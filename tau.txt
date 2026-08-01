@@ -1,4 +1,4 @@
--- tau only apple - Dark Blue Theme + Force Shelter TP
+-- tau only apple - Force TP 优先 ControlRoom
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -17,26 +17,23 @@ local Settings = {
 
 local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassesNames = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜"}
-local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ShelterInterior", "ControlRoom"}
+local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
+local ControlRoomNames = {"ControlRoom", "Control Room", "Camera", "Cameras", "观看", "旁观", "Monitor", "Screen", "控制室"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
 
 local collectedFragments = 0
 local glassesFound = false
-local currentMode = "Unknown"
-local isNext = false
-local systemOverload = false
-local lastModeTime = 0
 local knownFragments = {}
 local knownGlasses = {}
 local knownShelters = {}
+local knownControlRooms = {}
 local lastScan = 0
 local lastShelterCheck = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.7
 local SHELTER_CHECK_INTERVAL = 2.2
 
--- 颜色主题
 local Theme = {
     BgMain       = Color3.fromRGB(18, 20, 28),
     BgTitle      = Color3.fromRGB(22, 28, 42),
@@ -59,8 +56,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 390)
-Main.Position = UDim2.new(0, 25, 0.1, 0)
+Main.Size = UDim2.new(0, 380, 0, 360)
+Main.Position = UDim2.new(0, 25, 0.12, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -194,25 +191,20 @@ local function makeToggle(parent, text, y, on)
     return btn
 end
 
--- Info
 local PageInfo = createPage("Info")
-local StatusLabel = makeLabel(PageInfo, "Status: Off", 8)
-local ModeLabel = makeLabel(PageInfo, "Mode: Unknown", 28)
-local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 48)
-local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 68)
-local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 88)
-local OverloadLabel = makeLabel(PageInfo, "System Overload: No", 108)
-local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 135)
+local StatusLabel = makeLabel(PageInfo, "Status: Off", 10)
+local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 32)
+local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 54)
+local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 76)
+local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 110)
 
--- Loot
 local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
 local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
 local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 110, false)
-local ForceShelterBtn = makeToggle(PageLoot, "强制 TP 进避难所", 144, false)  -- 新增
+local ForceShelterBtn = makeToggle(PageLoot, "强制 TP 进 ControlRoom", 144, false)
 
--- Teleport
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
 local TPBloodBtn = makeToggle(PageTP, "血月祭坛前", 46, false)
@@ -236,7 +228,6 @@ PlayerListLayout.Parent = PlayerListFrame
 
 local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 268, false)
 
--- Extra
 local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
@@ -273,7 +264,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 390)
+        Main.Size = UDim2.new(0, 380, 0, 360)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -315,6 +306,14 @@ end
 local function isShelter(obj)
     local n = obj.Name:lower()
     for _, v in ipairs(ShelterNames) do
+        if n:find(v:lower()) then return true end
+    end
+    return false
+end
+
+local function isControlRoom(obj)
+    local n = obj.Name:lower()
+    for _, v in ipairs(ControlRoomNames) do
         if n:find(v:lower()) then return true end
     end
     return false
@@ -373,7 +372,6 @@ local function pickup(obj, typ)
     end
 end
 
--- 普通去门口
 local function goToShelter()
     local hrp = getHRP()
     if not hrp then return end
@@ -407,7 +405,7 @@ local function goToShelter()
     end
 end
 
--- ★ 强制 TP 进避难所（更激进）
+-- ★ 强制 TP 优先 ControlRoom
 local function forceTPShelter()
     local hrp = getHRP()
     if not hrp then
@@ -415,49 +413,66 @@ local function forceTPShelter()
         return
     end
 
-    local candidates = {}
+    local controlCandidates = {}
+    local shelterCandidates = {}
 
-    -- 收集所有可能的避难所相关物体
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if isShelter(obj) then
+        if isControlRoom(obj) then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
             if part then
-                table.insert(candidates, part)
+                table.insert(controlCandidates, part)
+            end
+        elseif isShelter(obj) then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                table.insert(shelterCandidates, part)
             end
         end
     end
 
-    if #candidates == 0 then
-        Notify("没找到避难所物体")
+    local targets = #controlCandidates > 0 and controlCandidates or shelterCandidates
+
+    if #targets == 0 then
+        Notify("没找到 ControlRoom / 避难所")
         return
     end
 
-    -- 尝试多个偏移位置（往里面丢）
     local offsets = {
-        Vector3.new(0, 5, 0),
-        Vector3.new(0, 3, 8),
-        Vector3.new(0, 3, -8),
-        Vector3.new(8, 3, 0),
-        Vector3.new(-8, 3, 0),
-        Vector3.new(0, 8, 0),
-        Vector3.new(0, 2, 12),
-        Vector3.new(0, 2, -12),
+        Vector3.new(0, 3, 0),
+        Vector3.new(0, 2, 4),
+        Vector3.new(0, 2, -4),
+        Vector3.new(4, 2, 0),
+        Vector3.new(-4, 2, 0),
+        Vector3.new(0, 4, 0),
+        Vector3.new(0, 1, 6),
+        Vector3.new(0, 1, -6),
+        Vector3.new(3, 2, 3),
+        Vector3.new(-3, 2, -3),
     }
 
-    for _, part in ipairs(candidates) do
+    Notify("正在强制 TP 到 ControlRoom...")
+
+    for _, part in ipairs(targets) do
         for _, offset in ipairs(offsets) do
             hrp.CFrame = part.CFrame + offset
-            task.wait(0.08)
+            task.wait(0.06)
 
-            -- 同时尝试触发附近的 Prompt
-            local prompt = part:FindFirstChildOfClass("ProximityPrompt") or part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt")
-            if prompt then
-                pcall(fireproximityprompt, prompt)
+            -- 尝试触发附近的观看/旁观 Prompt
+            local parent = part.Parent
+            if parent then
+                for _, child in ipairs(parent:GetDescendants()) do
+                    if child:IsA("ProximityPrompt") then
+                        local text = (child.ActionText or ""):lower() .. (child.ObjectText or ""):lower()
+                        if text:find("观看") or text:find("旁观") or text:find("interact") or text:find("camera") then
+                            pcall(fireproximityprompt, child)
+                        end
+                    end
+                end
             end
         end
     end
 
-    Notify("强制 TP 已尝试多次")
+    Notify("ControlRoom TP 已尝试完成")
 end
 
 local function teleportToKeyword(keywords, label)
@@ -524,72 +539,6 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
-local function checkText()
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pg then return end
-    local foundMode, foundIsNext = nil, false
-
-    for _, g in ipairs(pg:GetDescendants()) do
-        if g:IsA("TextLabel") or g:IsA("TextButton") then
-            local t = (g.Text or ""):lower()
-
-            if t:find("system overload") or t:find("系统过载") then
-                if not systemOverload then
-                    systemOverload = true
-                    Notify("System Overload!")
-                end
-            end
-
-            if t:find("this round's gamemode is") or t:find("gamemode is:") then
-                foundIsNext = true
-            end
-
-            if t:find("toastnado") then foundMode = "ToastNado"
-            elseif t:find("dust devil") then foundMode = "Dust Devil"
-            elseif t:find("infernado") then foundMode = "Infernado"
-            elseif t:find("double trouble") then foundMode = "Double Trouble"
-            elseif t:find("triple threat") then foundMode = "Triple Threat"
-            elseif t:find("four tornadoes") or t:find("4-nado") then foundMode = "4-Nado"
-            elseif t:find("chompnado") then foundMode = "Chompnado"
-            elseif t:find("deadnado") then foundMode = "Deadnado"
-            elseif t:find("trollnado") then foundMode = "Trollnado"
-            elseif t:find("lurker") then foundMode = "Lurker"
-            elseif t:find("unstoppable") then foundMode = "Unstoppable"
-            elseif t:find("rainwrapped") then foundMode = "Rainwrapped"
-            elseif t:find("freeze-nado") or t:find("freezenado") then foundMode = "Freeze-Nado"
-            elseif t:find("ghostnado") then foundMode = "GhostNado"
-            elseif t:find("megatornado") then foundMode = "MegaTornado"
-            elseif t:find("riftnado") then foundMode = "Riftnado"
-            elseif t:find("timebomb") then foundMode = "Timebomb Terror"
-            elseif t:find("bombs away") then foundMode = "Bombs Away"
-            elseif t:find("low-gravity") or t:find("low gravity") then foundMode = "Low-Gravity"
-            elseif t:find("skirmish") then foundMode = "Skirmish"
-            elseif t:find("taijitu") then foundMode = "Taijitu"
-            elseif t:find("krampus") then foundMode = "Krampus"
-            elseif t:find("hoshinado") then foundMode = "Hoshinado"
-            elseif t:find("noobnado") then foundMode = "NoobNado"
-            elseif t:find("retronado") or t:find("retro-nado") then foundMode = "Retro-Nado"
-            elseif t:find("tartarus") then foundMode = "Tartarus"
-            elseif t:find("doomsday") then foundMode = "Doomsday"
-            elseif t:find("chad!") or t:find("chad is") then foundMode = "Chad!"
-            elseif t:find("twisty") then foundMode = "Twisty The Clown"
-            elseif t:find("normal survival") then foundMode = "Normal Survival"
-            elseif t:find("zeus") then foundMode = "Zeus"
-            elseif t:find("your doom") then foundMode = "Your Doom"
-            end
-        end
-    end
-
-    if foundMode then
-        currentMode = foundMode
-        isNext = foundIsNext
-        lastModeTime = tick()
-    elseif tick() - lastModeTime > 20 then
-        currentMode = "Unknown"
-        isNext = false
-    end
-end
-
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
@@ -604,6 +553,8 @@ workspace.DescendantAdded:Connect(function(obj)
             end
         elseif isShelter(obj) then
             knownShelters[obj] = true
+        elseif isControlRoom(obj) then
+            knownControlRooms[obj] = true
         end
     end)
 end)
@@ -612,6 +563,7 @@ workspace.DescendantRemoving:Connect(function(obj)
     knownFragments[obj] = nil
     knownGlasses[obj] = nil
     knownShelters[obj] = nil
+    knownControlRooms[obj] = nil
 end)
 
 task.spawn(function()
@@ -620,6 +572,7 @@ task.spawn(function()
         if isFragment(obj) then knownFragments[obj] = true end
         if isGlasses(obj) then knownGlasses[obj] = true end
         if isShelter(obj) then knownShelters[obj] = true end
+        if isControlRoom(obj) then knownControlRooms[obj] = true end
     end
     refreshPlayerList()
 end)
@@ -629,15 +582,11 @@ task.spawn(function()
         local now = tick()
         local frags = countFrags()
 
-        checkText()
-
         StatusLabel.Text = "Status: " .. ((Settings.Enabled or Settings.FullAuto) and "Running" or "Off")
         StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(100, 200, 255) or Color3.fromRGB(255, 100, 100)
-        ModeLabel.Text = (isNext and "Next: " or "Mode: ") .. currentMode
         FragLabel.Text = "Map Fragments: " .. frags
         CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
-        OverloadLabel.Text = "System Overload: " .. (systemOverload and "YES" or "No")
 
         if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
@@ -722,7 +671,6 @@ AutoShelterBtn.MouseButton1Click:Connect(function()
     if Settings.AutoGoShelter then goToShelter() end
 end)
 
--- ★ 强制 TP 按钮
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
     forceTPShelter()
@@ -776,4 +724,4 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 Notify("tau only apple loaded")
-print("tau only apple Force Shelter TP loaded")
+print("tau only apple ControlRoom TP loaded")
