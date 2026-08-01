@@ -1,5 +1,5 @@
--- Tornado Alley Ultimate Auto Loot - Fully Fixed Version
--- Fixed: Mode detection (much stricter) + Reset Mode button + Fragment display + All previous features
+-- Tornado Alley Ultimate Auto Loot - Categorized UI Version
+-- Clear sections: Fragment Info / Auto Loot / Extras
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -33,11 +33,10 @@ local flyConnection = nil
 local FlyRange = 80
 local UpForce = 42
 
--- Mode detection state
 local currentDetectedMode = "Unknown"
 local isNextMode = false
 local lastModeUpdate = 0
-local MODE_TIMEOUT = 18 -- seconds, then clear to Unknown
+local MODE_TIMEOUT = 18
 
 -- ==================== UI ====================
 local function createUI()
@@ -51,8 +50,8 @@ local function createUI()
     ScreenGui.Parent = CoreGui
 
     local Main = Instance.new("Frame")
-    Main.Size = UDim2.new(0, 280, 0, 420)
-    Main.Position = UDim2.new(0, 18, 0.15, 0)
+    Main.Size = UDim2.new(0, 280, 0, 460)
+    Main.Position = UDim2.new(0, 18, 0.12, 0)
     Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     Main.BorderSizePixel = 0
     Main.Parent = ScreenGui
@@ -104,23 +103,21 @@ local function createUI()
     CloseCorner.CornerRadius = UDim.new(0, 6)
     CloseCorner.Parent = CloseBtn
 
-    -- Status
-    local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Name = "StatusLabel"
-    StatusLabel.Size = UDim2.new(1, -24, 0, 18)
-    StatusLabel.Position = UDim2.new(0, 12, 0, 42)
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = "Status: Off"
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 95, 95)
-    StatusLabel.Font = Enum.Font.GothamBold
-    StatusLabel.TextSize = 13
-    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    StatusLabel.Parent = Main
+    -- ===== Section 1: Fragment Info =====
+    local Section1 = Instance.new("TextLabel")
+    Section1.Size = UDim2.new(1, -24, 0, 18)
+    Section1.Position = UDim2.new(0, 12, 0, 42)
+    Section1.BackgroundTransparency = 1
+    Section1.Text = "── Fragment Info ──"
+    Section1.TextColor3 = Color3.fromRGB(140, 160, 220)
+    Section1.Font = Enum.Font.GothamBold
+    Section1.TextSize = 12
+    Section1.TextXAlignment = Enum.TextXAlignment.Left
+    Section1.Parent = Main
 
-    -- Info Box
     local InfoBox = Instance.new("Frame")
-    InfoBox.Size = UDim2.new(1, -24, 0, 115)
-    InfoBox.Position = UDim2.new(0, 12, 0, 66)
+    InfoBox.Size = UDim2.new(1, -24, 0, 78)
+    InfoBox.Position = UDim2.new(0, 12, 0, 62)
     InfoBox.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
     InfoBox.BorderSizePixel = 0
     InfoBox.Parent = Main
@@ -153,22 +150,10 @@ local function createUI()
     CollectedLabel.TextXAlignment = Enum.TextXAlignment.Left
     CollectedLabel.Parent = InfoBox
 
-    local GlassesLabel = Instance.new("TextLabel")
-    GlassesLabel.Name = "GlassesLabel"
-    GlassesLabel.Size = UDim2.new(1, -16, 0, 18)
-    GlassesLabel.Position = UDim2.new(0, 8, 0, 46)
-    GlassesLabel.BackgroundTransparency = 1
-    GlassesLabel.Text = "Glasses: Not Found"
-    GlassesLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
-    GlassesLabel.Font = Enum.Font.Gotham
-    GlassesLabel.TextSize = 12
-    GlassesLabel.TextXAlignment = Enum.TextXAlignment.Left
-    GlassesLabel.Parent = InfoBox
-
     local TartarusLabel = Instance.new("TextLabel")
     TartarusLabel.Name = "TartarusLabel"
     TartarusLabel.Size = UDim2.new(1, -16, 0, 18)
-    TartarusLabel.Position = UDim2.new(0, 8, 0, 66)
+    TartarusLabel.Position = UDim2.new(0, 8, 0, 46)
     TartarusLabel.BackgroundTransparency = 1
     TartarusLabel.Text = "Tartarus: Locked (0/5)"
     TartarusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
@@ -177,19 +162,18 @@ local function createUI()
     TartarusLabel.TextXAlignment = Enum.TextXAlignment.Left
     TartarusLabel.Parent = InfoBox
 
-    local ModeLabel = Instance.new("TextLabel")
-    ModeLabel.Name = "ModeLabel"
-    ModeLabel.Size = UDim2.new(1, -16, 0, 18)
-    ModeLabel.Position = UDim2.new(0, 8, 0, 86)
-    ModeLabel.BackgroundTransparency = 1
-    ModeLabel.Text = "Mode: Unknown"
-    ModeLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
-    ModeLabel.Font = Enum.Font.GothamBold
-    ModeLabel.TextSize = 12
-    ModeLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ModeLabel.Parent = InfoBox
+    -- ===== Section 2: Auto Loot =====
+    local Section2 = Instance.new("TextLabel")
+    Section2.Size = UDim2.new(1, -24, 0, 18)
+    Section2.Position = UDim2.new(0, 12, 0, 150)
+    Section2.BackgroundTransparency = 1
+    Section2.Text = "── Auto Loot ──"
+    Section2.TextColor3 = Color3.fromRGB(140, 200, 140)
+    Section2.Font = Enum.Font.GothamBold
+    Section2.TextSize = 12
+    Section2.TextXAlignment = Enum.TextXAlignment.Left
+    Section2.Parent = Main
 
-    -- Buttons helper
     local function makeButton(name, text, y, color)
         local btn = Instance.new("TextButton")
         btn.Name = name
@@ -208,23 +192,61 @@ local function createUI()
         return btn
     end
 
-    local ToggleBtn = makeButton("ToggleBtn", "Enable Auto Loot", 192, Color3.fromRGB(55, 55, 70))
-    local ModeBtn = makeButton("ModeBtn", "Mode: Fragments Only", 226, Color3.fromRGB(42, 42, 55))
-    local RejoinBtn = makeButton("RejoinBtn", "Auto Rejoin: ON", 260, Color3.fromRGB(42, 42, 55))
-    local TestBtn = makeButton("TestBtn", "Test: Fire Extinguisher", 294, Color3.fromRGB(60, 80, 130))
-    local FlyBtn = makeButton("FlyBtn", "Fly Parts: OFF", 328, Color3.fromRGB(55, 55, 70))
-    local ResetModeBtn = makeButton("ResetModeBtn", "Reset Mode Display", 362, Color3.fromRGB(90, 60, 60))
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Name = "StatusLabel"
+    StatusLabel.Size = UDim2.new(1, -24, 0, 16)
+    StatusLabel.Position = UDim2.new(0, 12, 0, 170)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "Status: Off"
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 95, 95)
+    StatusLabel.Font = Enum.Font.Gotham
+    StatusLabel.TextSize = 12
+    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    StatusLabel.Parent = Main
 
-    local TipLabel = Instance.new("TextLabel")
-    TipLabel.Size = UDim2.new(1, -24, 0, 16)
-    TipLabel.Position = UDim2.new(0, 12, 0, 396)
-    TipLabel.BackgroundTransparency = 1
-    TipLabel.Text = "PC: F Key | Mobile: Tap Button | Reset Mode if wrong"
-    TipLabel.TextColor3 = Color3.fromRGB(130, 135, 150)
-    TipLabel.Font = Enum.Font.Gotham
-    TipLabel.TextSize = 11
-    TipLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TipLabel.Parent = Main
+    local ToggleBtn = makeButton("ToggleBtn", "Enable Auto Loot", 190, Color3.fromRGB(55, 55, 70))
+    local ModeBtn = makeButton("ModeBtn", "Mode: Fragments Only", 224, Color3.fromRGB(42, 42, 55))
+    local RejoinBtn = makeButton("RejoinBtn", "Auto Rejoin: ON", 258, Color3.fromRGB(42, 42, 55))
+
+    -- ===== Section 3: Extras =====
+    local Section3 = Instance.new("TextLabel")
+    Section3.Size = UDim2.new(1, -24, 0, 18)
+    Section3.Position = UDim2.new(0, 12, 0, 296)
+    Section3.BackgroundTransparency = 1
+    Section3.Text = "── Extras ──"
+    Section3.TextColor3 = Color3.fromRGB(200, 170, 120)
+    Section3.Font = Enum.Font.GothamBold
+    Section3.TextSize = 12
+    Section3.TextXAlignment = Enum.TextXAlignment.Left
+    Section3.Parent = Main
+
+    local GlassesLabel = Instance.new("TextLabel")
+    GlassesLabel.Name = "GlassesLabel"
+    GlassesLabel.Size = UDim2.new(1, -24, 0, 16)
+    GlassesLabel.Position = UDim2.new(0, 12, 0, 316)
+    GlassesLabel.BackgroundTransparency = 1
+    GlassesLabel.Text = "Glasses: Not Found"
+    GlassesLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
+    GlassesLabel.Font = Enum.Font.Gotham
+    GlassesLabel.TextSize = 12
+    GlassesLabel.TextXAlignment = Enum.TextXAlignment.Left
+    GlassesLabel.Parent = Main
+
+    local ModeLabel = Instance.new("TextLabel")
+    ModeLabel.Name = "ModeLabel"
+    ModeLabel.Size = UDim2.new(1, -24, 0, 16)
+    ModeLabel.Position = UDim2.new(0, 12, 0, 334)
+    ModeLabel.BackgroundTransparency = 1
+    ModeLabel.Text = "Mode: Unknown"
+    ModeLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
+    ModeLabel.Font = Enum.Font.Gotham
+    ModeLabel.TextSize = 12
+    ModeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ModeLabel.Parent = Main
+
+    local TestBtn = makeButton("TestBtn", "Test: Fire Extinguisher", 356, Color3.fromRGB(60, 80, 130))
+    local FlyBtn = makeButton("FlyBtn", "Fly Parts: OFF", 390, Color3.fromRGB(55, 55, 70))
+    local ResetModeBtn = makeButton("ResetModeBtn", "Reset Mode Display", 424, Color3.fromRGB(90, 60, 60))
 
     return ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel,
            ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, ResetModeBtn, CloseBtn, TitleBar
@@ -390,10 +412,8 @@ local function toggleFly()
     end
 end
 
--- ==================== Strict Mode Detection ====================
--- Only accept very clear phrases. Prefer longer matches.
+-- Strict Mode Detection
 local strictModes = {
-    -- Strong next-round announcements
     ["this round's gamemode is tartarus"] = {mode = "Tartarus", next = true},
     ["this round's gamemode is doomsday"] = {mode = "Doomsday", next = true},
     ["this round's gamemode is chad"] = {mode = "Chad!", next = true},
@@ -423,7 +443,6 @@ local strictModes = {
     ["this round's gamemode is riftnado"] = {mode = "Riftnado", next = true},
     ["this round's gamemode is low-gravity"] = {mode = "Low-Gravity", next = true},
 
-    -- Strong current-round phrases
     ["there is a dust devil"] = {mode = "Dust Devil", next = false},
     ["dust devil!"] = {mode = "Dust Devil", next = false},
     ["there is an infernado"] = {mode = "Infernado", next = false},
@@ -461,7 +480,6 @@ local function updateModeDetection()
         isNextMode = bestIsNext
         lastModeUpdate = tick()
     else
-        -- Auto clear after timeout
         if tick() - lastModeUpdate > MODE_TIMEOUT then
             currentDetectedMode = "Unknown"
             isNextMode = false
@@ -469,7 +487,6 @@ local function updateModeDetection()
     end
 end
 
--- Real-time spawn detection
 workspace.DescendantAdded:Connect(function(obj)
     if not Settings.Enabled then return end
     task.wait()
@@ -486,7 +503,6 @@ task.spawn(function()
         local physicalCount = countPhysicalFragments()
         updateModeDetection()
 
-        -- Update UI
         if FragmentCountLabel then
             FragmentCountLabel.Text = "Map Fragments: " .. physicalCount
             FragmentCountLabel.TextColor3 = physicalCount > 0 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 120, 120)
@@ -494,10 +510,6 @@ task.spawn(function()
         if CollectedLabel then
             CollectedLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
             CollectedLabel.TextColor3 = collectedFragments >= 5 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
-        end
-        if GlassesLabel then
-            GlassesLabel.Text = glassesFound and "Glasses: FOUND ✓" or "Glasses: Not Found"
-            GlassesLabel.TextColor3 = glassesFound and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
         end
         if TartarusLabel then
             if collectedFragments >= 5 then
@@ -507,6 +519,10 @@ task.spawn(function()
                 TartarusLabel.Text = "Tartarus: Locked (" .. collectedFragments .. "/5)"
                 TartarusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
             end
+        end
+        if GlassesLabel then
+            GlassesLabel.Text = glassesFound and "Glasses: FOUND ✓" or "Glasses: Not Found"
+            GlassesLabel.TextColor3 = glassesFound and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
         end
         if ModeLabel then
             if isNextMode then
@@ -634,7 +650,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Character respawn protection
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     if not CoreGui:FindFirstChild("TAU_AutoLoot_UI") then
@@ -644,5 +659,5 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print("TAU Auto Loot Fully Fixed Version loaded")
-Notify("Script loaded - Mode detection fixed + Reset button added")
+print("TAU Auto Loot Categorized UI loaded")
+Notify("Script loaded - UI categorized")
