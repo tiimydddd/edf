@@ -1,4 +1,4 @@
--- tau only apple - Dark Blue Theme (匹配你发的图)
+-- tau only apple - Dark Blue Theme + Force Shelter TP
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -17,7 +17,7 @@ local Settings = {
 
 local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassesNames = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜"}
-local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
+local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ShelterInterior", "ControlRoom"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
 
@@ -36,18 +36,18 @@ local isMinimized = false
 local SCAN_INTERVAL = 0.7
 local SHELTER_CHECK_INTERVAL = 2.2
 
--- 颜色主题（匹配你发的图）
+-- 颜色主题
 local Theme = {
-    BgMain       = Color3.fromRGB(18, 20, 28),      -- 深灰蓝
-    BgTitle      = Color3.fromRGB(22, 28, 42),      -- 深蓝灰
-    BgSidebar    = Color3.fromRGB(14, 16, 24),      -- 更深
-    BgContent    = Color3.fromRGB(20, 24, 34),      -- 内容区
-    BgButtonOff  = Color3.fromRGB(35, 42, 58),      -- 灰色按钮
-    BgButtonOn   = Color3.fromRGB(30, 90, 160),     -- 电蓝色按钮
-    BgButtonFull = Color3.fromRGB(20, 70, 140),     -- Full Auto 深蓝
+    BgMain       = Color3.fromRGB(18, 20, 28),
+    BgTitle      = Color3.fromRGB(22, 28, 42),
+    BgSidebar    = Color3.fromRGB(14, 16, 24),
+    BgContent    = Color3.fromRGB(20, 24, 34),
+    BgButtonOff  = Color3.fromRGB(35, 42, 58),
+    BgButtonOn   = Color3.fromRGB(30, 90, 160),
+    BgButtonFull = Color3.fromRGB(20, 70, 140),
     TextWhite    = Color3.fromRGB(230, 235, 245),
     TextGray     = Color3.fromRGB(160, 170, 190),
-    AccentBlue   = Color3.fromRGB(80, 160, 255),    -- 高亮蓝
+    AccentBlue   = Color3.fromRGB(80, 160, 255),
     CloseRed     = Color3.fromRGB(160, 50, 50),
 }
 
@@ -59,21 +59,19 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 360)
-Main.Position = UDim2.new(0, 25, 0.12, 0)
+Main.Size = UDim2.new(0, 380, 0, 390)
+Main.Position = UDim2.new(0, 25, 0.1, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
--- 轻微蓝色描边
 local Stroke = Instance.new("UIStroke")
 Stroke.Color = Color3.fromRGB(40, 80, 140)
 Stroke.Thickness = 1.2
 Stroke.Transparency = 0.6
 Stroke.Parent = Main
 
--- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 32)
 TitleBar.BackgroundColor3 = Theme.BgTitle
@@ -121,7 +119,6 @@ CloseBtn.TextSize = 14
 CloseBtn.Parent = TitleBar
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
 
--- Sidebar
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 100, 1, -32)
 Sidebar.Position = UDim2.new(0, 0, 0, 32)
@@ -197,7 +194,7 @@ local function makeToggle(parent, text, y, on)
     return btn
 end
 
--- ===== Info Page =====
+-- Info
 local PageInfo = createPage("Info")
 local StatusLabel = makeLabel(PageInfo, "Status: Off", 8)
 local ModeLabel = makeLabel(PageInfo, "Mode: Unknown", 28)
@@ -207,14 +204,15 @@ local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 88)
 local OverloadLabel = makeLabel(PageInfo, "System Overload: No", 108)
 local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 135)
 
--- ===== Loot Page =====
+-- Loot
 local PageLoot = createPage("Loot")
-local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 10, false)
-local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 46, false)
-local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 82, false)
-local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 118, false)
+local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
+local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
+local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
+local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 110, false)
+local ForceShelterBtn = makeToggle(PageLoot, "强制 TP 进避难所", 144, false)  -- 新增
 
--- ===== Teleport Page =====
+-- Teleport
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
 local TPBloodBtn = makeToggle(PageTP, "血月祭坛前", 46, false)
@@ -238,7 +236,7 @@ PlayerListLayout.Parent = PlayerListFrame
 
 local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 268, false)
 
--- ===== Extra Page =====
+-- Extra
 local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
@@ -267,7 +265,6 @@ TabLoot.MouseButton1Click:Connect(function() switchTab("Loot") end)
 TabTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
 
--- Minimize
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
@@ -276,7 +273,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 360)
+        Main.Size = UDim2.new(0, 380, 0, 390)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -376,6 +373,7 @@ local function pickup(obj, typ)
     end
 end
 
+-- 普通去门口
 local function goToShelter()
     local hrp = getHRP()
     if not hrp then return end
@@ -388,7 +386,7 @@ local function goToShelter()
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
                 local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
                 if prompt then pcall(fireproximityprompt, prompt) end
-                Notify("Trying Shelter...")
+                Notify("Trying Shelter door...")
                 return
             end
         end
@@ -407,6 +405,59 @@ local function goToShelter()
             end
         end
     end
+end
+
+-- ★ 强制 TP 进避难所（更激进）
+local function forceTPShelter()
+    local hrp = getHRP()
+    if not hrp then
+        Notify("没有角色")
+        return
+    end
+
+    local candidates = {}
+
+    -- 收集所有可能的避难所相关物体
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelter(obj) then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                table.insert(candidates, part)
+            end
+        end
+    end
+
+    if #candidates == 0 then
+        Notify("没找到避难所物体")
+        return
+    end
+
+    -- 尝试多个偏移位置（往里面丢）
+    local offsets = {
+        Vector3.new(0, 5, 0),
+        Vector3.new(0, 3, 8),
+        Vector3.new(0, 3, -8),
+        Vector3.new(8, 3, 0),
+        Vector3.new(-8, 3, 0),
+        Vector3.new(0, 8, 0),
+        Vector3.new(0, 2, 12),
+        Vector3.new(0, 2, -12),
+    }
+
+    for _, part in ipairs(candidates) do
+        for _, offset in ipairs(offsets) do
+            hrp.CFrame = part.CFrame + offset
+            task.wait(0.08)
+
+            -- 同时尝试触发附近的 Prompt
+            local prompt = part:FindFirstChildOfClass("ProximityPrompt") or part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then
+                pcall(fireproximityprompt, prompt)
+            end
+        end
+    end
+
+    Notify("强制 TP 已尝试多次")
 end
 
 local function teleportToKeyword(keywords, label)
@@ -473,7 +524,6 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
--- 地图模式检测
 local function checkText()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
@@ -540,7 +590,6 @@ local function checkText()
     end
 end
 
--- 监听
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
@@ -575,7 +624,6 @@ task.spawn(function()
     refreshPlayerList()
 end)
 
--- 主循环
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -622,7 +670,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== 按钮事件 ====================
+-- 按钮
 FullAutoBtn.MouseButton1Click:Connect(function()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
@@ -674,7 +722,17 @@ AutoShelterBtn.MouseButton1Click:Connect(function()
     if Settings.AutoGoShelter then goToShelter() end
 end)
 
--- Teleport
+-- ★ 强制 TP 按钮
+ForceShelterBtn.MouseButton1Click:Connect(function()
+    ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
+    forceTPShelter()
+    task.delay(1.5, function()
+        if ForceShelterBtn then
+            ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
+        end
+    end)
+end)
+
 TPHopBtn.MouseButton1Click:Connect(function()
     Notify("Server Hopping...")
     TeleportService:Teleport(PLACE_ID, LocalPlayer)
@@ -697,7 +755,6 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- 拖动
 local dragging, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -719,4 +776,4 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 Notify("tau only apple loaded")
-print("tau only apple Dark Blue Theme loaded")
+print("tau only apple Force Shelter TP loaded")
