@@ -1,7 +1,8 @@
--- tau only apple (修改版 v3)
+-- tau only apple (修改版 v4)
 -- 已移除：自动对拉锁、ControlRoom强制TP
 -- 新增：第1局没有血月碎片就自动重进
 -- 模式：只有血月 / 只有眼镜 / 血月+眼镜 / 血月+眼镜+钥匙 / 血月+眼镜+球棒
+-- 新增：A.检测当前/下一个模式  B.自动投票地图  C.额外灾难提醒  D.Chad骰子提醒
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -19,6 +20,15 @@ local Settings = {
     AutoGoShelter = false,
     FullAuto = false,
     RejoinNoFrag = true,
+    AutoVoteMap = true,          -- 自动投票地图
+    ExtraDisasterAlert = true,   -- 额外灾难提醒
+    ChadDiceAlert = true,        -- Chad骰子提醒
+}
+
+-- 优先投票的地图（可自行修改，按优先级从高到低）
+local PreferredMaps = {
+    "Farm", "Town", "Neighborhood", "Metropolis", "Boardwalk",
+    "Isle Vista", "Death Valley", "Fort Blox", "Junkyard", "Rome"
 }
 
 local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "Blood Moon"}
@@ -28,6 +38,35 @@ local BatNames = {"Baseball Bat", "Bat", "球棒", "BaseballBat"}
 local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
+
+-- 模式关键词（用于检测当前/下一个模式）
+local GamemodeKeywords = {
+    {"chad", "Chad!"},
+    {"tartarus", "Tartarus"},
+    {"doomsday", "Doomsday"},
+    {"twisty", "Twisty The Clown"},
+    {"megatornado", "MegaTornado"},
+    {"unstoppable", "Unstoppable"},
+    {"six-nado", "Six-Nado"},
+    {"noobnado", "NoobNado"},
+    {"ghostnado", "GhostNado"},
+    {"bombs away", "Bombs Away"},
+    {"your doom", "Your Doom"},
+    {"taijitu", "Taijitu"},
+    {"dual threat", "Dual Threat"},
+    {"merge threat", "Merge Threat"},
+    {"trollnado", "TrollNado"},
+    {"lurker", "Lurker"},
+}
+
+-- 额外灾难关键词
+local ExtraDisasterKeywords = {
+    {"meteor", "Meteors"},
+    {"flash flood", "Flash Flood"},
+    {"acid rain", "Acid Rain"},
+    {"bonus disaster", "Bonus Disaster"},
+    {"extra disaster", "Extra Disaster"},
+}
 
 local collectedFragments = 0
 local glassesFound = false
@@ -40,13 +79,22 @@ local knownBats = {}
 local knownShelters = {}
 local lastScan = 0
 local lastShelterCheck = 0
+local lastModeCheck = 0
+local lastVoteCheck = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.7
 local SHELTER_CHECK_INTERVAL = 2.2
+local MODE_CHECK_INTERVAL = 1.5
+local VOTE_CHECK_INTERVAL = 1.0
 
 local firstRoundChecked = false
 local joinTime = tick()
 local FIRST_ROUND_WAIT = 25
+
+local currentMode = "Unknown"
+local nextMode = "Unknown"
+local lastChadDiceNotify = 0
+local lastExtraNotify = 0
 
 local ModeNames = {
     [1] = "只有血月",
@@ -78,8 +126,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 380)
-Main.Position = UDim2.new(0, 25, 0.12, 0)
+Main.Size = UDim2.new(0, 400, 0, 420)
+Main.Position = UDim2.new(0, 25, 0.1, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -109,7 +157,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "tau only apple (mod v3)"
+Title.Text = "tau only apple (mod v4)"
 Title.TextColor3 = Theme.TextWhite
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -214,13 +262,15 @@ local function makeToggle(parent, text, y, on)
 end
 
 local PageInfo = createPage("Info")
-local StatusLabel = makeLabel(PageInfo, "Status: Off", 10)
-local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 32)
-local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 54)
-local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 76)
-local KeyLabel = makeLabel(PageInfo, "Key: Not Found", 98)
-local BatLabel = makeLabel(PageInfo, "Bat: Not Found", 120)
-local TipLabel = makeLabel(PageInfo, "提示: 第1局无碎片会自动重进", 150)
+local StatusLabel = makeLabel(PageInfo, "Status: Off", 8)
+local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 28)
+local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 48)
+local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 68)
+local KeyLabel = makeLabel(PageInfo, "Key: Not Found", 88)
+local BatLabel = makeLabel(PageInfo, "Bat: Not Found", 108)
+local CurrentModeLabel = makeLabel(PageInfo, "当前模式: Unknown", 135)
+local NextModeLabel = makeLabel(PageInfo, "下一模式: Unknown", 155)
+local TipLabel = makeLabel(PageInfo, "提示: 第1局无碎片会自动重进", 185)
 
 local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
@@ -228,6 +278,7 @@ local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "模式: 只有血月", 76, false)
 local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 110, false)
 local RejoinBtn = makeToggle(PageLoot, "第1局无碎片重进: ON", 144, true)
+local AutoVoteBtn = makeToggle(PageLoot, "自动投票地图: ON", 178, true)
 
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
@@ -253,9 +304,11 @@ PlayerListLayout.Parent = PlayerListFrame
 local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 268, false)
 
 local PageExtra = createPage("Extra")
-local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
-local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
-local ModeTip = makeLabel(PageExtra, "模式: 血月→眼镜→血月眼镜→血月眼镜钥匙→血月眼镜球棒", 70)
+local ExtraDisasterBtn = makeToggle(PageExtra, "额外灾难提醒: ON", 12, true)
+local ChadDiceBtn = makeToggle(PageExtra, "Chad骰子提醒: ON", 46, true)
+local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 90)
+local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 112)
+local ModeTip = makeLabel(PageExtra, "模式: 血月→眼镜→血月眼镜→血月眼镜钥匙→血月眼镜球棒", 140)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
@@ -289,7 +342,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 380)
+        Main.Size = UDim2.new(0, 400, 0, 420)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -302,7 +355,7 @@ local function Notify(msg)
         StarterGui:SetCore("SendNotification", {
             Title = "tau only apple",
             Text = tostring(msg),
-            Duration = 2.5
+            Duration = 3
         })
     end)
 end
@@ -376,15 +429,15 @@ local function countFrags()
 end
 
 local function shouldPickup(typ)
-    if Settings.Mode == 1 then       -- 只有血月
+    if Settings.Mode == 1 then
         return typ == "Fragment"
-    elseif Settings.Mode == 2 then   -- 只有眼镜
+    elseif Settings.Mode == 2 then
         return typ == "Glasses"
-    elseif Settings.Mode == 3 then   -- 血月+眼镜
+    elseif Settings.Mode == 3 then
         return typ == "Fragment" or typ == "Glasses"
-    elseif Settings.Mode == 4 then   -- 血月+眼镜+钥匙
+    elseif Settings.Mode == 4 then
         return typ == "Fragment" or typ == "Glasses" or typ == "Key"
-    elseif Settings.Mode == 5 then   -- 血月+眼镜+球棒
+    elseif Settings.Mode == 5 then
         return typ == "Fragment" or typ == "Glasses" or typ == "Bat"
     end
     return false
@@ -540,6 +593,117 @@ local function checkFirstRoundNoFrag()
     end
 end
 
+-- ==================== A. 检测当前/下一个模式 ====================
+local function detectModes()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    local foundCurrent = nil
+    local foundNext = nil
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") or g:IsA("TextBox") then
+            local t = (g.Text or ""):lower()
+            if t == "" then continue end
+
+            for _, pair in ipairs(GamemodeKeywords) do
+                if t:find(pair[1]) then
+                    if t:find("next") or t:find("upcoming") or t:find("incoming") or t:find("下一") then
+                        foundNext = pair[2]
+                    else
+                        foundCurrent = pair[2]
+                    end
+                end
+            end
+        end
+    end
+
+    if foundCurrent then currentMode = foundCurrent end
+    if foundNext then nextMode = foundNext end
+end
+
+-- ==================== B. 自动投票地图 ====================
+local function autoVoteMap()
+    if not Settings.AutoVoteMap then return end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextButton") or g:IsA("ImageButton") then
+            local text = (g.Text or ""):lower()
+            local name = g.Name:lower()
+
+            -- 优先投指定地图
+            for _, mapName in ipairs(PreferredMaps) do
+                if text:find(mapName:lower()) or name:find(mapName:lower()) then
+                    pcall(function()
+                        firesignal(g.MouseButton1Click)
+                        g:Activate()
+                    end)
+                    Notify("已自动投票地图: " .. mapName)
+                    return
+                end
+            end
+        end
+    end
+
+    -- 没找到优先地图就投第一个看起来像投票按钮的
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextButton") then
+            local text = (g.Text or ""):lower()
+            if text:find("vote") or text:find("map") or #text > 3 then
+                pcall(function()
+                    firesignal(g.MouseButton1Click)
+                end)
+                return
+            end
+        end
+    end
+end
+
+-- ==================== C. 额外灾难提醒 ====================
+local function checkExtraDisaster()
+    if not Settings.ExtraDisasterAlert then return end
+    if tick() - lastExtraNotify < 8 then return end
+
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") then
+            local t = (g.Text or ""):lower()
+            for _, pair in ipairs(ExtraDisasterKeywords) do
+                if t:find(pair[1]) then
+                    lastExtraNotify = tick()
+                    Notify("⚠ 额外灾难: " .. pair[2])
+                    return
+                end
+            end
+        end
+    end
+end
+
+-- ==================== D. Chad 骰子提醒 ====================
+local function checkChadDice()
+    if not Settings.ChadDiceAlert then return end
+    if tick() - lastChadDiceNotify < 6 then return end
+
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") or g:IsA("ImageLabel") then
+            local t = ((g.Text or "") .. " " .. g.Name):lower()
+            if t:find("dice") or t:find("roll") or t:find("chad") and (t:find("queue") or t:find("骰子") or t:find("点数")) then
+                lastChadDiceNotify = tick()
+                Notify("🎲 Chad 骰子出现！准备排队稀有模式")
+                return
+            end
+        end
+    end
+end
+
+-- ==================== 主循环相关 ====================
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
@@ -600,6 +764,8 @@ task.spawn(function()
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
         KeyLabel.Text = "Key: " .. (keyFound and "FOUND" or "Not Found")
         BatLabel.Text = "Bat: " .. (batFound and "FOUND" or "Not Found")
+        CurrentModeLabel.Text = "当前模式: " .. currentMode
+        NextModeLabel.Text = "下一模式: " .. nextMode
 
         if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
@@ -639,6 +805,18 @@ task.spawn(function()
             goToShelter()
         end
 
+        if (now - lastModeCheck) >= MODE_CHECK_INTERVAL then
+            lastModeCheck = now
+            detectModes()
+            checkExtraDisaster()
+            checkChadDice()
+        end
+
+        if Settings.AutoVoteMap and (now - lastVoteCheck) >= VOTE_CHECK_INTERVAL then
+            lastVoteCheck = now
+            autoVoteMap()
+        end
+
         checkFirstRoundNoFrag()
 
         task.wait(0.25)
@@ -651,7 +829,6 @@ FullAutoBtn.MouseButton1Click:Connect(function()
     if Settings.FullAuto then
         Settings.Enabled = true
         Settings.AutoGoShelter = true
-
         FullAutoBtn.Text = "★ Full Auto: ON"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
         ToggleBtn.Text = "Auto Loot: ON"
@@ -662,7 +839,6 @@ FullAutoBtn.MouseButton1Click:Connect(function()
     else
         Settings.Enabled = false
         Settings.AutoGoShelter = false
-
         FullAutoBtn.Text = "★ Full Auto: OFF"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
         ToggleBtn.Text = "Auto Loot: OFF"
@@ -704,6 +880,24 @@ RejoinBtn.MouseButton1Click:Connect(function()
     else
         Notify("已关闭：第1局无碎片自动重进")
     end
+end)
+
+AutoVoteBtn.MouseButton1Click:Connect(function()
+    Settings.AutoVoteMap = not Settings.AutoVoteMap
+    AutoVoteBtn.Text = Settings.AutoVoteMap and "自动投票地图: ON" or "自动投票地图: OFF"
+    AutoVoteBtn.BackgroundColor3 = Settings.AutoVoteMap and Theme.BgButtonOn or Theme.BgButtonOff
+end)
+
+ExtraDisasterBtn.MouseButton1Click:Connect(function()
+    Settings.ExtraDisasterAlert = not Settings.ExtraDisasterAlert
+    ExtraDisasterBtn.Text = Settings.ExtraDisasterAlert and "额外灾难提醒: ON" or "额外灾难提醒: OFF"
+    ExtraDisasterBtn.BackgroundColor3 = Settings.ExtraDisasterAlert and Theme.BgButtonOn or Theme.BgButtonOff
+end)
+
+ChadDiceBtn.MouseButton1Click:Connect(function()
+    Settings.ChadDiceAlert = not Settings.ChadDiceAlert
+    ChadDiceBtn.Text = Settings.ChadDiceAlert and "Chad骰子提醒: ON" or "Chad骰子提醒: OFF"
+    ChadDiceBtn.BackgroundColor3 = Settings.ChadDiceAlert and Theme.BgButtonOn or Theme.BgButtonOff
 end)
 
 TPHopBtn.MouseButton1Click:Connect(function()
@@ -748,5 +942,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("tau only apple (mod v3) loaded")
-print("tau only apple mod v3 - 5 modes")
+Notify("tau only apple (mod v4) loaded")
+print("tau only apple mod v4 - A/B/C/D features added")
