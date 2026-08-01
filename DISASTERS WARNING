@@ -1,0 +1,609 @@
+-- 灾难警告之VIP版本
+-- PlaceId: 7479931846
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local PLACE_ID = 7479931846
+
+local Settings = {
+    AutoShelter = false,
+    AntiAFK = false,
+}
+
+local currentDisaster = "Unknown"
+local nextDisaster = "Unknown"
+local dangerAlerts = false
+local lastDangerState = false
+local theEndActive = false
+local lastDisasterTime = 0
+local isMinimized = false
+local knownShelters = {}
+local lastShelterCheck = 0
+local SHELTER_INTERVAL = 2.5
+
+local ShelterNames = {
+    "Shelter", "Bunker", "Underground", "UndergroundShelter", "Underground Bunker",
+    "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlPanel", "Control Room"
+}
+
+local Theme = {
+    BgMain       = Color3.fromRGB(18, 20, 28),
+    BgTitle      = Color3.fromRGB(22, 28, 42),
+    BgSidebar    = Color3.fromRGB(14, 16, 24),
+    BgContent    = Color3.fromRGB(20, 24, 34),
+    BgButtonOff  = Color3.fromRGB(35, 42, 58),
+    BgButtonOn   = Color3.fromRGB(30, 90, 160),
+    TextWhite    = Color3.fromRGB(230, 235, 245),
+    TextGray     = Color3.fromRGB(160, 170, 190),
+    CloseRed     = Color3.fromRGB(160, 50, 50),
+}
+
+-- ==================== UI ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DisasterWarning_VIP"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = CoreGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 380, 0, 380)
+Main.Position = UDim2.new(0, 25, 0.12, 0)
+Main.BackgroundColor3 = Theme.BgMain
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(40, 80, 140)
+Stroke.Thickness = 1.2
+Stroke.Transparency = 0.6
+Stroke.Parent = Main
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 32)
+TitleBar.BackgroundColor3 = Theme.BgTitle
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
+
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0, 12)
+TitleFix.Position = UDim2.new(0, 0, 1, -12)
+TitleFix.BackgroundColor3 = Theme.BgTitle
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -70, 1, 0)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "灾难警告之VIP版本"
+Title.TextColor3 = Theme.TextWhite
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 24, 0, 24)
+MinBtn.Position = UDim2.new(1, -56, 0, 4)
+MinBtn.BackgroundColor3 = Color3.fromRGB(40, 55, 80)
+MinBtn.Text = "–"
+MinBtn.TextColor3 = Theme.TextWhite
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.Parent = TitleBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 5)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -28, 0, 4)
+CloseBtn.BackgroundColor3 = Theme.CloseRed
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Theme.TextWhite
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 100, 1, -32)
+Sidebar.Position = UDim2.new(0, 0, 0, 32)
+Sidebar.BackgroundColor3 = Theme.BgSidebar
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -100, 1, -32)
+Content.Position = UDim2.new(0, 100, 0, 32)
+Content.BackgroundColor3 = Theme.BgContent
+Content.BorderSizePixel = 0
+Content.Parent = Main
+
+local function makeTab(name, text, y)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(1, -8, 0, 30)
+    btn.Position = UDim2.new(0, 4, 0, y)
+    btn.BackgroundColor3 = Theme.BgSidebar
+    btn.Text = " " .. text
+    btn.TextColor3 = Theme.TextGray
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = Sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local TabInfo = makeTab("Info", "Info", 8)
+local TabLoot = makeTab("Shelter", "Shelter", 42)
+local TabTP = makeTab("Teleport", "Teleport", 76)
+local TabExtra = makeTab("Extra", "Extra", 110)
+
+local Pages = {}
+local function createPage(name)
+    local page = Instance.new("Frame")
+    page.Name = name
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.Visible = false
+    page.Parent = Content
+    Pages[name] = page
+    return page
+end
+
+local function makeLabel(parent, text, y)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -16, 0, 18)
+    l.Position = UDim2.new(0, 10, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Theme.TextGray
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 12
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
+
+local function makeToggle(parent, text, y, on)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 28)
+    btn.Position = UDim2.new(0, 10, 0, y)
+    btn.BackgroundColor3 = on and Theme.BgButtonOn or Theme.BgButtonOff
+    btn.Text = text
+    btn.TextColor3 = Theme.TextWhite
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+-- Info Page（整齐排列）
+local PageInfo = createPage("Info")
+local StatusLabel   = makeLabel(PageInfo, "Status: Ready", 8)
+local DisasterLabel = makeLabel(PageInfo, "当前灾难: Unknown", 36)
+local NextLabel     = makeLabel(PageInfo, "下一场  : Unknown", 58)
+local DangerLabel   = makeLabel(PageInfo, "Danger Alerts: Off", 88)
+local EndLabel      = makeLabel(PageInfo, "The End: No", 110)
+
+-- Shelter Page
+local PageShelter = createPage("Shelter")
+local AutoShelterBtn = makeToggle(PageShelter, "Auto Go Shelter: OFF", 12, false)
+local ForceShelterBtn = makeToggle(PageShelter, "强制 TP 进避难所", 50, false)
+local ShelterTip = makeLabel(PageShelter, "自动扫描 Shelter / Bunker", 95)
+
+-- Teleport Page
+local PageTP = createPage("Teleport")
+local TPHopBtn = makeToggle(PageTP, "Server Hop", 12, false)
+local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 48)
+
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size = UDim2.new(1, -20, 0, 140)
+PlayerListFrame.Position = UDim2.new(0, 10, 0, 70)
+PlayerListFrame.BackgroundColor3 = Color3.fromRGB(28, 34, 48)
+PlayerListFrame.BorderSizePixel = 0
+PlayerListFrame.ScrollBarThickness = 4
+PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.Parent = PageTP
+Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 6)
+
+local PlayerListLayout = Instance.new("UIListLayout")
+PlayerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+PlayerListLayout.Padding = UDim.new(0, 4)
+PlayerListLayout.Parent = PlayerListFrame
+
+local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 220, false)
+
+-- Extra Page
+local PageExtra = createPage("Extra")
+local AFKBtn = makeToggle(PageExtra, "Anti-AFK: OFF", 12, false)
+local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 55)
+local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 77)
+
+Pages["Info"].Visible = true
+TabInfo.BackgroundColor3 = Theme.BgButtonOn
+TabInfo.TextColor3 = Theme.TextWhite
+
+local function switchTab(name)
+    for n, page in pairs(Pages) do
+        page.Visible = (n == name)
+    end
+    for _, tab in pairs({TabInfo, TabLoot, TabTP, TabExtra}) do
+        tab.BackgroundColor3 = Theme.BgSidebar
+        tab.TextColor3 = Theme.TextGray
+    end
+    local map = {Info = TabInfo, Shelter = TabLoot, Teleport = TabTP, Extra = TabExtra}
+    if map[name] then
+        map[name].BackgroundColor3 = Theme.BgButtonOn
+        map[name].TextColor3 = Theme.TextWhite
+    end
+end
+
+TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
+TabLoot.MouseButton1Click:Connect(function() switchTab("Shelter") end)
+TabTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
+TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
+
+MinBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        Main.Size = UDim2.new(0, 180, 0, 32)
+        Sidebar.Visible = false
+        Content.Visible = false
+        MinBtn.Text = "+"
+        Title.Text = "灾难警告 VIP"
+    else
+        Main.Size = UDim2.new(0, 380, 0, 380)
+        Sidebar.Visible = true
+        Content.Visible = true
+        MinBtn.Text = "–"
+        Title.Text = "灾难警告之VIP版本"
+    end
+end)
+
+-- ==================== Functions ====================
+local function Notify(msg)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "灾难警告之VIP版本",
+            Text = tostring(msg),
+            Duration = 3
+        })
+    end)
+end
+
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function isShelter(obj)
+    local n = obj.Name:lower()
+    for _, v in ipairs(ShelterNames) do
+        if n:find(v:lower()) then return true end
+    end
+    return false
+end
+
+local function cleanCache(cache)
+    for obj in pairs(cache) do
+        if not obj or not obj.Parent then
+            cache[obj] = nil
+        end
+    end
+end
+
+local function checkGameText()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    local foundDisaster = nil
+    local foundNext = nil
+    local foundDanger = false
+    local foundEnd = false
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") or g:IsA("TextBox") then
+            local t = (g.Text or ""):lower()
+
+            if t:find("danger alert") or t:find("danger alerts") then
+                foundDanger = true
+            end
+
+            if t:find("the end") or t:find("theend") then
+                foundEnd = true
+            end
+
+            if t:find("tornado") then foundDisaster = "Tornado"
+            elseif t:find("avalanche") then foundDisaster = "Avalanche"
+            elseif t:find("meteor") then foundDisaster = "Meteor Shower"
+            elseif t:find("tsunami") then foundDisaster = "Tsunami"
+            elseif t:find("comet") then foundDisaster = "Comet Shower"
+            elseif t:find("lethal smog") or t:find("smog") then foundDisaster = "Lethal Smog"
+            elseif t:find("mothership") then foundDisaster = "Mothership"
+            elseif t:find("volcano") or t:find("eruption") then foundDisaster = "Volcano"
+            elseif t:find("blizzard") then foundDisaster = "Blizzard"
+            elseif t:find("acid rain") then foundDisaster = "Acid Rain"
+            elseif t:find("earthquake") then foundDisaster = "Earthquake"
+            elseif t:find("flood") then foundDisaster = "Flood"
+            elseif t:find("sandstorm") then foundDisaster = "Sandstorm"
+            elseif t:find("thunderstorm") or t:find("lightning") then foundDisaster = "Thunderstorm"
+            elseif t:find("wildfire") then foundDisaster = "Wildfire"
+            elseif t:find("the end") then foundDisaster = "The End"
+            end
+
+            if t:find("next") or t:find("upcoming") or t:find("incoming") then
+                if t:find("tornado") then foundNext = "Tornado"
+                elseif t:find("avalanche") then foundNext = "Avalanche"
+                elseif t:find("meteor") then foundNext = "Meteor Shower"
+                elseif t:find("tsunami") then foundNext = "Tsunami"
+                elseif t:find("the end") then foundNext = "The End"
+                end
+            end
+        end
+    end
+
+    if foundDisaster then
+        currentDisaster = foundDisaster
+        lastDisasterTime = tick()
+    elseif tick() - lastDisasterTime > 25 then
+        currentDisaster = "Unknown"
+    end
+
+    if foundNext then
+        nextDisaster = foundNext
+    end
+
+    if foundDanger and not lastDangerState then
+        Notify("⚠ Danger Alerts 已开启！")
+    end
+    lastDangerState = foundDanger
+    dangerAlerts = foundDanger
+    theEndActive = foundEnd
+end
+
+local function goToShelter()
+    local hrp = getHRP()
+    if not hrp then return end
+    cleanCache(knownShelters)
+
+    for obj in pairs(knownShelters) do
+        if obj and obj.Parent then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+                local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+                if prompt then pcall(fireproximityprompt, prompt) end
+                Notify("Trying Shelter...")
+                return
+            end
+        end
+    end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelter(obj) then
+            knownShelters[obj] = true
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+                local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+                if prompt then pcall(fireproximityprompt, prompt) end
+                Notify("Found Shelter")
+                return
+            end
+        end
+    end
+end
+
+local function forceTPShelter()
+    local hrp = getHRP()
+    if not hrp then
+        Notify("没有角色")
+        return
+    end
+
+    local candidates = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelter(obj) then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                table.insert(candidates, part)
+            end
+        end
+    end
+
+    if #candidates == 0 then
+        Notify("没找到避难所")
+        return
+    end
+
+    local offsets = {
+        Vector3.new(0, 4, 0),
+        Vector3.new(0, 3, 6),
+        Vector3.new(0, 3, -6),
+        Vector3.new(6, 3, 0),
+        Vector3.new(-6, 3, 0),
+        Vector3.new(0, 6, 0),
+        Vector3.new(0, 2, 10),
+        Vector3.new(0, 2, -10),
+    }
+
+    Notify("强制 TP 进避难所...")
+    for _, part in ipairs(candidates) do
+        for _, offset in ipairs(offsets) do
+            hrp.CFrame = part.CFrame + offset
+            task.wait(0.07)
+            local prompt = part:FindFirstChildOfClass("ProximityPrompt") or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
+            if prompt then pcall(fireproximityprompt, prompt) end
+        end
+    end
+    Notify("强制 TP 完成")
+end
+
+local function teleportToPlayer(player)
+    local hrp = getHRP()
+    if not hrp then return end
+    local targetChar = player.Character
+    if not targetChar then
+        Notify(player.Name .. " 没有角色")
+        return
+    end
+    local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+    if targetHRP then
+        hrp.CFrame = targetHRP.CFrame + Vector3.new(0, 3, 0)
+        Notify("已传送到 " .. player.Name)
+    end
+end
+
+local function refreshPlayerList()
+    for _, child in ipairs(PlayerListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local y = 0
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -8, 0, 26)
+            btn.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
+            btn.Text = plr.Name
+            btn.TextColor3 = Theme.TextWhite
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 12
+            btn.Parent = PlayerListFrame
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+            btn.MouseButton1Click:Connect(function()
+                teleportToPlayer(plr)
+            end)
+            y = y + 30
+        end
+    end
+    PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+end
+
+workspace.DescendantAdded:Connect(function(obj)
+    task.defer(function()
+        if isShelter(obj) then
+            knownShelters[obj] = true
+        end
+    end)
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    knownShelters[obj] = nil
+end)
+
+task.spawn(function()
+    task.wait(1.5)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelter(obj) then knownShelters[obj] = true end
+    end
+    refreshPlayerList()
+end)
+
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        local now = tick()
+
+        checkGameText()
+
+        StatusLabel.Text = "Status: " .. (Settings.AutoShelter and "Auto Shelter ON" or "Ready")
+        StatusLabel.TextColor3 = Settings.AutoShelter and Color3.fromRGB(100, 200, 255) or Theme.TextGray
+
+        DisasterLabel.Text = "当前灾难: " .. currentDisaster
+        NextLabel.Text     = "下一场  : " .. nextDisaster
+        DangerLabel.Text   = "Danger Alerts: " .. (dangerAlerts and "ON" or "Off")
+        DangerLabel.TextColor3 = dangerAlerts and Color3.fromRGB(255, 120, 80) or Theme.TextGray
+        EndLabel.Text = "The End: " .. (theEndActive and "YES" or "No")
+        EndLabel.TextColor3 = theEndActive and Color3.fromRGB(255, 80, 80) or Theme.TextGray
+
+        if Settings.AutoShelter and (now - lastShelterCheck) >= SHELTER_INTERVAL then
+            lastShelterCheck = now
+            goToShelter()
+        end
+
+        task.wait(0.4)
+    end
+end)
+
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        if Settings.AntiAFK then
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Jump = true end
+        end
+        task.wait(45)
+    end
+end)
+
+-- 按钮
+AutoShelterBtn.MouseButton1Click:Connect(function()
+    Settings.AutoShelter = not Settings.AutoShelter
+    AutoShelterBtn.Text = Settings.AutoShelter and "Auto Go Shelter: ON" or "Auto Go Shelter: OFF"
+    AutoShelterBtn.BackgroundColor3 = Settings.AutoShelter and Theme.BgButtonOn or Theme.BgButtonOff
+    if Settings.AutoShelter then goToShelter() end
+    Notify(Settings.AutoShelter and "Auto Shelter ON" or "OFF")
+end)
+
+ForceShelterBtn.MouseButton1Click:Connect(function()
+    ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
+    forceTPShelter()
+    task.delay(1.5, function()
+        if ForceShelterBtn then
+            ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
+        end
+    end)
+end)
+
+TPHopBtn.MouseButton1Click:Connect(function()
+    Notify("Server Hopping...")
+    TeleportService:Teleport(PLACE_ID, LocalPlayer)
+end)
+
+RefreshPlayersBtn.MouseButton1Click:Connect(function()
+    refreshPlayerList()
+    Notify("玩家列表已刷新")
+end)
+
+AFKBtn.MouseButton1Click:Connect(function()
+    Settings.AntiAFK = not Settings.AntiAFK
+    AFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
+    AFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+Notify("灾难警告之VIP版本 已加载")
+print("灾难警告之VIP版本 loaded")
