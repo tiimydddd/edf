@@ -1,0 +1,409 @@
+-- Tornado Alley Ultimate Auto Loot + Smart Rejoin + Fly Parts + Fire Extinguisher Test
+-- Press F to toggle flying unanchored parts
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local PLACE_ID = 2313058949
+
+local Settings = {
+    Enabled = false,
+    OnlyFragments = true,
+    ScanSpeed = 0.4,
+    AutoRejoin = true,
+    NoFragmentTime = 90,
+}
+
+local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
+local GlassesNames = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜"}
+local ExtinguisherNames = {"Fire Extinguisher", "Extinguisher", "灭火器"}
+
+local foundAnyFragment = false
+local lastFoundTime = tick()
+local flyEnabled = false
+local flyConnection = nil
+local FlyRange = 80
+local UpForce = 42
+
+-- ==================== UI ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TAU_AutoLoot_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = CoreGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 240, 0, 250)
+Main.Position = UDim2.new(0, 20, 0.28, 0)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = Main
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -30, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "TAU Auto Loot"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -27, 0, 3)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.Parent = TitleBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 4)
+CloseCorner.Parent = CloseBtn
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 18)
+StatusLabel.Position = UDim2.new(0, 10, 0, 36)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: Off"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 13
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = Main
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -20, 0, 26)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 58)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+ToggleBtn.Text = "Enable Auto Loot"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 13
+ToggleBtn.Parent = Main
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.Parent = ToggleBtn
+
+local ModeBtn = Instance.new("TextButton")
+ModeBtn.Size = UDim2.new(1, -20, 0, 24)
+ModeBtn.Position = UDim2.new(0, 10, 0, 90)
+ModeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+ModeBtn.Text = "Mode: Fragments Only"
+ModeBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+ModeBtn.Font = Enum.Font.Gotham
+ModeBtn.TextSize = 12
+ModeBtn.Parent = Main
+
+local ModeCorner = Instance.new("UICorner")
+ModeCorner.CornerRadius = UDim.new(0, 6)
+ModeCorner.Parent = ModeBtn
+
+local RejoinBtn = Instance.new("TextButton")
+RejoinBtn.Size = UDim2.new(1, -20, 0, 24)
+RejoinBtn.Position = UDim2.new(0, 10, 0, 120)
+RejoinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+RejoinBtn.Text = "Auto Rejoin: ON"
+RejoinBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+RejoinBtn.Font = Enum.Font.Gotham
+RejoinBtn.TextSize = 12
+RejoinBtn.Parent = Main
+
+local RejoinCorner = Instance.new("UICorner")
+RejoinCorner.CornerRadius = UDim.new(0, 6)
+RejoinCorner.Parent = RejoinBtn
+
+local TestBtn = Instance.new("TextButton")
+TestBtn.Size = UDim2.new(1, -20, 0, 24)
+TestBtn.Position = UDim2.new(0, 10, 0, 150)
+TestBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
+TestBtn.Text = "Test: Pick Fire Extinguisher"
+TestBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TestBtn.Font = Enum.Font.GothamBold
+TestBtn.TextSize = 12
+TestBtn.Parent = Main
+
+local TestCorner = Instance.new("UICorner")
+TestCorner.CornerRadius = UDim.new(0, 6)
+TestCorner.Parent = TestBtn
+
+local FlyLabel = Instance.new("TextLabel")
+FlyLabel.Size = UDim2.new(1, -20, 0, 16)
+FlyLabel.Position = UDim2.new(0, 10, 0, 182)
+FlyLabel.BackgroundTransparency = 1
+FlyLabel.Text = "Press F: Fly Parts OFF"
+FlyLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+FlyLabel.Font = Enum.Font.Gotham
+FlyLabel.TextSize = 12
+FlyLabel.TextXAlignment = Enum.TextXAlignment.Left
+FlyLabel.Parent = Main
+
+local TipLabel = Instance.new("TextLabel")
+TipLabel.Size = UDim2.new(1, -20, 0, 14)
+TipLabel.Position = UDim2.new(0, 10, 0, 202)
+TipLabel.BackgroundTransparency = 1
+TipLabel.Text = "F = Toggle Fly Parts"
+TipLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+TipLabel.Font = Enum.Font.Gotham
+TipLabel.TextSize = 11
+TipLabel.TextXAlignment = Enum.TextXAlignment.Left
+TipLabel.Parent = Main
+
+-- ==================== Functions ====================
+local function Notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "TAU Auto Loot",
+            Text = text,
+            Duration = 3.5
+        })
+    end)
+    print("[TAU] " .. text)
+end
+
+local function getHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function isTarget(obj)
+    local name = obj.Name:lower()
+    for _, n in ipairs(FragmentNames) do
+        if name:find(n:lower()) then return "Fragment" end
+    end
+    if not Settings.OnlyFragments then
+        for _, n in ipairs(GlassesNames) do
+            if name:find(n:lower()) then return "Glasses" end
+        end
+    end
+    return nil
+end
+
+local function isExtinguisher(obj)
+    local name = obj.Name:lower()
+    for _, n in ipairs(ExtinguisherNames) do
+        if name:find(n:lower()) then return true end
+    end
+    return false
+end
+
+local function tryPickup(obj, itemType)
+    local hrp = getHRP()
+    if not hrp then return end
+
+    local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+    if not part then return end
+
+    hrp.CFrame = part.CFrame + Vector3.new(0, 2.8, 0)
+
+    local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+    if prompt then pcall(fireproximityprompt, prompt) end
+
+    local touch = part:FindFirstChildOfClass("TouchInterest")
+    if touch then
+        pcall(firetouchinterest, hrp, part, 0)
+        task.wait(0.04)
+        pcall(firetouchinterest, hrp, part, 1)
+    end
+
+    local click = obj:FindFirstChildOfClass("ClickDetector") or part:FindFirstChildOfClass("ClickDetector")
+    if click then pcall(fireclickdetector, click) end
+
+    if itemType == "Fragment" then
+        foundAnyFragment = true
+        Settings.AutoRejoin = false
+        RejoinBtn.Text = "Auto Rejoin: OFF (Found)"
+        Notify("Fragment found! Auto Rejoin disabled.")
+    end
+
+    lastFoundTime = tick()
+    Notify("Trying to pick up: " .. itemType)
+end
+
+local function tryPickExtinguisher()
+    local found = false
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isExtinguisher(obj) then
+            found = true
+            tryPickup(obj, "Fire Extinguisher")
+            task.wait(0.15)
+        end
+    end
+    if found then
+        Notify("Fire Extinguisher found and trying to pick up")
+    else
+        Notify("No Fire Extinguisher found on the map")
+    end
+end
+
+local function rejoin()
+    if foundAnyFragment then return end
+    Notify("No fragments found, rejoining...")
+    task.wait(1.2)
+    TeleportService:Teleport(PLACE_ID, LocalPlayer)
+end
+
+local function makePartsFly()
+    local hrp = getHRP()
+    if not hrp then return end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(LocalPlayer.Character) then
+            local distance = (obj.Position - hrp.Position).Magnitude
+            if distance <= FlyRange then
+                local old = obj:FindFirstChild("FlyForce")
+                if old then old:Destroy() end
+
+                local bv = Instance.new("BodyVelocity")
+                bv.Name = "FlyForce"
+                bv.MaxForce = Vector3.new(0, math.huge, 0)
+                bv.Velocity = Vector3.new(0, UpForce, 0)
+                bv.Parent = obj
+
+                task.delay(2.5, function()
+                    if bv and bv.Parent then bv:Destroy() end
+                end)
+            end
+        end
+    end
+end
+
+-- Main Loop
+task.spawn(function()
+    while true do
+        if Settings.Enabled then
+            local hrp = getHRP()
+            if hrp then
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if not Settings.Enabled then break end
+                    local itemType = isTarget(obj)
+                    if itemType then
+                        tryPickup(obj, itemType)
+                        task.wait(0.2)
+                    end
+                end
+            end
+
+            if Settings.AutoRejoin and not foundAnyFragment and (tick() - lastFoundTime) > Settings.NoFragmentTime then
+                rejoin()
+            end
+        end
+        task.wait(Settings.ScanSpeed)
+    end
+end)
+
+-- Fly Parts Toggle (F key)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        flyEnabled = not flyEnabled
+        if flyEnabled then
+            FlyLabel.Text = "Press F: Fly Parts ON"
+            FlyLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+            Notify("Fly Parts Enabled")
+            flyConnection = RunService.Heartbeat:Connect(function()
+                makePartsFly()
+            end)
+        else
+            FlyLabel.Text = "Press F: Fly Parts OFF"
+            FlyLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+            Notify("Fly Parts Disabled")
+            if flyConnection then
+                flyConnection:Disconnect()
+                flyConnection = nil
+            end
+        end
+    end
+end)
+
+-- Buttons
+ToggleBtn.MouseButton1Click:Connect(function()
+    Settings.Enabled = not Settings.Enabled
+    if Settings.Enabled then
+        ToggleBtn.Text = "Disable Auto Loot"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
+        StatusLabel.Text = "Status: Running"
+        StatusLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+        lastFoundTime = tick()
+        Notify("Auto Loot Enabled")
+    else
+        ToggleBtn.Text = "Enable Auto Loot"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        StatusLabel.Text = "Status: Off"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
+        Notify("Auto Loot Disabled")
+    end
+end)
+
+ModeBtn.MouseButton1Click:Connect(function()
+    Settings.OnlyFragments = not Settings.OnlyFragments
+    ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
+end)
+
+RejoinBtn.MouseButton1Click:Connect(function()
+    if foundAnyFragment then
+        Notify("Already found a fragment, cannot enable Auto Rejoin.")
+        return
+    end
+    Settings.AutoRejoin = not Settings.AutoRejoin
+    RejoinBtn.Text = Settings.AutoRejoin and "Auto Rejoin: ON" or "Auto Rejoin: OFF"
+end)
+
+TestBtn.MouseButton1Click:Connect(function()
+    tryPickExtinguisher()
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    if flyConnection then
+        flyConnection:Disconnect()
+    end
+end)
+
+-- Dragging
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+print("TAU Auto Loot + Test Button loaded")
+Notify("Script loaded. Test button ready.")
