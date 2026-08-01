@@ -1,6 +1,5 @@
-
--- Tornado Alley Ultimate Auto Loot - Complete Latest Version (English UI)
--- Features: Auto loot fragments/glasses + Smart rejoin + Mobile fly parts + Real-time spawn detection + Current/Next mode detection + Fragment progress
+-- Tornado Alley Ultimate Auto Loot - Complete Latest Version (English)
+-- Features: Auto loot + Smart rejoin + Mobile fly parts + Real-time spawn detection + Improved mode detection + Fragment progress
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -385,82 +384,93 @@ local function toggleFly()
     end
 end
 
--- Mode Detection
+-- Improved Mode Detection
 local knownModes = {
-    ["dust devil"] = "Dust Devil",
-    ["infernado"] = "Infernado",
+    ["this round's gamemode is tartarus"] = "Tartarus",
+    ["this round's gamemode is doomsday"] = "Doomsday",
+    ["this round's gamemode is chad"] = "Chad!",
+    ["this round's gamemode is twisty"] = "Twisty The Clown",
+    ["this round's gamemode is lurker"] = "Lurker",
+    ["this round's gamemode is trollnado"] = "Trollnado",
+    ["this round's gamemode is dust devil"] = "Dust Devil",
+    ["this round's gamemode is infernado"] = "Infernado",
+    ["this round's gamemode is deadnado"] = "Deadnado",
+    ["this round's gamemode is chompnado"] = "Chompnado",
+    ["this round's gamemode is zeus"] = "Zeus",
+    ["this round's gamemode is double trouble"] = "Double Trouble",
+    ["this round's gamemode is triple threat"] = "Triple Threat",
+    ["this round's gamemode is 4-nado"] = "4-Nado",
+    ["this round's gamemode is unstoppable"] = "Unstoppable",
+    ["this round's gamemode is rainwrapped"] = "Rainwrapped",
+    ["this round's gamemode is freeze-nado"] = "Freeze-Nado",
+    ["this round's gamemode is ghostnado"] = "GhostNado",
+    ["this round's gamemode is jacko"] = "JackO’Nado",
+    ["this round's gamemode is timebomb"] = "Timebomb Terror",
+    ["this round's gamemode is riftnado"] = "Riftnado",
+    ["this round's gamemode is low-gravity"] = "Low-Gravity",
+    ["this round's gamemode is bombs away"] = "Bombs Away",
+    ["this round's gamemode is normal survival"] = "Normal Survival",
+    ["this round's gamemode is skirmish"] = "Skirmish",
+    ["this round's gamemode is taijitu"] = "Taijitu",
+    ["this round's gamemode is krampus"] = "Krampus",
+    ["this round's gamemode is hoshinado"] = "Hoshinado",
+    ["this round's gamemode is megatornado"] = "MegaTornado",
+
+    ["there is a dust devil"] = "Dust Devil",
+    ["dust devil!"] = "Dust Devil",
+    ["there is an infernado"] = "Infernado",
     ["deadnado"] = "Deadnado",
     ["chompnado"] = "Chompnado",
-    ["zeus"] = "Zeus",
     ["trollnado"] = "Trollnado",
     ["lurker"] = "Lurker",
-    ["doomsday"] = "Doomsday",
-    ["tartarus"] = "Tartarus",
-    ["chad"] = "Chad!",
-    ["twisty"] = "Twisty The Clown",
-    ["double trouble"] = "Double Trouble",
-    ["triple threat"] = "Triple Threat",
-    ["4-nado"] = "4-Nado",
     ["four tornadoes"] = "4-Nado",
-    ["six-nado"] = "Six-Nado",
-    ["megatornado"] = "MegaTornado",
-    ["giganado"] = "GigaNado",
+    ["there are two tornadoes"] = "Double Trouble",
+    ["there are three"] = "Triple Threat",
     ["unstoppable"] = "Unstoppable",
     ["rainwrapped"] = "Rainwrapped",
     ["freeze-nado"] = "Freeze-Nado",
-    ["mintnado"] = "Mintnado",
     ["ghostnado"] = "GhostNado",
     ["jacko"] = "JackO’Nado",
-    ["wraithnado"] = "WraithNado",
-    ["timebomb"] = "Timebomb Terror",
+    ["timebomb terror"] = "Timebomb Terror",
     ["riftnado"] = "Riftnado",
     ["low-gravity"] = "Low-Gravity",
     ["bombs away"] = "Bombs Away",
-    ["normal survival"] = "Normal Survival",
-    ["there is a tornado"] = "Normal Survival",
-    ["skirmish"] = "Skirmish",
-    ["taijitu"] = "Taijitu",
-    ["yin n' yang"] = "Yin N' Yang",
     ["krampus"] = "Krampus",
     ["hoshinado"] = "Hoshinado",
-    ["toastnado"] = "ToastNado",
-    ["noobnado"] = "NoobNado",
-    ["retronado"] = "Retro-Nado",
-    ["your doom"] = "Your Doom",
-    ["tsunami"] = "Tsunami",
-    ["meteors"] = "Meteors",
-    ["black hole"] = "Black Hole",
-    ["flood"] = "Flood",
-    ["lava flood"] = "Lava Flood",
-    ["alien invasion"] = "Alien Invasion",
-    ["volcano"] = "Volcano",
-    ["avalanche"] = "Avalanche",
-    ["atomic bomb"] = "Atomic Bomb",
-    ["pollution"] = "Pollution",
-    ["acid rain"] = "Acid Rain",
-    ["hurricane"] = "Hurricane",
+    ["tartarus"] = "Tartarus",
+    ["doomsday"] = "Doomsday",
+    ["chad!"] = "Chad!",
+    ["twisty the clown"] = "Twisty The Clown",
+    ["twisty!!!!"] = "Twisty The Clown",
 }
+
+local lastDetectedMode = "Detecting..."
+local lastDetectTime = 0
 
 local function detectMode()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return "Detecting...", false, nil end
 
-    local foundMode = "Detecting..."
+    local foundMode = nil
     local isNext = false
     local doomsdayRisk = nil
+    local bestMatchLength = 0
 
     for _, gui in ipairs(playerGui:GetDescendants()) do
         if gui:IsA("TextLabel") or gui:IsA("TextButton") then
             local text = string.lower(gui.Text or "")
-            if text:find("this round's gamemode is") or text:find("gamemode is:") or text:find("round's gamemode") then
+
+            if text:find("this round's gamemode is") or text:find("gamemode is:") then
                 isNext = true
             end
+
             for keyword, modeName in pairs(knownModes) do
-                if text:find(keyword) then
+                if text:find(keyword) and #keyword > bestMatchLength then
                     foundMode = modeName
-                    break
+                    bestMatchLength = #keyword
                 end
             end
+
             if text:find("low risk") then
                 doomsdayRisk = "Low Risk"
             elseif text:find("medium risk") then
@@ -472,7 +482,17 @@ local function detectMode()
             end
         end
     end
-    return foundMode, isNext, doomsdayRisk
+
+    if foundMode then
+        lastDetectedMode = foundMode
+        lastDetectTime = tick()
+    else
+        if tick() - lastDetectTime > 25 then
+            lastDetectedMode = "Detecting..."
+        end
+    end
+
+    return lastDetectedMode, isNext, doomsdayRisk
 end
 
 -- Real-time spawn detection
