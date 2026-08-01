@@ -1,5 +1,7 @@
 -- 灾难警告之VIP版本
 -- PlaceId: 7479931846
+-- 功能：先开宝箱 → 再去避难所 | Workspace检测Danger Alert | 当前/下一场灾难 | The End | 玩家传送
+
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -22,12 +24,18 @@ local theEndActive = false
 local lastDisasterTime = 0
 local isMinimized = false
 local knownShelters = {}
+local knownChests = {}
 local lastShelterCheck = 0
-local SHELTER_INTERVAL = 2.5
+local SHELTER_INTERVAL = 3.5
 
 local ShelterNames = {
     "Shelter", "Bunker", "Underground", "UndergroundShelter", "Underground Bunker",
     "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlPanel", "Control Room"
+}
+
+local ChestNames = {
+    "Chest", "Treasure", "TreasureChest", "Treasure Chest",
+    "Box", "Crate", "Loot", "宝箱"
 }
 
 local Theme = {
@@ -185,7 +193,7 @@ local function makeToggle(parent, text, y, on)
     return btn
 end
 
--- Info Page（整齐排列）
+-- Info
 local PageInfo = createPage("Info")
 local StatusLabel   = makeLabel(PageInfo, "Status: Ready", 8)
 local DisasterLabel = makeLabel(PageInfo, "当前灾难: Unknown", 36)
@@ -193,13 +201,13 @@ local NextLabel     = makeLabel(PageInfo, "下一场  : Unknown", 58)
 local DangerLabel   = makeLabel(PageInfo, "Danger Alerts: Off", 88)
 local EndLabel      = makeLabel(PageInfo, "The End: No", 110)
 
--- Shelter Page
+-- Shelter
 local PageShelter = createPage("Shelter")
-local AutoShelterBtn = makeToggle(PageShelter, "Auto Go Shelter: OFF", 12, false)
+local AutoShelterBtn = makeToggle(PageShelter, "Auto: 开箱→避难所 OFF", 12, false)
 local ForceShelterBtn = makeToggle(PageShelter, "强制 TP 进避难所", 50, false)
-local ShelterTip = makeLabel(PageShelter, "自动扫描 Shelter / Bunker", 95)
+local ShelterTip = makeLabel(PageShelter, "先开宝箱，再去避难所", 95)
 
--- Teleport Page
+-- Teleport
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 12, false)
 local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 48)
@@ -221,7 +229,7 @@ PlayerListLayout.Parent = PlayerListFrame
 
 local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 220, false)
 
--- Extra Page
+-- Extra
 local PageExtra = createPage("Extra")
 local AFKBtn = makeToggle(PageExtra, "Anti-AFK: OFF", 12, false)
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 55)
@@ -292,6 +300,14 @@ local function isShelter(obj)
     return false
 end
 
+local function isChest(obj)
+    local n = obj.Name:lower()
+    for _, v in ipairs(ChestNames) do
+        if n:find(v:lower()) then return true end
+    end
+    return false
+end
+
 local function cleanCache(cache)
     for obj in pairs(cache) do
         if not obj or not obj.Parent then
@@ -300,22 +316,36 @@ local function cleanCache(cache)
     end
 end
 
-local function checkGameText()
+-- 检测 Workspace 的 Danger Alert
+local function checkDangerAlert()
+    local found = false
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local name = obj.Name:lower()
+        if name:find("danger") and (name:find("alert") or name:find("alerts")) then
+            found = true
+            break
+        end
+    end
+
+    if found and not lastDangerState then
+        Notify("⚠ Danger Alert 已开启！")
+    end
+    lastDangerState = found
+    dangerAlerts = found
+end
+
+-- 检测灾难文字
+local function checkDisasterText()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
 
     local foundDisaster = nil
     local foundNext = nil
-    local foundDanger = false
     local foundEnd = false
 
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") or g:IsA("TextBox") then
             local t = (g.Text or ""):lower()
-
-            if t:find("danger alert") or t:find("danger alerts") then
-                foundDanger = true
-            end
 
             if t:find("the end") or t:find("theend") then
                 foundEnd = true
@@ -360,15 +390,55 @@ local function checkGameText()
     if foundNext then
         nextDisaster = foundNext
     end
-
-    if foundDanger and not lastDangerState then
-        Notify("⚠ Danger Alerts 已开启！")
-    end
-    lastDangerState = foundDanger
-    dangerAlerts = foundDanger
     theEndActive = foundEnd
 end
 
+-- 打开宝箱
+local function openChests()
+    local hrp = getHRP()
+    if not hrp then return false end
+
+    cleanCache(knownChests)
+    local opened = false
+
+    local function tryOpen(obj)
+        local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+        if not part then return end
+
+        hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.12)
+
+        local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+        if prompt then
+            pcall(fireproximityprompt, prompt)
+            opened = true
+        end
+
+        local click = obj:FindFirstChildOfClass("ClickDetector") or part:FindFirstChildOfClass("ClickDetector")
+        if click then
+            pcall(fireclickdetector, click)
+            opened = true
+        end
+        task.wait(0.15)
+    end
+
+    for obj in pairs(knownChests) do
+        if obj and obj.Parent then
+            tryOpen(obj)
+        end
+    end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isChest(obj) then
+            knownChests[obj] = true
+            tryOpen(obj)
+        end
+    end
+
+    return opened
+end
+
+-- 去避难所门口
 local function goToShelter()
     local hrp = getHRP()
     if not hrp then return end
@@ -381,7 +451,7 @@ local function goToShelter()
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
                 local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
                 if prompt then pcall(fireproximityprompt, prompt) end
-                Notify("Trying Shelter...")
+                Notify("已到达避难所附近")
                 return
             end
         end
@@ -395,13 +465,23 @@ local function goToShelter()
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
                 local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
                 if prompt then pcall(fireproximityprompt, prompt) end
-                Notify("Found Shelter")
+                Notify("找到避难所")
                 return
             end
         end
     end
 end
 
+-- 自动流程：先开宝箱 → 再去避难所
+local function autoShelterFlow()
+    Notify("开始：先开宝箱...")
+    openChests()
+    task.wait(1.2)
+    Notify("宝箱处理完毕，前往避难所...")
+    goToShelter()
+end
+
+-- 强制 TP
 local function forceTPShelter()
     local hrp = getHRP()
     if not hrp then
@@ -431,8 +511,6 @@ local function forceTPShelter()
         Vector3.new(6, 3, 0),
         Vector3.new(-6, 3, 0),
         Vector3.new(0, 6, 0),
-        Vector3.new(0, 2, 10),
-        Vector3.new(0, 2, -10),
     }
 
     Notify("强制 TP 进避难所...")
@@ -491,33 +569,40 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
+-- 监听
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isShelter(obj) then
             knownShelters[obj] = true
+        elseif isChest(obj) then
+            knownChests[obj] = true
         end
     end)
 end)
 
 workspace.DescendantRemoving:Connect(function(obj)
     knownShelters[obj] = nil
+    knownChests[obj] = nil
 end)
 
 task.spawn(function()
     task.wait(1.5)
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isShelter(obj) then knownShelters[obj] = true end
+        if isChest(obj) then knownChests[obj] = true end
     end
     refreshPlayerList()
 end)
 
+-- 主循环
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
 
-        checkGameText()
+        checkDangerAlert()
+        checkDisasterText()
 
-        StatusLabel.Text = "Status: " .. (Settings.AutoShelter and "Auto Shelter ON" or "Ready")
+        StatusLabel.Text = "Status: " .. (Settings.AutoShelter and "开箱→避难所 ON" or "Ready")
         StatusLabel.TextColor3 = Settings.AutoShelter and Color3.fromRGB(100, 200, 255) or Theme.TextGray
 
         DisasterLabel.Text = "当前灾难: " .. currentDisaster
@@ -529,13 +614,14 @@ task.spawn(function()
 
         if Settings.AutoShelter and (now - lastShelterCheck) >= SHELTER_INTERVAL then
             lastShelterCheck = now
-            goToShelter()
+            autoShelterFlow()
         end
 
-        task.wait(0.4)
+        task.wait(0.45)
     end
 end)
 
+-- Anti AFK
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         if Settings.AntiAFK then
@@ -549,10 +635,12 @@ end)
 -- 按钮
 AutoShelterBtn.MouseButton1Click:Connect(function()
     Settings.AutoShelter = not Settings.AutoShelter
-    AutoShelterBtn.Text = Settings.AutoShelter and "Auto Go Shelter: ON" or "Auto Go Shelter: OFF"
+    AutoShelterBtn.Text = Settings.AutoShelter and "Auto: 开箱→避难所 ON" or "Auto: 开箱→避难所 OFF"
     AutoShelterBtn.BackgroundColor3 = Settings.AutoShelter and Theme.BgButtonOn or Theme.BgButtonOff
-    if Settings.AutoShelter then goToShelter() end
-    Notify(Settings.AutoShelter and "Auto Shelter ON" or "OFF")
+    if Settings.AutoShelter then
+        autoShelterFlow()
+    end
+    Notify(Settings.AutoShelter and "自动流程已开启" or "已关闭")
 end)
 
 ForceShelterBtn.MouseButton1Click:Connect(function()
@@ -585,6 +673,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
+-- 拖动
 local dragging, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
