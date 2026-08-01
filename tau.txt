@@ -1,4 +1,4 @@
--- tau only apple - Clean + Tabs + Teleport
+-- tau only apple - Dark Blue Theme (匹配你发的图)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -10,27 +10,46 @@ local PLACE_ID = 2313058949
 
 local Settings = {
     Enabled = false,
-    AutoShelterKey = false,
+    OnlyFragments = true,
     AutoGoShelter = false,
     FullAuto = false,
 }
 
 local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
-local ShelterKeyNames = {"Shelter Key", "ShelterKey", "避难所钥匙"}
+local GlassesNames = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜"}
 local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
 
 local collectedFragments = 0
-local hasShelterKey = false
+local glassesFound = false
+local currentMode = "Unknown"
+local isNext = false
+local systemOverload = false
+local lastModeTime = 0
 local knownFragments = {}
-local knownShelterKeys = {}
+local knownGlasses = {}
 local knownShelters = {}
 local lastScan = 0
 local lastShelterCheck = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.7
 local SHELTER_CHECK_INTERVAL = 2.2
+
+-- 颜色主题（匹配你发的图）
+local Theme = {
+    BgMain       = Color3.fromRGB(18, 20, 28),      -- 深灰蓝
+    BgTitle      = Color3.fromRGB(22, 28, 42),      -- 深蓝灰
+    BgSidebar    = Color3.fromRGB(14, 16, 24),      -- 更深
+    BgContent    = Color3.fromRGB(20, 24, 34),      -- 内容区
+    BgButtonOff  = Color3.fromRGB(35, 42, 58),      -- 灰色按钮
+    BgButtonOn   = Color3.fromRGB(30, 90, 160),     -- 电蓝色按钮
+    BgButtonFull = Color3.fromRGB(20, 70, 140),     -- Full Auto 深蓝
+    TextWhite    = Color3.fromRGB(230, 235, 245),
+    TextGray     = Color3.fromRGB(160, 170, 190),
+    AccentBlue   = Color3.fromRGB(80, 160, 255),    -- 高亮蓝
+    CloseRed     = Color3.fromRGB(160, 50, 50),
+}
 
 -- ==================== UI ====================
 local ScreenGui = Instance.new("ScreenGui")
@@ -40,17 +59,24 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 340)
-Main.Position = UDim2.new(0, 25, 0.15, 0)
-Main.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+Main.Size = UDim2.new(0, 380, 0, 360)
+Main.Position = UDim2.new(0, 25, 0.12, 0)
+Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
+-- 轻微蓝色描边
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(40, 80, 140)
+Stroke.Thickness = 1.2
+Stroke.Transparency = 0.6
+Stroke.Parent = Main
+
 -- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 32)
-TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+TitleBar.BackgroundColor3 = Theme.BgTitle
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = Main
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
@@ -58,7 +84,7 @@ Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
 local TitleFix = Instance.new("Frame")
 TitleFix.Size = UDim2.new(1, 0, 0, 12)
 TitleFix.Position = UDim2.new(0, 0, 1, -12)
-TitleFix.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+TitleFix.BackgroundColor3 = Theme.BgTitle
 TitleFix.BorderSizePixel = 0
 TitleFix.Parent = TitleBar
 
@@ -67,7 +93,7 @@ Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "tau only apple"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextColor3 = Theme.TextWhite
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -76,9 +102,9 @@ Title.Parent = TitleBar
 local MinBtn = Instance.new("TextButton")
 MinBtn.Size = UDim2.new(0, 24, 0, 24)
 MinBtn.Position = UDim2.new(1, -56, 0, 4)
-MinBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+MinBtn.BackgroundColor3 = Color3.fromRGB(40, 55, 80)
 MinBtn.Text = "–"
-MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.TextColor3 = Theme.TextWhite
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 16
 MinBtn.Parent = TitleBar
@@ -87,9 +113,9 @@ Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 5)
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 24, 0, 24)
 CloseBtn.Position = UDim2.new(1, -28, 0, 4)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
+CloseBtn.BackgroundColor3 = Theme.CloseRed
 CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextColor3 = Theme.TextWhite
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 14
 CloseBtn.Parent = TitleBar
@@ -99,14 +125,14 @@ Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 100, 1, -32)
 Sidebar.Position = UDim2.new(0, 0, 0, 32)
-Sidebar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+Sidebar.BackgroundColor3 = Theme.BgSidebar
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -100, 1, -32)
 Content.Position = UDim2.new(0, 100, 0, 32)
-Content.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+Content.BackgroundColor3 = Theme.BgContent
 Content.BorderSizePixel = 0
 Content.Parent = Main
 
@@ -115,9 +141,9 @@ local function makeTab(name, text, y)
     btn.Name = name
     btn.Size = UDim2.new(1, -8, 0, 30)
     btn.Position = UDim2.new(0, 4, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+    btn.BackgroundColor3 = Theme.BgSidebar
     btn.Text = " " .. text
-    btn.TextColor3 = Color3.fromRGB(180, 180, 190)
+    btn.TextColor3 = Theme.TextGray
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 12
     btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -149,7 +175,7 @@ local function makeLabel(parent, text, y)
     l.Position = UDim2.new(0, 10, 0, y)
     l.BackgroundTransparency = 1
     l.Text = text
-    l.TextColor3 = Color3.fromRGB(200, 200, 210)
+    l.TextColor3 = Theme.TextGray
     l.Font = Enum.Font.Gotham
     l.TextSize = 12
     l.TextXAlignment = Enum.TextXAlignment.Left
@@ -161,9 +187,9 @@ local function makeToggle(parent, text, y, on)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -20, 0, 28)
     btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = on and Color3.fromRGB(40, 120, 70) or Color3.fromRGB(45, 45, 58)
+    btn.BackgroundColor3 = on and Theme.BgButtonOn or Theme.BgButtonOff
     btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextColor3 = Theme.TextWhite
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 12
     btn.Parent = parent
@@ -173,16 +199,19 @@ end
 
 -- ===== Info Page =====
 local PageInfo = createPage("Info")
-local StatusLabel = makeLabel(PageInfo, "Status: Off", 10)
-local FragLabel = makeLabel(PageInfo, "Fragments: 0 / 5", 32)
-local KeyLabel = makeLabel(PageInfo, "Shelter Key: No", 54)
-local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 80)
+local StatusLabel = makeLabel(PageInfo, "Status: Off", 8)
+local ModeLabel = makeLabel(PageInfo, "Mode: Unknown", 28)
+local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 48)
+local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 68)
+local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 88)
+local OverloadLabel = makeLabel(PageInfo, "System Overload: No", 108)
+local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 135)
 
 -- ===== Loot Page =====
 local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 10, false)
-local ToggleBtn = makeToggle(PageLoot, "Auto Fragments: OFF", 46, false)
-local ShelterKeyBtn = makeToggle(PageLoot, "Auto Shelter Key: OFF", 82, false)
+local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 46, false)
+local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 82, false)
 local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 118, false)
 
 -- ===== Teleport Page =====
@@ -195,7 +224,7 @@ local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 118)
 local PlayerListFrame = Instance.new("ScrollingFrame")
 PlayerListFrame.Size = UDim2.new(1, -20, 0, 120)
 PlayerListFrame.Position = UDim2.new(0, 10, 0, 140)
-PlayerListFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+PlayerListFrame.BackgroundColor3 = Color3.fromRGB(28, 34, 48)
 PlayerListFrame.BorderSizePixel = 0
 PlayerListFrame.ScrollBarThickness = 4
 PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -215,21 +244,21 @@ local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
 
 Pages["Info"].Visible = true
-TabInfo.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-TabInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
+TabInfo.BackgroundColor3 = Theme.BgButtonOn
+TabInfo.TextColor3 = Theme.TextWhite
 
 local function switchTab(name)
     for n, page in pairs(Pages) do
         page.Visible = (n == name)
     end
     for _, tab in pairs({TabInfo, TabLoot, TabTP, TabExtra}) do
-        tab.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
-        tab.TextColor3 = Color3.fromRGB(180, 180, 190)
+        tab.BackgroundColor3 = Theme.BgSidebar
+        tab.TextColor3 = Theme.TextGray
     end
     local map = {Info = TabInfo, Loot = TabLoot, Teleport = TabTP, Extra = TabExtra}
     if map[name] then
-        map[name].BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-        map[name].TextColor3 = Color3.fromRGB(255, 255, 255)
+        map[name].BackgroundColor3 = Theme.BgButtonOn
+        map[name].TextColor3 = Theme.TextWhite
     end
 end
 
@@ -247,7 +276,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 340)
+        Main.Size = UDim2.new(0, 380, 0, 360)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -278,9 +307,9 @@ local function isFragment(obj)
     return false
 end
 
-local function isShelterKey(obj)
+local function isGlasses(obj)
     local n = obj.Name:lower()
-    for _, v in ipairs(ShelterKeyNames) do
+    for _, v in ipairs(GlassesNames) do
         if n:find(v:lower()) then return true end
     end
     return false
@@ -310,6 +339,13 @@ local function cleanCache(cache)
     end
 end
 
+local function countFrags()
+    cleanCache(knownFragments)
+    local c = 0
+    for _ in pairs(knownFragments) do c = c + 1 end
+    return c
+end
+
 local function pickup(obj, typ)
     local hrp = getHRP()
     if not hrp then return end
@@ -334,9 +370,9 @@ local function pickup(obj, typ)
     if typ == "Fragment" then
         collectedFragments = collectedFragments + 1
         Notify("Fragment " .. collectedFragments .. "/5")
-    elseif typ == "Key" then
-        hasShelterKey = true
-        Notify("Shelter Key got!")
+    elseif typ == "Glasses" then
+        glassesFound = true
+        Notify("Glasses found!")
     end
 end
 
@@ -420,9 +456,9 @@ local function refreshPlayerList()
         if plr ~= LocalPlayer then
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -8, 0, 26)
-            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+            btn.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
             btn.Text = plr.Name
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.TextColor3 = Theme.TextWhite
             btn.Font = Enum.Font.Gotham
             btn.TextSize = 12
             btn.Parent = PlayerListFrame
@@ -437,6 +473,73 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
+-- 地图模式检测
+local function checkText()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+    local foundMode, foundIsNext = nil, false
+
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") then
+            local t = (g.Text or ""):lower()
+
+            if t:find("system overload") or t:find("系统过载") then
+                if not systemOverload then
+                    systemOverload = true
+                    Notify("System Overload!")
+                end
+            end
+
+            if t:find("this round's gamemode is") or t:find("gamemode is:") then
+                foundIsNext = true
+            end
+
+            if t:find("toastnado") then foundMode = "ToastNado"
+            elseif t:find("dust devil") then foundMode = "Dust Devil"
+            elseif t:find("infernado") then foundMode = "Infernado"
+            elseif t:find("double trouble") then foundMode = "Double Trouble"
+            elseif t:find("triple threat") then foundMode = "Triple Threat"
+            elseif t:find("four tornadoes") or t:find("4-nado") then foundMode = "4-Nado"
+            elseif t:find("chompnado") then foundMode = "Chompnado"
+            elseif t:find("deadnado") then foundMode = "Deadnado"
+            elseif t:find("trollnado") then foundMode = "Trollnado"
+            elseif t:find("lurker") then foundMode = "Lurker"
+            elseif t:find("unstoppable") then foundMode = "Unstoppable"
+            elseif t:find("rainwrapped") then foundMode = "Rainwrapped"
+            elseif t:find("freeze-nado") or t:find("freezenado") then foundMode = "Freeze-Nado"
+            elseif t:find("ghostnado") then foundMode = "GhostNado"
+            elseif t:find("megatornado") then foundMode = "MegaTornado"
+            elseif t:find("riftnado") then foundMode = "Riftnado"
+            elseif t:find("timebomb") then foundMode = "Timebomb Terror"
+            elseif t:find("bombs away") then foundMode = "Bombs Away"
+            elseif t:find("low-gravity") or t:find("low gravity") then foundMode = "Low-Gravity"
+            elseif t:find("skirmish") then foundMode = "Skirmish"
+            elseif t:find("taijitu") then foundMode = "Taijitu"
+            elseif t:find("krampus") then foundMode = "Krampus"
+            elseif t:find("hoshinado") then foundMode = "Hoshinado"
+            elseif t:find("noobnado") then foundMode = "NoobNado"
+            elseif t:find("retronado") or t:find("retro-nado") then foundMode = "Retro-Nado"
+            elseif t:find("tartarus") then foundMode = "Tartarus"
+            elseif t:find("doomsday") then foundMode = "Doomsday"
+            elseif t:find("chad!") or t:find("chad is") then foundMode = "Chad!"
+            elseif t:find("twisty") then foundMode = "Twisty The Clown"
+            elseif t:find("normal survival") then foundMode = "Normal Survival"
+            elseif t:find("zeus") then foundMode = "Zeus"
+            elseif t:find("your doom") then foundMode = "Your Doom"
+            end
+        end
+    end
+
+    if foundMode then
+        currentMode = foundMode
+        isNext = foundIsNext
+        lastModeTime = tick()
+    elseif tick() - lastModeTime > 20 then
+        currentMode = "Unknown"
+        isNext = false
+    end
+end
+
 -- 监听
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
@@ -445,10 +548,10 @@ workspace.DescendantAdded:Connect(function(obj)
             if Settings.Enabled or Settings.FullAuto then
                 pickup(obj, "Fragment")
             end
-        elseif isShelterKey(obj) then
-            knownShelterKeys[obj] = true
-            if Settings.AutoShelterKey or Settings.FullAuto then
-                pickup(obj, "Key")
+        elseif isGlasses(obj) then
+            knownGlasses[obj] = true
+            if (Settings.Enabled or Settings.FullAuto) and not Settings.OnlyFragments then
+                pickup(obj, "Glasses")
             end
         elseif isShelter(obj) then
             knownShelters[obj] = true
@@ -458,7 +561,7 @@ end)
 
 workspace.DescendantRemoving:Connect(function(obj)
     knownFragments[obj] = nil
-    knownShelterKeys[obj] = nil
+    knownGlasses[obj] = nil
     knownShelters[obj] = nil
 end)
 
@@ -466,7 +569,7 @@ task.spawn(function()
     task.wait(1.2)
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isFragment(obj) then knownFragments[obj] = true end
-        if isShelterKey(obj) then knownShelterKeys[obj] = true end
+        if isGlasses(obj) then knownGlasses[obj] = true end
         if isShelter(obj) then knownShelters[obj] = true end
     end
     refreshPlayerList()
@@ -476,16 +579,22 @@ end)
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
+        local frags = countFrags()
+
+        checkText()
 
         StatusLabel.Text = "Status: " .. ((Settings.Enabled or Settings.FullAuto) and "Running" or "Off")
-        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(80, 255, 100) or Color3.fromRGB(255, 90, 90)
-        FragLabel.Text = "Fragments: " .. collectedFragments .. " / 5"
-        KeyLabel.Text = "Shelter Key: " .. (hasShelterKey and "YES" or "No")
+        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(100, 200, 255) or Color3.fromRGB(255, 100, 100)
+        ModeLabel.Text = (isNext and "Next: " or "Mode: ") .. currentMode
+        FragLabel.Text = "Map Fragments: " .. frags
+        CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
+        GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
+        OverloadLabel.Text = "System Overload: " .. (systemOverload and "YES" or "No")
 
         if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
             cleanCache(knownFragments)
-            cleanCache(knownShelterKeys)
+            cleanCache(knownGlasses)
 
             for obj in pairs(knownFragments) do
                 if obj and obj.Parent then
@@ -494,17 +603,17 @@ task.spawn(function()
                 end
             end
 
-            if Settings.AutoShelterKey or Settings.FullAuto then
-                for obj in pairs(knownShelterKeys) do
+            if not Settings.OnlyFragments then
+                for obj in pairs(knownGlasses) do
                     if obj and obj.Parent then
-                        pickup(obj, "Key")
+                        pickup(obj, "Glasses")
                         task.wait(0.07)
                     end
                 end
             end
         end
 
-        if (Settings.AutoGoShelter or Settings.FullAuto) and hasShelterKey and (now - lastShelterCheck) >= SHELTER_CHECK_INTERVAL then
+        if (Settings.AutoGoShelter or Settings.FullAuto) and (now - lastShelterCheck) >= SHELTER_CHECK_INTERVAL then
             lastShelterCheck = now
             goToShelter()
         end
@@ -518,53 +627,54 @@ FullAutoBtn.MouseButton1Click:Connect(function()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
         Settings.Enabled = true
-        Settings.AutoShelterKey = true
+        Settings.OnlyFragments = false
         Settings.AutoGoShelter = true
+
         FullAutoBtn.Text = "★ Full Auto: ON"
-        FullAutoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-        ToggleBtn.Text = "Auto Fragments: ON"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
-        ShelterKeyBtn.Text = "Auto Shelter Key: ON"
-        ShelterKeyBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
+        FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
+        ToggleBtn.Text = "Auto Loot: ON"
+        ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
+        ModeBtn.Text = "Mode: Fragments + Glasses"
+        ModeBtn.BackgroundColor3 = Theme.BgButtonOn
         AutoShelterBtn.Text = "Auto Go Shelter: ON"
-        AutoShelterBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
+        AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOn
         Notify("Full Auto ON")
     else
         Settings.Enabled = false
-        Settings.AutoShelterKey = false
         Settings.AutoGoShelter = false
+
         FullAutoBtn.Text = "★ Full Auto: OFF"
-        FullAutoBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-        ToggleBtn.Text = "Auto Fragments: OFF"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-        ShelterKeyBtn.Text = "Auto Shelter Key: OFF"
-        ShelterKeyBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+        FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
+        ToggleBtn.Text = "Auto Loot: OFF"
+        ToggleBtn.BackgroundColor3 = Theme.BgButtonOff
+        ModeBtn.Text = "Mode: Fragments Only"
+        ModeBtn.BackgroundColor3 = Theme.BgButtonOff
         AutoShelterBtn.Text = "Auto Go Shelter: OFF"
-        AutoShelterBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+        AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOff
         Notify("Full Auto OFF")
     end
 end)
 
 ToggleBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = not Settings.Enabled
-    ToggleBtn.Text = Settings.Enabled and "Auto Fragments: ON" or "Auto Fragments: OFF"
-    ToggleBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(40, 120, 70) or Color3.fromRGB(45, 45, 58)
+    ToggleBtn.Text = Settings.Enabled and "Auto Loot: ON" or "Auto Loot: OFF"
+    ToggleBtn.BackgroundColor3 = Settings.Enabled and Theme.BgButtonOn or Theme.BgButtonOff
 end)
 
-ShelterKeyBtn.MouseButton1Click:Connect(function()
-    Settings.AutoShelterKey = not Settings.AutoShelterKey
-    ShelterKeyBtn.Text = Settings.AutoShelterKey and "Auto Shelter Key: ON" or "Auto Shelter Key: OFF"
-    ShelterKeyBtn.BackgroundColor3 = Settings.AutoShelterKey and Color3.fromRGB(40, 120, 70) or Color3.fromRGB(45, 45, 58)
+ModeBtn.MouseButton1Click:Connect(function()
+    Settings.OnlyFragments = not Settings.OnlyFragments
+    ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
+    ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
 end)
 
 AutoShelterBtn.MouseButton1Click:Connect(function()
     Settings.AutoGoShelter = not Settings.AutoGoShelter
     AutoShelterBtn.Text = Settings.AutoGoShelter and "Auto Go Shelter: ON" or "Auto Go Shelter: OFF"
-    AutoShelterBtn.BackgroundColor3 = Settings.AutoGoShelter and Color3.fromRGB(40, 120, 70) or Color3.fromRGB(45, 45, 58)
+    AutoShelterBtn.BackgroundColor3 = Settings.AutoGoShelter and Theme.BgButtonOn or Theme.BgButtonOff
     if Settings.AutoGoShelter then goToShelter() end
 end)
 
--- Teleport 按钮
+-- Teleport
 TPHopBtn.MouseButton1Click:Connect(function()
     Notify("Server Hopping...")
     TeleportService:Teleport(PLACE_ID, LocalPlayer)
@@ -609,4 +719,4 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 Notify("tau only apple loaded")
-print("tau only apple with Teleport loaded")
+print("tau only apple Dark Blue Theme loaded")
