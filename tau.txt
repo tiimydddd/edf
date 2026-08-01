@@ -1,5 +1,5 @@
--- TAU Auto Loot - Optimized Complete Version
--- Sidebar UI + Lag fixed (cache + lower scan frequency)
+-- TAU Auto Loot - Full Optimized + Minimize
+-- Sidebar UI + Minimize + Strict Mode Detection + Lag Optimized
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -40,8 +40,7 @@ local lastAFK = 0
 local lastScan = 0
 local lastESPUpdate = 0
 local espFolder = nil
-local currentTab = "Info"
-
+local isMinimized = false
 local knownFragments = {}
 local knownGlasses = {}
 local SCAN_INTERVAL = 0.75
@@ -65,7 +64,7 @@ local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 10)
 MainCorner.Parent = Main
 
--- Title
+-- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 32)
 TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
@@ -84,7 +83,7 @@ TitleFix.BorderSizePixel = 0
 TitleFix.Parent = TitleBar
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -40, 1, 0)
+Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "TAU Auto Loot"
@@ -93,6 +92,20 @@ Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TitleBar
+
+-- Minimize Button
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 24, 0, 24)
+MinBtn.Position = UDim2.new(1, -56, 0, 4)
+MinBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+MinBtn.Text = "–"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.Parent = TitleBar
+local MinCorner = Instance.new("UICorner")
+MinCorner.CornerRadius = UDim.new(0, 5)
+MinCorner.Parent = MinBtn
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 24, 0, 24)
@@ -107,8 +120,9 @@ local CloseCorner = Instance.new("UICorner")
 CloseCorner.CornerRadius = UDim.new(0, 5)
 CloseCorner.Parent = CloseBtn
 
--- Sidebar
+-- Sidebar + Content (will be hidden when minimized)
 local Sidebar = Instance.new("Frame")
+Sidebar.Name = "Sidebar"
 Sidebar.Size = UDim2.new(0, 110, 1, -32)
 Sidebar.Position = UDim2.new(0, 0, 0, 32)
 Sidebar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
@@ -116,6 +130,7 @@ Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 
 local Content = Instance.new("Frame")
+Content.Name = "Content"
 Content.Size = UDim2.new(1, -110, 1, -32)
 Content.Position = UDim2.new(0, 110, 0, 32)
 Content.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
@@ -187,7 +202,6 @@ local function makeToggle(parent, text, y, on)
     return btn
 end
 
--- Pages
 local PageInfo = createPage("Info")
 local StatusLabel = makeLabel(PageInfo, "Status: Off", 12)
 local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 34)
@@ -237,6 +251,24 @@ TabLoot.MouseButton1Click:Connect(function() switchTab("Loot") end)
 TabESP.MouseButton1Click:Connect(function() switchTab("ESP") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
 
+-- Minimize / Restore
+MinBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        Main.Size = UDim2.new(0, 180, 0, 32)
+        Sidebar.Visible = false
+        Content.Visible = false
+        MinBtn.Text = "+"
+        Title.Text = "TAU (Minimized)"
+    else
+        Main.Size = UDim2.new(0, 420, 0, 340)
+        Sidebar.Visible = true
+        Content.Visible = true
+        MinBtn.Text = "–"
+        Title.Text = "TAU Auto Loot"
+    end
+end)
+
 -- ==================== Functions ====================
 local function Notify(msg)
     pcall(function()
@@ -276,9 +308,7 @@ end
 
 local function cleanCache(cache)
     for obj in pairs(cache) do
-        if not obj or not obj.Parent then
-            cache[obj] = nil
-        end
+        if not obj or not obj.Parent then cache[obj] = nil end
     end
 end
 
@@ -304,22 +334,17 @@ local function pickup(obj, typ)
     if not hrp then return end
     local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
     if not part then return end
-
     hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
-
     local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
     if prompt then pcall(fireproximityprompt, prompt) end
-
     local touch = part:FindFirstChildOfClass("TouchInterest")
     if touch then
         pcall(firetouchinterest, hrp, part, 0)
         task.wait(0.03)
         pcall(firetouchinterest, hrp, part, 1)
     end
-
     local click = obj:FindFirstChildOfClass("ClickDetector") or part:FindFirstChildOfClass("ClickDetector")
     if click then pcall(fireclickdetector, click) end
-
     if typ == "Fragment" then
         collectedFragments = collectedFragments + 1
         Notify("Fragment " .. collectedFragments .. "/5")
@@ -332,10 +357,7 @@ local function pickup(obj, typ)
 end
 
 local function clearESP()
-    if espFolder then
-        espFolder:Destroy()
-        espFolder = nil
-    end
+    if espFolder then espFolder:Destroy() espFolder = nil end
 end
 
 local function updateESP()
@@ -344,7 +366,6 @@ local function updateESP()
     espFolder = Instance.new("Folder")
     espFolder.Name = "TAU_ESP"
     espFolder.Parent = CoreGui
-
     if Settings.ESPFragments then
         for obj in pairs(knownFragments) do
             if obj and obj.Parent then
@@ -405,57 +426,76 @@ local function toggleFly()
     end
 end
 
+-- Strict + Complete Mode Detection
 local function checkText()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
+    local foundMode, foundIsNext = nil, false
+
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") then
             local t = (g.Text or ""):lower()
+
             if Settings.DetectOverload and (t:find("system overload") or t:find("系统过载")) then
-                if not systemOverload then
-                    systemOverload = true
-                    Notify("System Overload!")
-                end
+                if not systemOverload then systemOverload = true Notify("System Overload!") end
             end
-            if t:find("this round's gamemode is") then isNext = true end
-            if t:find("double trouble") then currentMode = "Double Trouble" lastModeTime = tick()
-            elseif t:find("dust devil") then currentMode = "Dust Devil" lastModeTime = tick()
-            elseif t:find("infernado") then currentMode = "Infernado" lastModeTime = tick()
-            elseif t:find("tartarus") then currentMode = "Tartarus" lastModeTime = tick()
-            elseif t:find("doomsday") then currentMode = "Doomsday" lastModeTime = tick()
-            elseif t:find("normal survival") then currentMode = "Normal Survival" lastModeTime = tick()
-            elseif t:find("4-nado") or t:find("four tornadoes") then currentMode = "4-Nado" lastModeTime = tick()
-            elseif t:find("triple threat") then currentMode = "Triple Threat" lastModeTime = tick()
+            if t:find("this round's gamemode is") or t:find("gamemode is:") then foundIsNext = true end
+
+            if t:find("toastnado") then foundMode = "ToastNado"
+            elseif t:find("a dust devil is occurring") or t:find("dust devil is occurring") then foundMode = "Dust Devil"
+            elseif t:find("infernado is occurring") or t:find("an infernado") then foundMode = "Infernado"
+            elseif t:find("double trouble") then foundMode = "Double Trouble"
+            elseif t:find("triple threat") then foundMode = "Triple Threat"
+            elseif t:find("four tornadoes") or t:find("4-nado is occurring") then foundMode = "4-Nado"
+            elseif t:find("chompnado") then foundMode = "Chompnado"
+            elseif t:find("deadnado") then foundMode = "Deadnado"
+            elseif t:find("trollnado") then foundMode = "Trollnado"
+            elseif t:find("lurker") then foundMode = "Lurker"
+            elseif t:find("unstoppable") then foundMode = "Unstoppable"
+            elseif t:find("rainwrapped") then foundMode = "Rainwrapped"
+            elseif t:find("freeze-nado") or t:find("freezenado") then foundMode = "Freeze-Nado"
+            elseif t:find("ghostnado") then foundMode = "GhostNado"
+            elseif t:find("megatornado") then foundMode = "MegaTornado"
+            elseif t:find("riftnado") then foundMode = "Riftnado"
+            elseif t:find("timebomb") then foundMode = "Timebomb Terror"
+            elseif t:find("bombs away") then foundMode = "Bombs Away"
+            elseif t:find("low-gravity") or t:find("low gravity") then foundMode = "Low-Gravity"
+            elseif t:find("skirmish") then foundMode = "Skirmish"
+            elseif t:find("taijitu") then foundMode = "Taijitu"
+            elseif t:find("krampus") then foundMode = "Krampus"
+            elseif t:find("hoshinado") then foundMode = "Hoshinado"
+            elseif t:find("noobnado") then foundMode = "NoobNado"
+            elseif t:find("retronado") or t:find("retro-nado") then foundMode = "Retro-Nado"
+            elseif t:find("tartarus") then foundMode = "Tartarus"
+            elseif t:find("doomsday") then foundMode = "Doomsday"
+            elseif t:find("chad!") or t:find("chad is") then foundMode = "Chad!"
+            elseif t:find("twisty the clown") or t:find("twisty!!!!") then foundMode = "Twisty The Clown"
+            elseif t:find("normal survival") then foundMode = "Normal Survival"
+            elseif t:find("zeus") then foundMode = "Zeus"
             end
         end
     end
-    if tick() - lastModeTime > 20 then
+
+    if foundMode then
+        currentMode = foundMode
+        isNext = foundIsNext
+        lastModeTime = tick()
+    elseif tick() - lastModeTime > 18 then
         currentMode = "Unknown"
         isNext = false
     end
 end
 
--- Real-time tracking (light)
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
             knownFragments[obj] = true
-            if Settings.Enabled then
-                Notify("New Fragment!")
-                playSound()
-                pickup(obj, "Fragment")
-            end
+            if Settings.Enabled then Notify("New Fragment!") playSound() pickup(obj, "Fragment") end
         elseif isGlasses(obj) then
             knownGlasses[obj] = true
-            if Settings.Enabled and not Settings.OnlyFragments then
-                Notify("New Glasses!")
-                playSound()
-                pickup(obj, "Glasses")
-            end
+            if Settings.Enabled and not Settings.OnlyFragments then Notify("New Glasses!") playSound() pickup(obj, "Glasses") end
         elseif Settings.AutoShelterKey and isShelterKey(obj) then
-            if Settings.Enabled then
-                pickup(obj, "Key")
-            end
+            if Settings.Enabled then pickup(obj, "Key") end
         end
     end)
 end)
@@ -465,7 +505,6 @@ workspace.DescendantRemoving:Connect(function(obj)
     knownGlasses[obj] = nil
 end)
 
--- Initial scan once
 task.spawn(function()
     task.wait(1)
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -474,7 +513,6 @@ task.spawn(function()
     end
 end)
 
--- Main loop (optimized)
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -486,35 +524,24 @@ task.spawn(function()
         FragLabel.Text = "Map Fragments: " .. frags
         CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
         TartarusLabel.Text = collectedFragments >= 5 and "Tartarus: UNLOCKED" or "Tartarus: Locked"
-        TartarusLabel.TextColor3 = collectedFragments >= 5 and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(200, 200, 210)
         ModeLabel.Text = (isNext and "Next: " or "Mode: ") .. currentMode
         OverloadLabel.Text = "System Overload: " .. (systemOverload and "YES" or "No")
-        OverloadLabel.TextColor3 = systemOverload and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(200, 200, 210)
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
 
-        -- Only scan cache at interval
         if Settings.Enabled and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
             cleanCache(knownFragments)
             cleanCache(knownGlasses)
-
             for obj in pairs(knownFragments) do
-                if obj and obj.Parent then
-                    pickup(obj, "Fragment")
-                    task.wait(0.1)
-                end
+                if obj and obj.Parent then pickup(obj, "Fragment") task.wait(0.1) end
             end
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
-                    if obj and obj.Parent then
-                        pickup(obj, "Glasses")
-                        task.wait(0.1)
-                    end
+                    if obj and obj.Parent then pickup(obj, "Glasses") task.wait(0.1) end
                 end
             end
         end
 
-        -- ESP low frequency
         if (Settings.ESPFragments or Settings.ESPGlasses) and (now - lastESPUpdate) >= ESP_INTERVAL then
             lastESPUpdate = now
             updateESP()
@@ -527,7 +554,6 @@ task.spawn(function()
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             if hum then hum.Jump = true end
         end
-
         task.wait(0.3)
     end
 end)
@@ -590,11 +616,7 @@ TestBtn.MouseButton1Click:Connect(function()
     for _, obj in ipairs(workspace:GetDescendants()) do
         local n = obj.Name:lower()
         for _, v in ipairs(ExtinguisherNames) do
-            if n:find(v:lower()) then
-                found = true
-                pickup(obj, "Ext")
-                break
-            end
+            if n:find(v:lower()) then found = true pickup(obj, "Ext") break end
         end
     end
     Notify(found and "Extinguisher tried" or "No Extinguisher")
@@ -644,12 +666,5 @@ UserInputService.InputBegan:Connect(function(input, gp)
     if input.KeyCode == Enum.KeyCode.F then toggleFly() end
 end)
 
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    if not CoreGui:FindFirstChild("TAU_AutoLoot_UI") then
-        Notify("UI missing after respawn - please re-execute")
-    end
-end)
-
-Notify("Optimized script loaded")
-print("TAU Optimized Complete loaded")
+Notify("Full script loaded - Minimize button ready")
+print("TAU Full Optimized + Minimize loaded")
