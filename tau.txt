@@ -1,4 +1,4 @@
--- tau only apple - Force TP 优先 ControlRoom (Fixed Auto Loot)
+-- tau only apple - Force TP 优先 ControlRoom (Fixed Multi-Fragment)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -37,10 +37,10 @@ local knownControlRooms = {}
 local lastScan = 0
 local lastShelterCheck = 0
 local isMinimized = false
-local SCAN_INTERVAL = 0.45
+local SCAN_INTERVAL = 0.4
 local SHELTER_CHECK_INTERVAL = 2.2
 local recentlyTried = {}
-local TRIED_COOLDOWN = 4
+local TRIED_COOLDOWN = 2.8   -- 稍微缩短，方便连续捡多个
 
 local Theme = {
     BgMain       = Color3.fromRGB(18, 20, 28),
@@ -295,16 +295,17 @@ local function getHRP()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
+-- 只注册最外层对象，避免把子部件当成独立碎片
 local function isFragment(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(FragmentNames) do
-        if n:find(v:lower()) then return true end
-    end
-    for _, child in ipairs(obj:GetChildren()) do
-        local cn = (child.Name or ""):lower()
-        for _, v in ipairs(FragmentNames) do
-            if cn:find(v:lower()) then return true end
+        if n:find(v:lower()) then
+            -- 如果父级已经是碎片，就跳过这个子物体
+            if obj.Parent and isFragment(obj.Parent) then
+                return false
+            end
+            return true
         end
     end
     return false
@@ -314,12 +315,11 @@ local function isGlasses(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(GlassesNames) do
-        if n:find(v:lower()) then return true end
-    end
-    for _, child in ipairs(obj:GetChildren()) do
-        local cn = (child.Name or ""):lower()
-        for _, v in ipairs(GlassesNames) do
-            if cn:find(v:lower()) then return true end
+        if n:find(v:lower()) then
+            if obj.Parent and isGlasses(obj.Parent) then
+                return false
+            end
+            return true
         end
     end
     return false
@@ -366,9 +366,20 @@ end
 
 local function getBestPart(obj)
     if obj:IsA("BasePart") then return obj end
-    local prefer = {"Handle", "Main", "Part", "MeshPart", "Union"}
+
+    -- 优先找有交互的部件
+    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt and prompt.Parent:IsA("BasePart") then
+        return prompt.Parent
+    end
+    local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
+    if click and click.Parent:IsA("BasePart") then
+        return click.Parent
+    end
+
+    local prefer = {"Handle", "Head", "Main", "Part", "MeshPart", "Union", "Primary"}
     for _, name in ipairs(prefer) do
-        local p = obj:FindFirstChild(name)
+        local p = obj:FindFirstChild(name, true)
         if p and p:IsA("BasePart") then return p end
     end
     return obj:FindFirstChildWhichIsA("BasePart", true)
@@ -379,7 +390,7 @@ local function tryFirePrompt(prompt)
     pcall(function()
         if fireproximityprompt then
             fireproximityprompt(prompt)
-            task.wait(0.05)
+            task.wait(0.04)
             fireproximityprompt(prompt, 1)
         end
     end)
@@ -400,46 +411,60 @@ local function pickup(obj, typ)
     local part = getBestPart(obj)
     if not part then return end
 
+    -- 多角度 + 多轮尝试，提高第2个碎片成功率
     local offsets = {
-        Vector3.new(0, 2.5, 0),
-        Vector3.new(0, 1.5, 2),
-        Vector3.new(0, 1.5, -2),
-        Vector3.new(2, 1.5, 0),
-        Vector3.new(-2, 1.5, 0),
-        Vector3.new(0, 3.5, 0),
+        Vector3.new(0, 2.2, 0),
+        Vector3.new(0, 1.8, 1.8),
+        Vector3.new(0, 1.8, -1.8),
+        Vector3.new(1.8, 1.8, 0),
+        Vector3.new(-1.8, 1.8, 0),
+        Vector3.new(0, 3.2, 0),
+        Vector3.new(1.2, 2.5, 1.2),
+        Vector3.new(-1.2, 2.5, -1.2),
     }
 
-    for _, offset in ipairs(offsets) do
-        if not obj.Parent then break end
-        hrp.CFrame = part.CFrame + offset
-        task.wait(0.04)
+    for round = 1, 2 do   -- 每个碎片尝试两轮
+        for _, offset in ipairs(offsets) do
+            if not obj.Parent then break end
+            hrp.CFrame = part.CFrame + offset
+            task.wait(0.035)
 
-        local prompt = obj:FindFirstChildOfClass("ProximityPrompt")
-            or part:FindFirstChildOfClass("ProximityPrompt")
-            or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-        tryFirePrompt(prompt)
+            -- 全层级搜索交互
+            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+            tryFirePrompt(prompt)
 
-        local touch = part:FindFirstChildOfClass("TouchInterest")
-        if touch then
-            pcall(function()
-                firetouchinterest(hrp, part, 0)
-                task.wait(0.03)
-                firetouchinterest(hrp, part, 1)
-            end)
+            local touchPart = part
+            local touch = touchPart:FindFirstChildOfClass("TouchInterest")
+            if not touch then
+                -- 再找其他可能有 TouchInterest 的部件
+                for _, p in ipairs(obj:GetDescendants()) do
+                    if p:IsA("BasePart") and p:FindFirstChildOfClass("TouchInterest") then
+                        touchPart = p
+                        touch = p:FindFirstChildOfClass("TouchInterest")
+                        break
+                    end
+                end
+            end
+            if touch then
+                pcall(function()
+                    firetouchinterest(hrp, touchPart, 0)
+                    task.wait(0.025)
+                    firetouchinterest(hrp, touchPart, 1)
+                end)
+            end
+
+            local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
+            if click then
+                pcall(fireclickdetector, click)
+            end
+
+            task.wait(0.045)
         end
-
-        local click = obj:FindFirstChildOfClass("ClickDetector")
-            or part:FindFirstChildOfClass("ClickDetector")
-            or obj:FindFirstChildWhichIsA("ClickDetector", true)
-        if click then
-            pcall(fireclickdetector, click)
-        end
-
-        task.wait(0.06)
+        task.wait(0.08)
     end
 
-    -- 只有物品真正消失才加计数
-    task.delay(0.6, function()
+    -- 只有真正消失才加计数
+    task.delay(0.7, function()
         if not obj or not obj.Parent then
             if typ == "Fragment" then
                 collectedFragments = collectedFragments + 1
@@ -462,7 +487,7 @@ local function goToShelter()
             local part = getBestPart(obj)
             if part then
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
                 if prompt then tryFirePrompt(prompt) end
                 Notify("Trying Shelter door...")
                 return
@@ -476,7 +501,7 @@ local function goToShelter()
             local part = getBestPart(obj)
             if part then
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
+                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
                 if prompt then tryFirePrompt(prompt) end
                 Notify("Found Shelter")
                 return
@@ -622,11 +647,13 @@ workspace.DescendantAdded:Connect(function(obj)
         if isFragment(obj) then
             knownFragments[obj] = true
             if Settings.Enabled or Settings.FullAuto then
+                task.wait(0.15)  -- 稍微等一下再捡，避免模型还没完全加载
                 pickup(obj, "Fragment")
             end
         elseif isGlasses(obj) then
             knownGlasses[obj] = true
             if (Settings.Enabled or Settings.FullAuto) and not Settings.OnlyFragments then
+                task.wait(0.15)
                 pickup(obj, "Glasses")
             end
         elseif isShelter(obj) then
@@ -671,18 +698,28 @@ task.spawn(function()
             cleanCache(knownFragments)
             cleanCache(knownGlasses)
 
+            -- 按距离排序，先捡近的，提高连续捡多个的成功率
+            local fragList = {}
             for obj in pairs(knownFragments) do
                 if obj and obj.Parent then
-                    pickup(obj, "Fragment")
-                    task.wait(0.08)
+                    local part = getBestPart(obj)
+                    if part then
+                        table.insert(fragList, {obj = obj, dist = (part.Position - (getHRP() and getHRP().Position or Vector3.zero)).Magnitude})
+                    end
                 end
+            end
+            table.sort(fragList, function(a, b) return a.dist < b.dist end)
+
+            for _, data in ipairs(fragList) do
+                pickup(data.obj, "Fragment")
+                task.wait(0.12)  -- 每个碎片之间留一点间隔
             end
 
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
                     if obj and obj.Parent then
                         pickup(obj, "Glasses")
-                        task.wait(0.08)
+                        task.wait(0.12)
                     end
                 end
             end
@@ -693,7 +730,7 @@ task.spawn(function()
             goToShelter()
         end
 
-        task.wait(0.25)
+        task.wait(0.22)
     end
 end)
 
@@ -801,5 +838,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("tau only apple loaded (Fixed Auto Loot)")
-print("tau only apple ControlRoom TP loaded - Auto Loot Fixed")
+Notify("tau only apple loaded (Multi-Fragment Fixed)")
+print("tau only apple - Multi Fragment Fix")
