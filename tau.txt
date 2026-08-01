@@ -1,5 +1,5 @@
--- Tornado Alley Ultimate Auto Loot - Complete Latest Version (English)
--- Features: Auto loot + Smart rejoin + Mobile fly parts + Real-time spawn detection + Improved mode detection + Fragment progress
+-- Tornado Alley Ultimate Auto Loot - Fully Fixed Version
+-- Fixed: Mode detection (much stricter) + Reset Mode button + Fragment display + All previous features
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -33,6 +33,12 @@ local flyConnection = nil
 local FlyRange = 80
 local UpForce = 42
 
+-- Mode detection state
+local currentDetectedMode = "Unknown"
+local isNextMode = false
+local lastModeUpdate = 0
+local MODE_TIMEOUT = 18 -- seconds, then clear to Unknown
+
 -- ==================== UI ====================
 local function createUI()
     local old = CoreGui:FindFirstChild("TAU_AutoLoot_UI")
@@ -45,8 +51,8 @@ local function createUI()
     ScreenGui.Parent = CoreGui
 
     local Main = Instance.new("Frame")
-    Main.Size = UDim2.new(0, 270, 0, 380)
-    Main.Position = UDim2.new(0, 18, 0.18, 0)
+    Main.Size = UDim2.new(0, 280, 0, 420)
+    Main.Position = UDim2.new(0, 18, 0.15, 0)
     Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     Main.BorderSizePixel = 0
     Main.Parent = ScreenGui
@@ -113,7 +119,7 @@ local function createUI()
 
     -- Info Box
     local InfoBox = Instance.new("Frame")
-    InfoBox.Size = UDim2.new(1, -24, 0, 110)
+    InfoBox.Size = UDim2.new(1, -24, 0, 115)
     InfoBox.Position = UDim2.new(0, 12, 0, 66)
     InfoBox.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
     InfoBox.BorderSizePixel = 0
@@ -128,7 +134,7 @@ local function createUI()
     FragmentCountLabel.Size = UDim2.new(1, -16, 0, 18)
     FragmentCountLabel.Position = UDim2.new(0, 8, 0, 6)
     FragmentCountLabel.BackgroundTransparency = 1
-    FragmentCountLabel.Text = "Server Fragments: 0"
+    FragmentCountLabel.Text = "Map Fragments: 0"
     FragmentCountLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
     FragmentCountLabel.Font = Enum.Font.Gotham
     FragmentCountLabel.TextSize = 12
@@ -140,7 +146,7 @@ local function createUI()
     CollectedLabel.Size = UDim2.new(1, -16, 0, 18)
     CollectedLabel.Position = UDim2.new(0, 8, 0, 26)
     CollectedLabel.BackgroundTransparency = 1
-    CollectedLabel.Text = "Collected: 0 / 5"
+    CollectedLabel.Text = "My Collected: 0 / 5"
     CollectedLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
     CollectedLabel.Font = Enum.Font.Gotham
     CollectedLabel.TextSize = 12
@@ -176,14 +182,14 @@ local function createUI()
     ModeLabel.Size = UDim2.new(1, -16, 0, 18)
     ModeLabel.Position = UDim2.new(0, 8, 0, 86)
     ModeLabel.BackgroundTransparency = 1
-    ModeLabel.Text = "Current Mode: Detecting..."
+    ModeLabel.Text = "Mode: Unknown"
     ModeLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
     ModeLabel.Font = Enum.Font.GothamBold
     ModeLabel.TextSize = 12
     ModeLabel.TextXAlignment = Enum.TextXAlignment.Left
     ModeLabel.Parent = InfoBox
 
-    -- Buttons
+    -- Buttons helper
     local function makeButton(name, text, y, color)
         local btn = Instance.new("TextButton")
         btn.Name = name
@@ -199,31 +205,33 @@ local function createUI()
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 7)
         corner.Parent = btn
-
         return btn
     end
 
-    local ToggleBtn = makeButton("ToggleBtn", "Enable Auto Loot", 186, Color3.fromRGB(55, 55, 70))
-    local ModeBtn = makeButton("ModeBtn", "Mode: Fragments Only", 220, Color3.fromRGB(42, 42, 55))
-    local RejoinBtn = makeButton("RejoinBtn", "Auto Rejoin: ON", 254, Color3.fromRGB(42, 42, 55))
-    local TestBtn = makeButton("TestBtn", "Test: Fire Extinguisher", 288, Color3.fromRGB(60, 80, 130))
-    local FlyBtn = makeButton("FlyBtn", "Fly Parts: OFF", 322, Color3.fromRGB(55, 55, 70))
+    local ToggleBtn = makeButton("ToggleBtn", "Enable Auto Loot", 192, Color3.fromRGB(55, 55, 70))
+    local ModeBtn = makeButton("ModeBtn", "Mode: Fragments Only", 226, Color3.fromRGB(42, 42, 55))
+    local RejoinBtn = makeButton("RejoinBtn", "Auto Rejoin: ON", 260, Color3.fromRGB(42, 42, 55))
+    local TestBtn = makeButton("TestBtn", "Test: Fire Extinguisher", 294, Color3.fromRGB(60, 80, 130))
+    local FlyBtn = makeButton("FlyBtn", "Fly Parts: OFF", 328, Color3.fromRGB(55, 55, 70))
+    local ResetModeBtn = makeButton("ResetModeBtn", "Reset Mode Display", 362, Color3.fromRGB(90, 60, 60))
 
     local TipLabel = Instance.new("TextLabel")
     TipLabel.Size = UDim2.new(1, -24, 0, 16)
-    TipLabel.Position = UDim2.new(0, 12, 0, 356)
+    TipLabel.Position = UDim2.new(0, 12, 0, 396)
     TipLabel.BackgroundTransparency = 1
-    TipLabel.Text = "PC: F Key  |  Mobile: Tap Button  |  Won't rejoin if fragments exist"
+    TipLabel.Text = "PC: F Key | Mobile: Tap Button | Reset Mode if wrong"
     TipLabel.TextColor3 = Color3.fromRGB(130, 135, 150)
     TipLabel.Font = Enum.Font.Gotham
     TipLabel.TextSize = 11
     TipLabel.TextXAlignment = Enum.TextXAlignment.Left
     TipLabel.Parent = Main
 
-    return ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel, ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, CloseBtn, TitleBar
+    return ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel,
+           ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, ResetModeBtn, CloseBtn, TitleBar
 end
 
-local ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel, ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, CloseBtn, TitleBar = createUI()
+local ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel,
+      ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, ResetModeBtn, CloseBtn, TitleBar = createUI()
 
 -- ==================== Functions ====================
 local function Notify(text)
@@ -263,7 +271,7 @@ local function isExtinguisher(obj)
     return false
 end
 
-local function countServerFragments()
+local function countPhysicalFragments()
     local count = 0
     for _, obj in ipairs(workspace:GetDescendants()) do
         local name = obj.Name:lower()
@@ -311,7 +319,7 @@ local function tryPickup(obj, itemType)
     end
 
     lastFoundTime = tick()
-    Notify("Trying to pick up: " .. itemType)
+    Notify("Trying: " .. itemType)
 end
 
 local function tryPickExtinguisher()
@@ -324,20 +332,20 @@ local function tryPickExtinguisher()
         end
     end
     if found then
-        Notify("Fire Extinguisher found, trying to pick up")
+        Notify("Fire Extinguisher found")
     else
-        Notify("No Fire Extinguisher found on the map")
+        Notify("No Fire Extinguisher on map")
     end
 end
 
 local function rejoin()
     if foundAnyFragment then return end
-    local fragCount = countServerFragments()
+    local fragCount = countPhysicalFragments()
     if fragCount >= Settings.MinFragmentsToStay then
-        Notify("Server still has " .. fragCount .. " fragment(s), not rejoining")
+        Notify("Map still has " .. fragCount .. " fragment(s), not rejoining")
         return
     end
-    Notify("No fragments on server, rejoining...")
+    Notify("No fragments on map, rejoining...")
     task.wait(1.2)
     TeleportService:Teleport(PLACE_ID, LocalPlayer)
 end
@@ -370,9 +378,7 @@ local function toggleFly()
         FlyBtn.Text = "Fly Parts: ON"
         FlyBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
         Notify("Fly Parts Enabled")
-        flyConnection = RunService.Heartbeat:Connect(function()
-            makePartsFly()
-        end)
+        flyConnection = RunService.Heartbeat:Connect(makePartsFly)
     else
         FlyBtn.Text = "Fly Parts: OFF"
         FlyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
@@ -384,141 +390,109 @@ local function toggleFly()
     end
 end
 
--- Improved Mode Detection
-local knownModes = {
-    ["this round's gamemode is tartarus"] = "Tartarus",
-    ["this round's gamemode is doomsday"] = "Doomsday",
-    ["this round's gamemode is chad"] = "Chad!",
-    ["this round's gamemode is twisty"] = "Twisty The Clown",
-    ["this round's gamemode is lurker"] = "Lurker",
-    ["this round's gamemode is trollnado"] = "Trollnado",
-    ["this round's gamemode is dust devil"] = "Dust Devil",
-    ["this round's gamemode is infernado"] = "Infernado",
-    ["this round's gamemode is deadnado"] = "Deadnado",
-    ["this round's gamemode is chompnado"] = "Chompnado",
-    ["this round's gamemode is zeus"] = "Zeus",
-    ["this round's gamemode is double trouble"] = "Double Trouble",
-    ["this round's gamemode is triple threat"] = "Triple Threat",
-    ["this round's gamemode is 4-nado"] = "4-Nado",
-    ["this round's gamemode is unstoppable"] = "Unstoppable",
-    ["this round's gamemode is rainwrapped"] = "Rainwrapped",
-    ["this round's gamemode is freeze-nado"] = "Freeze-Nado",
-    ["this round's gamemode is ghostnado"] = "GhostNado",
-    ["this round's gamemode is jacko"] = "JackO’Nado",
-    ["this round's gamemode is timebomb"] = "Timebomb Terror",
-    ["this round's gamemode is riftnado"] = "Riftnado",
-    ["this round's gamemode is low-gravity"] = "Low-Gravity",
-    ["this round's gamemode is bombs away"] = "Bombs Away",
-    ["this round's gamemode is normal survival"] = "Normal Survival",
-    ["this round's gamemode is skirmish"] = "Skirmish",
-    ["this round's gamemode is taijitu"] = "Taijitu",
-    ["this round's gamemode is krampus"] = "Krampus",
-    ["this round's gamemode is hoshinado"] = "Hoshinado",
-    ["this round's gamemode is megatornado"] = "MegaTornado",
+-- ==================== Strict Mode Detection ====================
+-- Only accept very clear phrases. Prefer longer matches.
+local strictModes = {
+    -- Strong next-round announcements
+    ["this round's gamemode is tartarus"] = {mode = "Tartarus", next = true},
+    ["this round's gamemode is doomsday"] = {mode = "Doomsday", next = true},
+    ["this round's gamemode is chad"] = {mode = "Chad!", next = true},
+    ["this round's gamemode is twisty"] = {mode = "Twisty The Clown", next = true},
+    ["this round's gamemode is lurker"] = {mode = "Lurker", next = true},
+    ["this round's gamemode is trollnado"] = {mode = "Trollnado", next = true},
+    ["this round's gamemode is dust devil"] = {mode = "Dust Devil", next = true},
+    ["this round's gamemode is infernado"] = {mode = "Infernado", next = true},
+    ["this round's gamemode is deadnado"] = {mode = "Deadnado", next = true},
+    ["this round's gamemode is chompnado"] = {mode = "Chompnado", next = true},
+    ["this round's gamemode is zeus"] = {mode = "Zeus", next = true},
+    ["this round's gamemode is double trouble"] = {mode = "Double Trouble", next = true},
+    ["this round's gamemode is triple threat"] = {mode = "Triple Threat", next = true},
+    ["this round's gamemode is 4-nado"] = {mode = "4-Nado", next = true},
+    ["this round's gamemode is unstoppable"] = {mode = "Unstoppable", next = true},
+    ["this round's gamemode is rainwrapped"] = {mode = "Rainwrapped", next = true},
+    ["this round's gamemode is freeze-nado"] = {mode = "Freeze-Nado", next = true},
+    ["this round's gamemode is ghostnado"] = {mode = "GhostNado", next = true},
+    ["this round's gamemode is normal survival"] = {mode = "Normal Survival", next = true},
+    ["this round's gamemode is skirmish"] = {mode = "Skirmish", next = true},
+    ["this round's gamemode is taijitu"] = {mode = "Taijitu", next = true},
+    ["this round's gamemode is krampus"] = {mode = "Krampus", next = true},
+    ["this round's gamemode is hoshinado"] = {mode = "Hoshinado", next = true},
+    ["this round's gamemode is megatornado"] = {mode = "MegaTornado", next = true},
+    ["this round's gamemode is bombs away"] = {mode = "Bombs Away", next = true},
+    ["this round's gamemode is timebomb"] = {mode = "Timebomb Terror", next = true},
+    ["this round's gamemode is riftnado"] = {mode = "Riftnado", next = true},
+    ["this round's gamemode is low-gravity"] = {mode = "Low-Gravity", next = true},
 
-    ["there is a dust devil"] = "Dust Devil",
-    ["dust devil!"] = "Dust Devil",
-    ["there is an infernado"] = "Infernado",
-    ["deadnado"] = "Deadnado",
-    ["chompnado"] = "Chompnado",
-    ["trollnado"] = "Trollnado",
-    ["lurker"] = "Lurker",
-    ["four tornadoes"] = "4-Nado",
-    ["there are two tornadoes"] = "Double Trouble",
-    ["there are three"] = "Triple Threat",
-    ["unstoppable"] = "Unstoppable",
-    ["rainwrapped"] = "Rainwrapped",
-    ["freeze-nado"] = "Freeze-Nado",
-    ["ghostnado"] = "GhostNado",
-    ["jacko"] = "JackO’Nado",
-    ["timebomb terror"] = "Timebomb Terror",
-    ["riftnado"] = "Riftnado",
-    ["low-gravity"] = "Low-Gravity",
-    ["bombs away"] = "Bombs Away",
-    ["krampus"] = "Krampus",
-    ["hoshinado"] = "Hoshinado",
-    ["tartarus"] = "Tartarus",
-    ["doomsday"] = "Doomsday",
-    ["chad!"] = "Chad!",
-    ["twisty the clown"] = "Twisty The Clown",
-    ["twisty!!!!"] = "Twisty The Clown",
+    -- Strong current-round phrases
+    ["there is a dust devil"] = {mode = "Dust Devil", next = false},
+    ["dust devil!"] = {mode = "Dust Devil", next = false},
+    ["there is an infernado"] = {mode = "Infernado", next = false},
+    ["four tornadoes"] = {mode = "4-Nado", next = false},
+    ["there are two tornadoes"] = {mode = "Double Trouble", next = false},
+    ["there are three"] = {mode = "Triple Threat", next = false},
+    ["twisty the clown"] = {mode = "Twisty The Clown", next = false},
+    ["twisty!!!!"] = {mode = "Twisty The Clown", next = false},
+    ["chad!"] = {mode = "Chad!", next = false},
 }
 
-local lastDetectedMode = "Detecting..."
-local lastDetectTime = 0
-
-local function detectMode()
+local function updateModeDetection()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return "Detecting...", false, nil end
+    if not playerGui then return end
 
-    local foundMode = nil
-    local isNext = false
-    local doomsdayRisk = nil
-    local bestMatchLength = 0
+    local bestLen = 0
+    local bestMode = nil
+    local bestIsNext = false
 
     for _, gui in ipairs(playerGui:GetDescendants()) do
         if gui:IsA("TextLabel") or gui:IsA("TextButton") then
             local text = string.lower(gui.Text or "")
-
-            if text:find("this round's gamemode is") or text:find("gamemode is:") then
-                isNext = true
-            end
-
-            for keyword, modeName in pairs(knownModes) do
-                if text:find(keyword) and #keyword > bestMatchLength then
-                    foundMode = modeName
-                    bestMatchLength = #keyword
+            for keyword, data in pairs(strictModes) do
+                if text:find(keyword) and #keyword > bestLen then
+                    bestLen = #keyword
+                    bestMode = data.mode
+                    bestIsNext = data.next
                 end
             end
-
-            if text:find("low risk") then
-                doomsdayRisk = "Low Risk"
-            elseif text:find("medium risk") then
-                doomsdayRisk = "Medium Risk"
-            elseif text:find("high risk") then
-                doomsdayRisk = "High Risk"
-            elseif text:find("extreme risk") then
-                doomsdayRisk = "Extreme Risk"
-            end
         end
     end
 
-    if foundMode then
-        lastDetectedMode = foundMode
-        lastDetectTime = tick()
+    if bestMode then
+        currentDetectedMode = bestMode
+        isNextMode = bestIsNext
+        lastModeUpdate = tick()
     else
-        if tick() - lastDetectTime > 25 then
-            lastDetectedMode = "Detecting..."
+        -- Auto clear after timeout
+        if tick() - lastModeUpdate > MODE_TIMEOUT then
+            currentDetectedMode = "Unknown"
+            isNextMode = false
         end
     end
-
-    return lastDetectedMode, isNext, doomsdayRisk
 end
 
 -- Real-time spawn detection
-local function onNewItemAdded(obj)
+workspace.DescendantAdded:Connect(function(obj)
     if not Settings.Enabled then return end
     task.wait()
     local itemType = isTarget(obj)
     if itemType then
-        Notify("New " .. itemType .. " spawned! Trying to pick up...")
+        Notify("New " .. itemType .. " spawned!")
         tryPickup(obj, itemType)
     end
-end
-
-workspace.DescendantAdded:Connect(onNewItemAdded)
+end)
 
 -- ==================== Main Loop ====================
 task.spawn(function()
     while true do
-        local fragCount = countServerFragments()
+        local physicalCount = countPhysicalFragments()
+        updateModeDetection()
 
+        -- Update UI
         if FragmentCountLabel then
-            FragmentCountLabel.Text = "Server Fragments: " .. fragCount
-            FragmentCountLabel.TextColor3 = fragCount > 0 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 120, 120)
+            FragmentCountLabel.Text = "Map Fragments: " .. physicalCount
+            FragmentCountLabel.TextColor3 = physicalCount > 0 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 120, 120)
         end
         if CollectedLabel then
-            CollectedLabel.Text = "Collected: " .. collectedFragments .. " / 5"
+            CollectedLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
             CollectedLabel.TextColor3 = collectedFragments >= 5 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
         end
         if GlassesLabel then
@@ -535,22 +509,18 @@ task.spawn(function()
             end
         end
         if ModeLabel then
-            local currentMode, isNext, risk = detectMode()
-            if isNext then
-                ModeLabel.Text = "Next Mode: " .. currentMode
+            if isNextMode then
+                ModeLabel.Text = "Next Mode: " .. currentDetectedMode
                 ModeLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
             else
-                ModeLabel.Text = "Current Mode: " .. currentMode
-                if currentMode == "Tartarus" or currentMode == "Doomsday" then
+                ModeLabel.Text = "Current Mode: " .. currentDetectedMode
+                if currentDetectedMode == "Tartarus" or currentDetectedMode == "Doomsday" then
                     ModeLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-                elseif currentMode ~= "Detecting..." then
+                elseif currentDetectedMode ~= "Unknown" then
                     ModeLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
                 else
                     ModeLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
                 end
-            end
-            if risk then
-                ModeLabel.Text = ModeLabel.Text .. " | Doomsday: " .. risk
             end
         end
 
@@ -568,7 +538,7 @@ task.spawn(function()
             end
 
             if Settings.AutoRejoin and not foundAnyFragment then
-                if fragCount < Settings.MinFragmentsToStay and (tick() - lastFoundTime) > Settings.NoFragmentTime then
+                if physicalCount < Settings.MinFragmentsToStay and (tick() - lastFoundTime) > Settings.NoFragmentTime then
                     rejoin()
                 end
             end
@@ -577,7 +547,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== Inputs & Buttons ====================
+-- ==================== Buttons ====================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.F then
@@ -625,6 +595,15 @@ FlyBtn.MouseButton1Click:Connect(function()
     toggleFly()
 end)
 
+ResetModeBtn.MouseButton1Click:Connect(function()
+    currentDetectedMode = "Unknown"
+    isNextMode = false
+    lastModeUpdate = 0
+    ModeLabel.Text = "Mode: Unknown"
+    ModeLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
+    Notify("Mode display reset")
+end)
+
 CloseBtn.MouseButton1Click:Connect(function()
     if flyConnection then
         flyConnection:Disconnect()
@@ -659,10 +638,11 @@ end)
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     if not CoreGui:FindFirstChild("TAU_AutoLoot_UI") then
-        ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel, ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, CloseBtn, TitleBar = createUI()
+        ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel, ModeLabel,
+        ToggleBtn, ModeBtn, RejoinBtn, TestBtn, FlyBtn, ResetModeBtn, CloseBtn, TitleBar = createUI()
         Notify("UI reloaded")
     end
 end)
 
-print("TAU Auto Loot Complete Latest Version loaded")
-Notify("Script loaded successfully")
+print("TAU Auto Loot Fully Fixed Version loaded")
+Notify("Script loaded - Mode detection fixed + Reset button added")
