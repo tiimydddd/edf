@@ -1,5 +1,5 @@
--- Tornado Alley Ultimate Auto Loot - Fixed Complete Version
--- UI fixed + All features as buttons + Rejoin removed
+-- TAU Auto Loot - Clean Rebuild (UI guaranteed)
+-- Simple & stable version
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -12,16 +12,17 @@ local SoundService = game:GetService("SoundService")
 
 local PLACE_ID = 2313058949
 
+-- Settings
 local Settings = {
     Enabled = false,
     OnlyFragments = true,
-    ScanSpeed = 0.35,
     ESPFragments = false,
     ESPGlasses = false,
     AutoShelterKey = false,
     SpawnSound = false,
     AntiAFK = false,
     DetectOverload = true,
+    ScanSpeed = 0.4,
 }
 
 local FragmentNames = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -29,262 +30,202 @@ local GlassesNames = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses
 local ExtinguisherNames = {"Fire Extinguisher", "Extinguisher", "灭火器"}
 local ShelterKeyNames = {"Shelter Key", "ShelterKey", "避难所钥匙"}
 
-local foundAnyFragment = false
 local collectedFragments = 0
 local glassesFound = false
-local lastFoundTime = tick()
 local flyEnabled = false
 local flyConnection = nil
+local systemOverload = false
+local currentMode = "Unknown"
+local isNext = false
+local lastModeTime = 0
+local lastAFK = 0
+local espFolder = nil
 local FlyRange = 80
 local UpForce = 42
-local serverFragmentProgress = 0
-local tartarusUnlocked = false
-local systemOverloadActive = false
-local currentDetectedMode = "Unknown"
-local isNextMode = false
-local lastModeUpdate = 0
-local MODE_TIMEOUT = 15
-local lastAFKAction = 0
-local espFolder = nil
 
--- UI References
-local ScreenGui, Main, StatusLabel, FragmentCountLabel, CollectedLabel, GlassesLabel, TartarusLabel
-local ModeLabel, OverloadLabel, ToggleBtn, ModeBtn, ShelterBtn, ESPFragBtn, ESPGlassBtn
-local SoundBtn, OverloadBtn, FlyBtn, AFKBtn, TestBtn, HopBtn, ResetModeBtn, CloseBtn, TitleBar
+-- ==================== UI (Simple & Stable) ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TAU_AutoLoot_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = CoreGui
 
-local function Notify(text)
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 260, 0, 480)
+Main.Position = UDim2.new(0, 20, 0.15, 0)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = Main
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -30, 0, 30)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "TAU Auto Loot"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -28, 0, 3)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+CloseBtn.Parent = Main
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 4)
+CloseCorner.Parent = CloseBtn
+
+-- Info Labels
+local function makeLabel(y, text)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -16, 0, 16)
+    l.Position = UDim2.new(0, 8, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(190, 190, 200)
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 11
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = Main
+    return l
+end
+
+local StatusLabel = makeLabel(36, "Status: Off")
+local FragLabel = makeLabel(54, "Map Fragments: 0")
+local CollectLabel = makeLabel(72, "My Collected: 0/5")
+local TartarusLabel = makeLabel(90, "Tartarus: Locked")
+local ModeLabel = makeLabel(108, "Mode: Unknown")
+local OverloadLabel = makeLabel(126, "Overload: No")
+local GlassesLabel = makeLabel(144, "Glasses: No")
+
+-- Buttons
+local function makeBtn(y, text, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -16, 0, 26)
+    b.Position = UDim2.new(0, 8, 0, y)
+    b.BackgroundColor3 = color or Color3.fromRGB(40, 40, 55)
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.Parent = Main
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = b
+    return b
+end
+
+local ToggleBtn = makeBtn(168, "Enable Auto Loot", Color3.fromRGB(50, 50, 65))
+local ModeBtn = makeBtn(198, "Mode: Fragments Only")
+local ShelterBtn = makeBtn(228, "Auto Shelter Key: OFF")
+local ESPFragBtn = makeBtn(258, "ESP Fragments: OFF")
+local ESPGlassBtn = makeBtn(288, "ESP Glasses: OFF")
+local SoundBtn = makeBtn(318, "Spawn Sound: OFF")
+local OverloadBtn = makeBtn(348, "Detect Overload: ON", Color3.fromRGB(40, 90, 55))
+local FlyBtn = makeBtn(378, "Fly Parts: OFF", Color3.fromRGB(50, 50, 65))
+local AFKBtn = makeBtn(408, "Anti-AFK: OFF")
+local TestBtn = makeBtn(438, "Test Extinguisher", Color3.fromRGB(55, 75, 120))
+local HopBtn = makeBtn(468, "Server Hop", Color3.fromRGB(70, 50, 90))
+
+-- ==================== Functions ====================
+local function Notify(msg)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = "TAU Auto Loot",
-            Text = tostring(text),
-            Duration = 3.5
+            Title = "TAU",
+            Text = tostring(msg),
+            Duration = 3
         })
     end)
-    print("[TAU] " .. tostring(text))
+    print("[TAU]", msg)
 end
 
-local function createUI()
-    pcall(function()
-        local old = CoreGui:FindFirstChild("TAU_AutoLoot_UI")
-        if old then old:Destroy() end
-    end)
-
-    ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "TAU_AutoLoot_UI"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = CoreGui
-
-    Main = Instance.new("Frame")
-    Main.Size = UDim2.new(0, 280, 0, 520)
-    Main.Position = UDim2.new(0, 15, 0.08, 0)
-    Main.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
-    Main.BorderSizePixel = 0
-    Main.Parent = ScreenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = Main
-
-    -- Title Bar
-    TitleBar = Instance.new("Frame")
-    TitleBar.Size = UDim2.new(1, 0, 0, 32)
-    TitleBar.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
-    TitleBar.BorderSizePixel = 0
-    TitleBar.Parent = Main
-
-    local tCorner = Instance.new("UICorner")
-    tCorner.CornerRadius = UDim.new(0, 10)
-    tCorner.Parent = TitleBar
-
-    local titleFix = Instance.new("Frame")
-    titleFix.Size = UDim2.new(1, 0, 0, 12)
-    titleFix.Position = UDim2.new(0, 0, 1, -12)
-    titleFix.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
-    titleFix.BorderSizePixel = 0
-    titleFix.Parent = TitleBar
-
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -36, 1, 0)
-    title.Position = UDim2.new(0, 10, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "TAU Auto Loot"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 14
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = TitleBar
-
-    CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 24, 0, 24)
-    CloseBtn.Position = UDim2.new(1, -28, 0, 4)
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(190, 45, 45)
-    CloseBtn.Text = "×"
-    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseBtn.Font = Enum.Font.GothamBold
-    CloseBtn.TextSize = 14
-    CloseBtn.Parent = TitleBar
-    local cCorner = Instance.new("UICorner")
-    cCorner.CornerRadius = UDim.new(0, 6)
-    cCorner.Parent = CloseBtn
-
-    local function label(text, y, size)
-        local l = Instance.new("TextLabel")
-        l.Size = UDim2.new(1, -20, 0, size or 16)
-        l.Position = UDim2.new(0, 10, 0, y)
-        l.BackgroundTransparency = 1
-        l.Text = text
-        l.TextColor3 = Color3.fromRGB(180, 185, 200)
-        l.Font = Enum.Font.Gotham
-        l.TextSize = 12
-        l.TextXAlignment = Enum.TextXAlignment.Left
-        l.Parent = Main
-        return l
-    end
-
-    local function btn(text, y, color)
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, -20, 0, 26)
-        b.Position = UDim2.new(0, 10, 0, y)
-        b.BackgroundColor3 = color or Color3.fromRGB(42, 42, 55)
-        b.Text = text
-        b.TextColor3 = Color3.fromRGB(255, 255, 255)
-        b.Font = Enum.Font.GothamBold
-        b.TextSize = 12
-        b.Parent = Main
-        local bc = Instance.new("UICorner")
-        bc.CornerRadius = UDim.new(0, 6)
-        bc.Parent = b
-        return b
-    end
-
-    -- Info
-    FragmentCountLabel = label("Map Fragments: 0 | Server: ?", 40)
-    CollectedLabel = label("My Collected: 0 / 5", 58)
-    TartarusLabel = label("Tartarus: Locked", 76)
-    TartarusLabel.Font = Enum.Font.GothamBold
-    StatusLabel = label("Status: Off", 98)
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 95, 95)
-    ModeLabel = label("Mode: Unknown", 116)
-    OverloadLabel = label("System Overload: No", 134)
-    GlassesLabel = label("Glasses: Not Found", 152)
-
-    -- Buttons
-    ToggleBtn = btn("Enable Auto Loot", 176, Color3.fromRGB(55, 55, 70))
-    ModeBtn = btn("Mode: Fragments Only", 206)
-    ShelterBtn = btn("Auto Shelter Key: OFF", 236)
-    ESPFragBtn = btn("ESP Fragments: OFF", 266)
-    ESPGlassBtn = btn("ESP Glasses: OFF", 296)
-    SoundBtn = btn("Spawn Sound: OFF", 326)
-    OverloadBtn = btn("Detect Overload: ON", 356, Color3.fromRGB(40, 100, 60))
-    FlyBtn = btn("Fly Parts: OFF", 386, Color3.fromRGB(55, 55, 70))
-    AFKBtn = btn("Anti-AFK: OFF", 416)
-    TestBtn = btn("Test: Fire Extinguisher", 446, Color3.fromRGB(60, 80, 130))
-    HopBtn = btn("Server Hop", 476, Color3.fromRGB(80, 60, 100))
-    ResetModeBtn = btn("Reset Mode Display", 506, Color3.fromRGB(90, 60, 60))
-
-    Notify("UI created successfully")
-end
-
--- ==================== Core Functions ====================
 local function getHRP()
-    local char = LocalPlayer.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
 local function isTarget(obj)
-    local name = obj.Name:lower()
-    for _, n in ipairs(FragmentNames) do
-        if name:find(n:lower()) then return "Fragment" end
+    local n = obj.Name:lower()
+    for _, v in ipairs(FragmentNames) do
+        if n:find(v:lower()) then return "Fragment" end
     end
     if not Settings.OnlyFragments then
-        for _, n in ipairs(GlassesNames) do
-            if name:find(n:lower()) then return "Glasses" end
+        for _, v in ipairs(GlassesNames) do
+            if n:find(v:lower()) then return "Glasses" end
         end
     end
     if Settings.AutoShelterKey then
-        for _, n in ipairs(ShelterKeyNames) do
-            if name:find(n:lower()) then return "ShelterKey" end
+        for _, v in ipairs(ShelterKeyNames) do
+            if n:find(v:lower()) then return "Key" end
         end
     end
     return nil
 end
 
-local function isExtinguisher(obj)
-    local name = obj.Name:lower()
-    for _, n in ipairs(ExtinguisherNames) do
-        if name:find(n:lower()) then return true end
-    end
-    return false
-end
-
-local function countPhysicalFragments()
-    local count = 0
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        local name = obj.Name:lower()
-        for _, n in ipairs(FragmentNames) do
-            if name:find(n:lower()) then
-                count = count + 1
-                break
-            end
+local function countFrags()
+    local c = 0
+    for _, o in ipairs(workspace:GetDescendants()) do
+        local n = o.Name:lower()
+        for _, v in ipairs(FragmentNames) do
+            if n:find(v:lower()) then c = c + 1 break end
         end
     end
-    return count
+    return c
 end
 
-local function playSpawnSound()
+local function playSound()
     if not Settings.SpawnSound then return end
     local s = Instance.new("Sound")
     s.SoundId = "rbxassetid://6026984224"
-    s.Volume = 1.5
+    s.Volume = 1.2
     s.Parent = SoundService
     s:Play()
-    task.delay(2, function() if s then s:Destroy() end end)
+    task.delay(1.5, function() s:Destroy() end)
 end
 
-local function tryPickup(obj, itemType)
+local function pickup(obj, typ)
     local hrp = getHRP()
     if not hrp then return end
-    local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+    local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
     if not part then return end
 
-    hrp.CFrame = part.CFrame + Vector3.new(0, 2.8, 0)
+    hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+
     local prompt = obj:FindFirstChildOfClass("ProximityPrompt") or part:FindFirstChildOfClass("ProximityPrompt")
     if prompt then pcall(fireproximityprompt, prompt) end
+
     local touch = part:FindFirstChildOfClass("TouchInterest")
     if touch then
         pcall(firetouchinterest, hrp, part, 0)
-        task.wait(0.04)
+        task.wait(0.03)
         pcall(firetouchinterest, hrp, part, 1)
     end
+
     local click = obj:FindFirstChildOfClass("ClickDetector") or part:FindFirstChildOfClass("ClickDetector")
     if click then pcall(fireclickdetector, click) end
 
-    if itemType == "Fragment" then
-        foundAnyFragment = true
+    if typ == "Fragment" then
         collectedFragments = collectedFragments + 1
-        Notify("Fragment collected! Total: " .. collectedFragments .. "/5")
-        playSpawnSound()
-    elseif itemType == "Glasses" then
+        Notify("Fragment! " .. collectedFragments .. "/5")
+        playSound()
+    elseif typ == "Glasses" then
         glassesFound = true
         Notify("Glasses found!")
-        playSpawnSound()
-    elseif itemType == "ShelterKey" then
-        Notify("Shelter Key picked")
+        playSound()
     end
-    lastFoundTime = tick()
-end
-
-local function tryPickExtinguisher()
-    local found = false
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isExtinguisher(obj) then
-            found = true
-            tryPickup(obj, "Fire Extinguisher")
-            task.wait(0.12)
-        end
-    end
-    Notify(found and "Extinguisher found" or "No Extinguisher")
 end
 
 local function clearESP()
@@ -302,24 +243,23 @@ local function updateESP()
     espFolder.Parent = CoreGui
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        local name = obj.Name:lower()
-        local isFrag, isGlass = false, false
-        for _, n in ipairs(FragmentNames) do if name:find(n:lower()) then isFrag = true break end end
-        for _, n in ipairs(GlassesNames) do if name:find(n:lower()) then isGlass = true break end end
+        local n = obj.Name:lower()
+        local frag, glass = false, false
+        for _, v in ipairs(FragmentNames) do if n:find(v:lower()) then frag = true break end end
+        for _, v in ipairs(GlassesNames) do if n:find(v:lower()) then glass = true break end end
 
-        if (isFrag and Settings.ESPFragments) or (isGlass and Settings.ESPGlasses) then
-            local target = obj:IsA("Model") and obj or obj
+        if (frag and Settings.ESPFragments) or (glass and Settings.ESPGlasses) then
             local h = Instance.new("Highlight")
-            h.Adornee = target
-            h.FillColor = isFrag and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(80, 180, 255)
+            h.Adornee = obj
+            h.FillColor = frag and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(60, 160, 255)
             h.OutlineColor = Color3.fromRGB(255, 255, 255)
-            h.FillTransparency = 0.45
+            h.FillTransparency = 0.5
             h.Parent = espFolder
         end
     end
 end
 
-local function makePartsFly()
+local function flyParts()
     local hrp = getHRP()
     if not hrp then return end
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -329,10 +269,10 @@ local function makePartsFly()
                 if old then old:Destroy() end
                 local bv = Instance.new("BodyVelocity")
                 bv.Name = "FlyForce"
-                bv.MaxForce = Vector3.new(0, math.huge, 0)
+                bv.MaxForce = Vector3.new(0, 1e9, 0)
                 bv.Velocity = Vector3.new(0, UpForce, 0)
                 bv.Parent = obj
-                task.delay(2.5, function() if bv and bv.Parent then bv:Destroy() end end)
+                task.delay(2, function() if bv then bv:Destroy() end end)
             end
         end
     end
@@ -342,168 +282,75 @@ local function toggleFly()
     flyEnabled = not flyEnabled
     if flyEnabled then
         FlyBtn.Text = "Fly Parts: ON"
-        FlyBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
-        Notify("Fly Parts ON")
-        flyConnection = RunService.Heartbeat:Connect(makePartsFly)
+        FlyBtn.BackgroundColor3 = Color3.fromRGB(30, 130, 60)
+        flyConnection = RunService.Heartbeat:Connect(flyParts)
+        Notify("Fly ON")
     else
         FlyBtn.Text = "Fly Parts: OFF"
-        FlyBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-        Notify("Fly Parts OFF")
+        FlyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
         if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+        Notify("Fly OFF")
     end
 end
 
-local function doAntiAFK()
-    if not Settings.AntiAFK then return end
-    if tick() - lastAFKAction < 45 then return end
-    lastAFKAction = tick()
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.Jump = true end
-end
-
-local function checkAlerts()
+local function checkText()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
-    for _, gui in ipairs(pg:GetDescendants()) do
-        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-            local text = string.lower(gui.Text or "")
-            if (text:find("5th") or text:find("fifth") or text:find("all five")) and text:find("fragment") then
-                serverFragmentProgress = 5
-                tartarusUnlocked = true
-            elseif text:find("tartarus has been summoned") or text:find("tartarus has been awakened") then
-                serverFragmentProgress = 5
-                tartarusUnlocked = true
-            end
-            if Settings.DetectOverload and (text:find("system overload") or text:find("系统过载") or text:find("overload")) then
-                if not systemOverloadActive then
-                    systemOverloadActive = true
-                    Notify("System Overload detected!")
+    for _, g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") or g:IsA("TextButton") then
+            local t = (g.Text or ""):lower()
+            if t:find("system overload") or t:find("系统过载") then
+                if not systemOverload then
+                    systemOverload = true
+                    Notify("System Overload!")
                 end
+            end
+            if (t:find("5th") or t:find("fifth")) and t:find("fragment") then
+                Notify("5th Fragment collected!")
+            end
+            if t:find("this round's gamemode is") then
+                isNext = true
+            end
+            if t:find("double trouble") then currentMode = "Double Trouble" lastModeTime = tick()
+            elseif t:find("dust devil") then currentMode = "Dust Devil" lastModeTime = tick()
+            elseif t:find("infernado") then currentMode = "Infernado" lastModeTime = tick()
+            elseif t:find("tartarus") then currentMode = "Tartarus" lastModeTime = tick()
+            elseif t:find("doomsday") then currentMode = "Doomsday" lastModeTime = tick()
+            elseif t:find("normal survival") then currentMode = "Normal Survival" lastModeTime = tick()
+            elseif t:find("4-nado") or t:find("four tornadoes") then currentMode = "4-Nado" lastModeTime = tick()
             end
         end
     end
-end
-
-local strictModes = {
-    ["this round's gamemode is tartarus"] = {mode="Tartarus", next=true},
-    ["this round's gamemode is doomsday"] = {mode="Doomsday", next=true},
-    ["this round's gamemode is chad"] = {mode="Chad!", next=true},
-    ["this round's gamemode is twisty"] = {mode="Twisty The Clown", next=true},
-    ["this round's gamemode is lurker"] = {mode="Lurker", next=true},
-    ["this round's gamemode is trollnado"] = {mode="Trollnado", next=true},
-    ["this round's gamemode is dust devil"] = {mode="Dust Devil", next=true},
-    ["this round's gamemode is infernado"] = {mode="Infernado", next=true},
-    ["this round's gamemode is deadnado"] = {mode="Deadnado", next=true},
-    ["this round's gamemode is chompnado"] = {mode="Chompnado", next=true},
-    ["this round's gamemode is zeus"] = {mode="Zeus", next=true},
-    ["this round's gamemode is double trouble"] = {mode="Double Trouble", next=true},
-    ["this round's gamemode is triple threat"] = {mode="Triple Threat", next=true},
-    ["this round's gamemode is 4-nado"] = {mode="4-Nado", next=true},
-    ["this round's gamemode is unstoppable"] = {mode="Unstoppable", next=true},
-    ["this round's gamemode is rainwrapped"] = {mode="Rainwrapped", next=true},
-    ["this round's gamemode is freeze-nado"] = {mode="Freeze-Nado", next=true},
-    ["this round's gamemode is normal survival"] = {mode="Normal Survival", next=true},
-    ["there is a dust devil"] = {mode="Dust Devil", next=false},
-    ["there are two tornadoes"] = {mode="Double Trouble", next=false},
-    ["four tornadoes"] = {mode="4-Nado", next=false},
-    ["twisty the clown"] = {mode="Twisty The Clown", next=false},
-    ["chad!"] = {mode="Chad!", next=false},
-}
-
-local function updateModeDetection()
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pg then return end
-    local bestLen, bestMode, bestIsNext = 0, nil, false
-    for _, gui in ipairs(pg:GetDescendants()) do
-        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-            local text = string.lower(gui.Text or "")
-            for kw, data in pairs(strictModes) do
-                if text:find(kw) and #kw > bestLen then
-                    bestLen = #kw
-                    bestMode = data.mode
-                    bestIsNext = data.next
-                end
-            end
-        end
-    end
-    if bestMode then
-        currentDetectedMode = bestMode
-        isNextMode = bestIsNext
-        lastModeUpdate = tick()
-    elseif tick() - lastModeUpdate > MODE_TIMEOUT then
-        currentDetectedMode = "Unknown"
-        isNextMode = false
+    if tick() - lastModeTime > 20 then
+        currentMode = "Unknown"
+        isNext = false
     end
 end
 
--- ==================== Create UI first ====================
-createUI()
-
--- ==================== Connections ====================
-workspace.DescendantAdded:Connect(function(obj)
-    if not Settings.Enabled then return end
-    task.wait()
-    local t = isTarget(obj)
-    if t then
-        Notify("New " .. t .. " spawned")
-        playSpawnSound()
-        tryPickup(obj, t)
-    end
-    if Settings.ESPFragments or Settings.ESPGlasses then updateESP() end
-end)
-
+-- Main Loop
 task.spawn(function()
-    while true do
-        local physical = countPhysicalFragments()
-        checkAlerts()
-        updateModeDetection()
-        doAntiAFK()
+    while ScreenGui and ScreenGui.Parent do
+        local frags = countFrags()
+        checkText()
 
-        if FragmentCountLabel then
-            if serverFragmentProgress >= 5 or tartarusUnlocked then
-                FragmentCountLabel.Text = "Server: 5/5 (Tartarus Unlocked)"
-                FragmentCountLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-            else
-                FragmentCountLabel.Text = "Map Fragments: " .. physical .. " | Server: ?"
-                FragmentCountLabel.TextColor3 = physical > 0 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
-            end
-        end
-        if CollectedLabel then
-            CollectedLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
-            CollectedLabel.TextColor3 = collectedFragments >= 5 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
-        end
-        if TartarusLabel then
-            if tartarusUnlocked or serverFragmentProgress >= 5 or collectedFragments >= 5 then
-                TartarusLabel.Text = "Tartarus: UNLOCKED!"
-                TartarusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-            else
-                TartarusLabel.Text = "Tartarus: Locked (My " .. collectedFragments .. "/5)"
-                TartarusLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
-            end
-        end
-        if GlassesLabel then
-            GlassesLabel.Text = glassesFound and "Glasses: FOUND" or "Glasses: Not Found"
-            GlassesLabel.TextColor3 = glassesFound and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(180, 185, 200)
-        end
-        if ModeLabel then
-            ModeLabel.Text = (isNextMode and "Next: " or "Current: ") .. currentDetectedMode
-            ModeLabel.TextColor3 = currentDetectedMode == "Unknown" and Color3.fromRGB(180, 185, 200) or Color3.fromRGB(255, 200, 80)
-        end
-        if OverloadLabel then
-            OverloadLabel.Text = systemOverloadActive and "System Overload: YES" or "System Overload: No"
-            OverloadLabel.TextColor3 = systemOverloadActive and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(180, 185, 200)
-        end
+        StatusLabel.Text = Settings.Enabled and "Status: Running" or "Status: Off"
+        StatusLabel.TextColor3 = Settings.Enabled and Color3.fromRGB(80, 255, 100) or Color3.fromRGB(255, 90, 90)
+        FragLabel.Text = "Map Fragments: " .. frags
+        CollectLabel.Text = "My Collected: " .. collectedFragments .. "/5"
+        TartarusLabel.Text = collectedFragments >= 5 and "Tartarus: UNLOCKED" or "Tartarus: Locked"
+        TartarusLabel.TextColor3 = collectedFragments >= 5 and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(190, 190, 200)
+        ModeLabel.Text = (isNext and "Next: " or "Mode: ") .. currentMode
+        OverloadLabel.Text = systemOverload and "Overload: YES" or "Overload: No"
+        OverloadLabel.TextColor3 = systemOverload and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(190, 190, 200)
+        GlassesLabel.Text = glassesFound and "Glasses: FOUND" or "Glasses: No"
 
         if Settings.Enabled then
-            local hrp = getHRP()
-            if hrp then
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    if not Settings.Enabled then break end
-                    local t = isTarget(obj)
-                    if t then
-                        tryPickup(obj, t)
-                        task.wait(0.15)
-                    end
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if not Settings.Enabled then break end
+                local t = isTarget(obj)
+                if t then
+                    pickup(obj, t)
+                    task.wait(0.15)
                 end
             end
         end
@@ -514,31 +361,34 @@ task.spawn(function()
             clearESP()
         end
 
+        if Settings.AntiAFK and tick() - lastAFK > 50 then
+            lastAFK = tick()
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Jump = true end
+        end
+
         task.wait(Settings.ScanSpeed)
     end
 end)
 
--- Buttons
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.F then toggleFly() end
+-- Spawn detect
+workspace.DescendantAdded:Connect(function(obj)
+    if not Settings.Enabled then return end
+    task.wait(0.1)
+    local t = isTarget(obj)
+    if t then
+        Notify("New " .. t)
+        playSound()
+        pickup(obj, t)
+    end
 end)
 
+-- Buttons
 ToggleBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = not Settings.Enabled
-    if Settings.Enabled then
-        ToggleBtn.Text = "Disable Auto Loot"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 70)
-        StatusLabel.Text = "Status: Running"
-        StatusLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
-        Notify("Auto Loot ON")
-    else
-        ToggleBtn.Text = "Enable Auto Loot"
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-        StatusLabel.Text = "Status: Off"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 95, 95)
-        Notify("Auto Loot OFF")
-    end
+    ToggleBtn.Text = Settings.Enabled and "Disable Auto Loot" or "Enable Auto Loot"
+    ToggleBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(50, 50, 65)
+    Notify(Settings.Enabled and "Auto Loot ON" or "Auto Loot OFF")
 end)
 
 ModeBtn.MouseButton1Click:Connect(function()
@@ -549,33 +399,33 @@ end)
 ShelterBtn.MouseButton1Click:Connect(function()
     Settings.AutoShelterKey = not Settings.AutoShelterKey
     ShelterBtn.Text = Settings.AutoShelterKey and "Auto Shelter Key: ON" or "Auto Shelter Key: OFF"
-    ShelterBtn.BackgroundColor3 = Settings.AutoShelterKey and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(42, 42, 55)
+    ShelterBtn.BackgroundColor3 = Settings.AutoShelterKey and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(40, 40, 55)
 end)
 
 ESPFragBtn.MouseButton1Click:Connect(function()
     Settings.ESPFragments = not Settings.ESPFragments
     ESPFragBtn.Text = Settings.ESPFragments and "ESP Fragments: ON" or "ESP Fragments: OFF"
-    ESPFragBtn.BackgroundColor3 = Settings.ESPFragments and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(42, 42, 55)
+    ESPFragBtn.BackgroundColor3 = Settings.ESPFragments and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(40, 40, 55)
     updateESP()
 end)
 
 ESPGlassBtn.MouseButton1Click:Connect(function()
     Settings.ESPGlasses = not Settings.ESPGlasses
     ESPGlassBtn.Text = Settings.ESPGlasses and "ESP Glasses: ON" or "ESP Glasses: OFF"
-    ESPGlassBtn.BackgroundColor3 = Settings.ESPGlasses and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(42, 42, 55)
+    ESPGlassBtn.BackgroundColor3 = Settings.ESPGlasses and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(40, 40, 55)
     updateESP()
 end)
 
 SoundBtn.MouseButton1Click:Connect(function()
     Settings.SpawnSound = not Settings.SpawnSound
     SoundBtn.Text = Settings.SpawnSound and "Spawn Sound: ON" or "Spawn Sound: OFF"
-    SoundBtn.BackgroundColor3 = Settings.SpawnSound and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(42, 42, 55)
+    SoundBtn.BackgroundColor3 = Settings.SpawnSound and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(40, 40, 55)
 end)
 
 OverloadBtn.MouseButton1Click:Connect(function()
     Settings.DetectOverload = not Settings.DetectOverload
     OverloadBtn.Text = Settings.DetectOverload and "Detect Overload: ON" or "Detect Overload: OFF"
-    OverloadBtn.BackgroundColor3 = Settings.DetectOverload and Color3.fromRGB(40, 100, 60) or Color3.fromRGB(42, 42, 55)
+    OverloadBtn.BackgroundColor3 = Settings.DetectOverload and Color3.fromRGB(40, 90, 55) or Color3.fromRGB(40, 40, 55)
 end)
 
 FlyBtn.MouseButton1Click:Connect(toggleFly)
@@ -583,41 +433,47 @@ FlyBtn.MouseButton1Click:Connect(toggleFly)
 AFKBtn.MouseButton1Click:Connect(function()
     Settings.AntiAFK = not Settings.AntiAFK
     AFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
-    AFKBtn.BackgroundColor3 = Settings.AntiAFK and Color3.fromRGB(40, 140, 70) or Color3.fromRGB(42, 42, 55)
+    AFKBtn.BackgroundColor3 = Settings.AntiAFK and Color3.fromRGB(30, 130, 60) or Color3.fromRGB(40, 40, 55)
 end)
 
-TestBtn.MouseButton1Click:Connect(tryPickExtinguisher)
+TestBtn.MouseButton1Click:Connect(function()
+    local found = false
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local n = obj.Name:lower()
+        for _, v in ipairs(ExtinguisherNames) do
+            if n:find(v:lower()) then
+                found = true
+                pickup(obj, "Extinguisher")
+                break
+            end
+        end
+    end
+    Notify(found and "Extinguisher tried" or "No Extinguisher")
+end)
 
 HopBtn.MouseButton1Click:Connect(function()
-    Notify("Server hopping...")
+    Notify("Hopping...")
     TeleportService:Teleport(PLACE_ID, LocalPlayer)
-end)
-
-ResetModeBtn.MouseButton1Click:Connect(function()
-    currentDetectedMode = "Unknown"
-    isNextMode = false
-    lastModeUpdate = 0
-    systemOverloadActive = false
-    if ModeLabel then ModeLabel.Text = "Mode: Unknown" end
-    Notify("Mode reset")
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
     if flyConnection then flyConnection:Disconnect() end
     clearESP()
-    if ScreenGui then ScreenGui:Destroy() end
+    ScreenGui:Destroy()
 end)
 
 -- Drag
-local dragging, dragStart, startPos
-TitleBar.InputBegan:Connect(function(input)
+local dragging, startPos, dragStart
+Title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = Main.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
+    end
+end)
+Title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
@@ -627,13 +483,19 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.F then toggleFly() end
+end)
+
+-- Respawn protect
 LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1.2)
+    task.wait(1)
     if not CoreGui:FindFirstChild("TAU_AutoLoot_UI") then
-        createUI()
-        Notify("UI reloaded after respawn")
+        -- simple reload message
+        Notify("Character respawned - re-execute script if UI missing")
     end
 end)
 
-print("TAU Auto Loot Fixed Version loaded")
-Notify("Script loaded - UI should appear now")
+Notify("Script loaded - UI should be visible")
+print("TAU Clean Rebuild loaded")
