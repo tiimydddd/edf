@@ -1,4 +1,4 @@
--- tau only apple - Force TP 优先 ControlRoom (Fixed Multi-Fragment)
+-- tau only apple - ControlRoom Lock + Multi-Fragment Fixed
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -11,8 +11,9 @@ local PLACE_ID = 2313058949
 local Settings = {
     Enabled = false,
     OnlyFragments = true,
-    AutoGoShelter = false,
+    AutoGoShelter = false,      -- 现在这个会直接锁控制室
     FullAuto = false,
+    LockControlRoom = false,    -- 新增：强制锁定控制室（防踢）
 }
 
 local FragmentNames = {
@@ -24,7 +25,7 @@ local GlassesNames = {
     "Mysterious Shades", "Shades", "Glasses", "眼镜", "墨镜"
 }
 local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
-local ControlRoomNames = {"ControlRoom", "Control Room", "Camera", "Cameras", "观看", "旁观", "Monitor", "Screen", "控制室"}
+local ControlRoomNames = {"ControlRoom", "Control Room", "Camera", "Cameras", "观看", "旁观", "Monitor", "Screen", "控制室", "Spectator", "View"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
 
@@ -38,9 +39,9 @@ local lastScan = 0
 local lastShelterCheck = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.4
-local SHELTER_CHECK_INTERVAL = 2.2
+local SHELTER_CHECK_INTERVAL = 1.8
 local recentlyTried = {}
-local TRIED_COOLDOWN = 2.8   -- 稍微缩短，方便连续捡多个
+local TRIED_COOLDOWN = 2.8
 
 local Theme = {
     BgMain       = Color3.fromRGB(18, 20, 28),
@@ -210,8 +211,8 @@ local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
 local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
-local AutoShelterBtn = makeToggle(PageLoot, "Auto Go Shelter: OFF", 110, false)
-local ForceShelterBtn = makeToggle(PageLoot, "强制 TP 进 ControlRoom", 144, false)
+local AutoShelterBtn = makeToggle(PageLoot, "锁控制室 (防踢): OFF", 110, false)  -- 改名
+local ForceShelterBtn = makeToggle(PageLoot, "强制进控制室", 144, false)
 
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
@@ -295,13 +296,11 @@ local function getHRP()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
--- 只注册最外层对象，避免把子部件当成独立碎片
 local function isFragment(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(FragmentNames) do
         if n:find(v:lower()) then
-            -- 如果父级已经是碎片，就跳过这个子物体
             if obj.Parent and isFragment(obj.Parent) then
                 return false
             end
@@ -367,7 +366,6 @@ end
 local function getBestPart(obj)
     if obj:IsA("BasePart") then return obj end
 
-    -- 优先找有交互的部件
     local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
     if prompt and prompt.Parent:IsA("BasePart") then
         return prompt.Parent
@@ -411,7 +409,6 @@ local function pickup(obj, typ)
     local part = getBestPart(obj)
     if not part then return end
 
-    -- 多角度 + 多轮尝试，提高第2个碎片成功率
     local offsets = {
         Vector3.new(0, 2.2, 0),
         Vector3.new(0, 1.8, 1.8),
@@ -423,20 +420,18 @@ local function pickup(obj, typ)
         Vector3.new(-1.2, 2.5, -1.2),
     }
 
-    for round = 1, 2 do   -- 每个碎片尝试两轮
+    for round = 1, 2 do
         for _, offset in ipairs(offsets) do
             if not obj.Parent then break end
             hrp.CFrame = part.CFrame + offset
             task.wait(0.035)
 
-            -- 全层级搜索交互
             local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
             tryFirePrompt(prompt)
 
             local touchPart = part
             local touch = touchPart:FindFirstChildOfClass("TouchInterest")
             if not touch then
-                -- 再找其他可能有 TouchInterest 的部件
                 for _, p in ipairs(obj:GetDescendants()) do
                     if p:IsA("BasePart") and p:FindFirstChildOfClass("TouchInterest") then
                         touchPart = p
@@ -463,7 +458,6 @@ local function pickup(obj, typ)
         task.wait(0.08)
     end
 
-    -- 只有真正消失才加计数
     task.delay(0.7, function()
         if not obj or not obj.Parent then
             if typ == "Fragment" then
@@ -477,105 +471,85 @@ local function pickup(obj, typ)
     end)
 end
 
-local function goToShelter()
-    local hrp = getHRP()
-    if not hrp then return end
-    cleanCache(knownShelters)
-
-    for obj in pairs(knownShelters) do
-        if obj and obj.Parent then
-            local part = getBestPart(obj)
-            if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then tryFirePrompt(prompt) end
-                Notify("Trying Shelter door...")
-                return
-            end
-        end
-    end
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isShelter(obj) then
-            knownShelters[obj] = true
-            local part = getBestPart(obj)
-            if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then tryFirePrompt(prompt) end
-                Notify("Found Shelter")
-                return
-            end
-        end
-    end
-end
-
-local function forceTPShelter()
-    local hrp = getHRP()
-    if not hrp then
-        Notify("没有角色")
-        return
-    end
-
-    local controlCandidates = {}
-    local shelterCandidates = {}
-
+-- ★ 核心：直接找控制室并传送 + 触发观看
+local function getControlRoomTargets()
+    local targets = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isControlRoom(obj) then
             local part = getBestPart(obj)
             if part then
-                table.insert(controlCandidates, part)
-            end
-        elseif isShelter(obj) then
-            local part = getBestPart(obj)
-            if part then
-                table.insert(shelterCandidates, part)
+                table.insert(targets, {part = part, obj = obj})
             end
         end
     end
+    return targets
+end
 
-    local targets = #controlCandidates > 0 and controlCandidates or shelterCandidates
+local function forceToControlRoom(silent)
+    local hrp = getHRP()
+    if not hrp then
+        if not silent then Notify("没有角色") end
+        return false
+    end
 
+    local targets = getControlRoomTargets()
     if #targets == 0 then
-        Notify("没找到 ControlRoom / 避难所")
-        return
+        if not silent then Notify("没找到控制室") end
+        return false
     end
 
     local offsets = {
-        Vector3.new(0, 3, 0),
-        Vector3.new(0, 2, 4),
-        Vector3.new(0, 2, -4),
-        Vector3.new(4, 2, 0),
-        Vector3.new(-4, 2, 0),
-        Vector3.new(0, 4, 0),
-        Vector3.new(0, 1, 6),
-        Vector3.new(0, 1, -6),
-        Vector3.new(3, 2, 3),
-        Vector3.new(-3, 2, -3),
+        Vector3.new(0, 2.5, 0),
+        Vector3.new(0, 2, 3),
+        Vector3.new(0, 2, -3),
+        Vector3.new(3, 2, 0),
+        Vector3.new(-3, 2, 0),
+        Vector3.new(0, 3.5, 0),
+        Vector3.new(2, 2.5, 2),
+        Vector3.new(-2, 2.5, -2),
     }
 
-    Notify("正在强制 TP 到 ControlRoom...")
-
-    for _, part in ipairs(targets) do
+    for _, data in ipairs(targets) do
+        local part = data.part
         for _, offset in ipairs(offsets) do
             hrp.CFrame = part.CFrame + offset
-            task.wait(0.06)
+            task.wait(0.05)
 
-            local parent = part.Parent
+            -- 强制触发观看/旁观 Prompt
+            local parent = part.Parent or data.obj
             if parent then
                 for _, child in ipairs(parent:GetDescendants()) do
                     if child:IsA("ProximityPrompt") then
-                        local text = (child.ActionText or ""):lower() .. (child.ObjectText or ""):lower()
-                        if text:find("观看") or text:find("旁观") or text:find("interact") or text:find("camera") then
+                        local text = ((child.ActionText or "") .. (child.ObjectText or "")):lower()
+                        if text:find("观看") or text:find("旁观") or text:find("spectat") or text:find("camera") or text:find("view") or text:find("monitor") or text:find("interact") then
                             tryFirePrompt(child)
                         end
+                    end
+                end
+                -- 也直接 fire 所有 Prompt（保底）
+                for _, child in ipairs(parent:GetDescendants()) do
+                    if child:IsA("ProximityPrompt") then
+                        tryFirePrompt(child)
                     end
                 end
             end
         end
     end
 
-    Notify("ControlRoom TP 已尝试完成")
+    if not silent then
+        Notify("已强制进入控制室")
+    end
+    return true
+end
+
+-- 持续锁定控制室（防踢核心）
+local function startControlRoomLock()
+    task.spawn(function()
+        while Settings.LockControlRoom or Settings.AutoGoShelter or Settings.FullAuto do
+            forceToControlRoom(true)  -- 静默持续传送
+            task.wait(1.6)            -- 每隔1.6秒重新锁一次，防止被踢
+        end
+    end)
 end
 
 local function teleportToKeyword(keywords, label)
@@ -647,7 +621,7 @@ workspace.DescendantAdded:Connect(function(obj)
         if isFragment(obj) then
             knownFragments[obj] = true
             if Settings.Enabled or Settings.FullAuto then
-                task.wait(0.15)  -- 稍微等一下再捡，避免模型还没完全加载
+                task.wait(0.15)
                 pickup(obj, "Fragment")
             end
         elseif isGlasses(obj) then
@@ -698,7 +672,6 @@ task.spawn(function()
             cleanCache(knownFragments)
             cleanCache(knownGlasses)
 
-            -- 按距离排序，先捡近的，提高连续捡多个的成功率
             local fragList = {}
             for obj in pairs(knownFragments) do
                 if obj and obj.Parent then
@@ -712,7 +685,7 @@ task.spawn(function()
 
             for _, data in ipairs(fragList) do
                 pickup(data.obj, "Fragment")
-                task.wait(0.12)  -- 每个碎片之间留一点间隔
+                task.wait(0.12)
             end
 
             if not Settings.OnlyFragments then
@@ -725,9 +698,10 @@ task.spawn(function()
             end
         end
 
-        if (Settings.AutoGoShelter or Settings.FullAuto) and (now - lastShelterCheck) >= SHELTER_CHECK_INTERVAL then
+        -- 自动锁控制室
+        if (Settings.AutoGoShelter or Settings.FullAuto or Settings.LockControlRoom) and (now - lastShelterCheck) >= SHELTER_CHECK_INTERVAL then
             lastShelterCheck = now
-            goToShelter()
+            forceToControlRoom(true)
         end
 
         task.wait(0.22)
@@ -741,6 +715,7 @@ FullAutoBtn.MouseButton1Click:Connect(function()
         Settings.Enabled = true
         Settings.OnlyFragments = false
         Settings.AutoGoShelter = true
+        Settings.LockControlRoom = true
 
         FullAutoBtn.Text = "★ Full Auto: ON"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
@@ -748,12 +723,14 @@ FullAutoBtn.MouseButton1Click:Connect(function()
         ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
         ModeBtn.Text = "Mode: Fragments + Glasses"
         ModeBtn.BackgroundColor3 = Theme.BgButtonOn
-        AutoShelterBtn.Text = "Auto Go Shelter: ON"
+        AutoShelterBtn.Text = "锁控制室 (防踢): ON"
         AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-        Notify("Full Auto ON")
+        Notify("Full Auto ON（已锁控制室）")
+        startControlRoomLock()
     else
         Settings.Enabled = false
         Settings.AutoGoShelter = false
+        Settings.LockControlRoom = false
 
         FullAutoBtn.Text = "★ Full Auto: OFF"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
@@ -761,7 +738,7 @@ FullAutoBtn.MouseButton1Click:Connect(function()
         ToggleBtn.BackgroundColor3 = Theme.BgButtonOff
         ModeBtn.Text = "Mode: Fragments Only"
         ModeBtn.BackgroundColor3 = Theme.BgButtonOff
-        AutoShelterBtn.Text = "Auto Go Shelter: OFF"
+        AutoShelterBtn.Text = "锁控制室 (防踢): OFF"
         AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOff
         Notify("Full Auto OFF")
     end
@@ -779,17 +756,27 @@ ModeBtn.MouseButton1Click:Connect(function()
     ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
 end)
 
+-- 锁控制室按钮（防踢）
 AutoShelterBtn.MouseButton1Click:Connect(function()
-    Settings.AutoGoShelter = not Settings.AutoGoShelter
-    AutoShelterBtn.Text = Settings.AutoGoShelter and "Auto Go Shelter: ON" or "Auto Go Shelter: OFF"
-    AutoShelterBtn.BackgroundColor3 = Settings.AutoGoShelter and Theme.BgButtonOn or Theme.BgButtonOff
-    if Settings.AutoGoShelter then goToShelter() end
+    Settings.LockControlRoom = not Settings.LockControlRoom
+    Settings.AutoGoShelter = Settings.LockControlRoom
+    AutoShelterBtn.Text = Settings.LockControlRoom and "锁控制室 (防踢): ON" or "锁控制室 (防踢): OFF"
+    AutoShelterBtn.BackgroundColor3 = Settings.LockControlRoom and Theme.BgButtonOn or Theme.BgButtonOff
+
+    if Settings.LockControlRoom then
+        Notify("已开启控制室锁定（防踢）")
+        forceToControlRoom(false)
+        startControlRoomLock()
+    else
+        Notify("已关闭控制室锁定")
+    end
 end)
 
+-- 强制进控制室按钮（点一下就传送一次）
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-    forceTPShelter()
-    task.delay(1.5, function()
+    forceToControlRoom(false)
+    task.delay(1.2, function()
         if ForceShelterBtn then
             ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
         end
@@ -838,5 +825,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("tau only apple loaded (Multi-Fragment Fixed)")
-print("tau only apple - Multi Fragment Fix")
+Notify("tau only apple loaded (ControlRoom Lock)")
+print("tau only apple - ControlRoom Lock + Anti Kick")
