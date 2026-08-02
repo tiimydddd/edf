@@ -88,7 +88,7 @@ local UI_REFRESH_INTERVAL = 0.05
 
 local firstRoundChecked = false
 local joinTime = tick()
-local FIRST_ROUND_WAIT = 22
+local FIRST_ROUND_WAIT = 75
 local rejoinStatus = "等待检测..."
 local isAlerting = false
 
