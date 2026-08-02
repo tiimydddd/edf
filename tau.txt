@@ -1,5 +1,5 @@
--- tau only apple - Fixed Detection Full
--- Strict Mode / Doomsday / Blood Moon | Modern UI | 2-Choice Loot | Save
+-- tau only apple - Full Fixed
+-- Real mode text rules | Weeping Angel button | Click To Pull | Save | 2-choice loot
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -8,6 +8,7 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Settings = {
     Enabled = false,
@@ -17,11 +18,11 @@ local Settings = {
     TornadoPull = false,
     GodMode = false,
     FragmentFly = false,
+    ClickPull = false,
     AutoSave = true,
     SaveName = "default",
 }
 
--- 只认真正的血月碎片名，避免误计
 local FragmentNames = {
     "Blood Moon Fragment",
     "BloodMoonFragment",
@@ -56,12 +57,35 @@ local SAFE_DISTANCE = 9
 local FRAG_FLY_RANGE = 60
 local FRAG_FLY_UP = 35
 local FRAG_FLY_SIDE = 18
+local CLICK_PULL_RANGE = 100
+local CLICK_PULL_STRENGTH = 90
+local clickPullTarget = nil
 
 local tartarusUnlocked = false
 local doomsdayDetected = false
 local currentMode = "Unknown"
+local nextMode = "Unknown"
 local lastModeTime = 0
-local MODE_TIMEOUT = 12
+local MODE_TIMEOUT = 14
+
+-- Gamemode catalog (from ReplicatedStorage.Data.GamemodeData)
+local GamemodeCatalog = {}
+pcall(function()
+    local data = ReplicatedStorage:FindFirstChild("Data")
+    local mod = data and data:FindFirstChild("GamemodeData")
+    if mod and mod:IsA("ModuleScript") then
+        local t = require(mod)
+        if typeof(t) == "table" then
+            for k, v in pairs(t) do
+                if typeof(v) == "table" and v.Name then
+                    GamemodeCatalog[string.lower(v.Name)] = v.Name
+                elseif typeof(k) == "string" then
+                    GamemodeCatalog[string.lower(k)] = v.Name or k
+                end
+            end
+        end
+    end
+end)
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -80,6 +104,7 @@ local function saveSettings(force)
         tostring(Settings.TornadoPull),
         tostring(Settings.GodMode),
         tostring(Settings.FragmentFly),
+        tostring(Settings.ClickPull),
         tostring(Settings.AutoSave),
         tostring(TORNADO_RANGE),
         tostring(Settings.SaveName or "default"),
@@ -95,7 +120,7 @@ local function loadSettings()
     if not ok or not content then return end
     local lines = {}
     for line in content:gmatch("[^\r\n]+") do table.insert(lines, line) end
-    if #lines < 8 then return end
+    if #lines < 9 then return end
     Settings.Enabled = lines[1] == "true"
     Settings.OnlyFragments = lines[2] == "true"
     Settings.FullAuto = lines[3] == "true"
@@ -103,12 +128,13 @@ local function loadSettings()
     Settings.TornadoPull = lines[5] == "true"
     Settings.GodMode = lines[6] == "true"
     Settings.FragmentFly = lines[7] == "true"
-    Settings.AutoSave = lines[8] == "true"
-    if lines[9] then
-        local r = tonumber(lines[9])
+    Settings.ClickPull = lines[8] == "true"
+    Settings.AutoSave = lines[9] == "true"
+    if lines[10] then
+        local r = tonumber(lines[10])
         if r then TORNADO_RANGE = math.clamp(r, MIN_RANGE, MAX_RANGE) end
     end
-    if lines[10] then Settings.SaveName = lines[10] end
+    if lines[11] then Settings.SaveName = lines[11] end
 end
 
 -- ==================== UI ====================
@@ -119,17 +145,14 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 420, 0, 400)
-Main.Position = UDim2.new(0, 40, 0.12, 0)
+Main.Size = UDim2.new(0, 430, 0, 420)
+Main.Position = UDim2.new(0, 40, 0.1, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(50, 50, 60)
-Stroke.Thickness = 1
-Stroke.Parent = Main
+Instance.new("UIStroke", Main).Color = Color3.fromRGB(50, 50, 60)
 
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 36)
@@ -184,7 +207,6 @@ TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
 TabBar.BorderSizePixel = 0
 TabBar.Parent = Main
 Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
-
 local TabLayout = Instance.new("UIListLayout")
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 4)
@@ -192,7 +214,7 @@ TabLayout.Parent = TabBar
 
 local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 72, 1, -6)
+    btn.Size = UDim2.new(0, 74, 1, -6)
     btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -223,7 +245,7 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 340)
+    page.CanvasSize = UDim2.new(0, 0, 0, 380)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -261,7 +283,6 @@ local function makeToggle(parent, text, y, defaultOn)
     row.Position = UDim2.new(0, 8, 0, y)
     row.BackgroundTransparency = 1
     row.Parent = parent
-
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -60, 1, 0)
     label.BackgroundTransparency = 1
@@ -271,7 +292,6 @@ local function makeToggle(parent, text, y, defaultOn)
     label.TextSize = 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
-
     local track = Instance.new("TextButton")
     track.Size = UDim2.new(0, 44, 0, 22)
     track.Position = UDim2.new(1, -50, 0.5, -11)
@@ -279,14 +299,12 @@ local function makeToggle(parent, text, y, defaultOn)
     track.Text = ""
     track.Parent = row
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-
     local thumb = Instance.new("Frame")
     thumb.Size = UDim2.new(0, 18, 0, 18)
     thumb.Position = defaultOn and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
     thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     thumb.Parent = track
     Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
-
     return row, track, thumb
 end
 
@@ -297,19 +315,20 @@ end
 
 -- Info
 local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 210)
+local infoCard = makeCard(PageInfo, 4, 230)
 local StatusLabel = makeLabel(infoCard, "Status: Off", 10)
-local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 34)
-local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 58)
-local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 82)
-local ModeLabel = makeLabel(infoCard, "Mode: Unknown", 106)
-local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: Map 0 | My 0/5", 130)
-local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 154)
+local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 32)
+local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 54)
+local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 76)
+local ModeLabel = makeLabel(infoCard, "Current: Unknown", 98)
+local NextModeLabel = makeLabel(infoCard, "Next: Unknown", 120)
+local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: Map 0 | My 0/5", 142)
+local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 164)
 local ResetModeBtn = Instance.new("TextButton")
 ResetModeBtn.Size = UDim2.new(1, -24, 0, 26)
-ResetModeBtn.Position = UDim2.new(0, 12, 0, 178)
+ResetModeBtn.Position = UDim2.new(0, 12, 0, 192)
 ResetModeBtn.BackgroundColor3 = Color3.fromRGB(55, 45, 45)
-ResetModeBtn.Text = "Reset Mode / Doomsday Display"
+ResetModeBtn.Text = "Reset Mode Display"
 ResetModeBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
 ResetModeBtn.Font = Enum.Font.GothamBold
 ResetModeBtn.TextSize = 11
@@ -380,15 +399,16 @@ Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 8)
 
 -- Extra
 local PageExtra = createPage("Extra")
-local extraCard = makeCard(PageExtra, 4, 270)
-local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 10, true)
-local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 48, false)
-local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 86, false)
-local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 124, false)
-local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 165)
+local extraCard = makeCard(PageExtra, 4, 360)
+local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 8, true)
+local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 42, false)
+local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 76, false)
+local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 110, false)
+local _, ClickTrack, ClickThumb = makeToggle(extraCard, "Click To Pull", 144, false)
+local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 180)
 local RangeDown = Instance.new("TextButton")
 RangeDown.Size = UDim2.new(0, 90, 0, 28)
-RangeDown.Position = UDim2.new(0, 12, 0, 195)
+RangeDown.Position = UDim2.new(0, 12, 0, 205)
 RangeDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeDown.Text = "Range -20"
 RangeDown.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -398,7 +418,7 @@ RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
 local RangeUp = Instance.new("TextButton")
 RangeUp.Size = UDim2.new(0, 90, 0, 28)
-RangeUp.Position = UDim2.new(0, 112, 0, 195)
+RangeUp.Position = UDim2.new(0, 112, 0, 205)
 RangeUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeUp.Text = "Range +20"
 RangeUp.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -408,7 +428,7 @@ RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
 local RangeReset = Instance.new("TextButton")
 RangeReset.Size = UDim2.new(0, 100, 0, 28)
-RangeReset.Position = UDim2.new(0, 212, 0, 195)
+RangeReset.Position = UDim2.new(0, 212, 0, 205)
 RangeReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeReset.Text = "Reset (80)"
 RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -416,6 +436,17 @@ RangeReset.Font = Enum.Font.GothamBold
 RangeReset.TextSize = 12
 RangeReset.Parent = extraCard
 Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
+
+local AngelBtn = Instance.new("TextButton")
+AngelBtn.Size = UDim2.new(1, -24, 0, 32)
+AngelBtn.Position = UDim2.new(0, 12, 0, 250)
+AngelBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 120)
+AngelBtn.Text = "Start Weeping Angel Client"
+AngelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AngelBtn.Font = Enum.Font.GothamBold
+AngelBtn.TextSize = 12
+AngelBtn.Parent = extraCard
+Instance.new("UICorner", AngelBtn).CornerRadius = UDim.new(0, 8)
 
 -- Save
 local PageSave = createPage("Save")
@@ -498,7 +529,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 420, 0, 400)
+        Main.Size = UDim2.new(0, 430, 0, 420)
         TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -525,7 +556,7 @@ local function isFragment(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(FragmentNames) do
-        if n == v:lower() or n:find(v:lower(), 1, true) then
+        if n:find(v:lower(), 1, true) then
             if obj.Parent and isFragment(obj.Parent) then return false end
             return true
         end
@@ -685,44 +716,37 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
--- ========== 修好的模式 / 末日 / 血月检测 ==========
--- 优先匹配「A xxx is occurring」完整句，避免残留误判
-local MODE_RULES = {
+-- Mode detection: Next vs Current (wiki phrases)
+local CURRENT_RULES = {
     {pat = "a toastnado is occurring", mode = "ToastNado"},
     {pat = "toastnado is occurring", mode = "ToastNado"},
-    {pat = "a dust devil is occurring", mode = "Dust Devil"},
+    {pat = "there is a dust devil", mode = "Dust Devil"},
     {pat = "dust devil is occurring", mode = "Dust Devil"},
     {pat = "an infernado is occurring", mode = "Infernado"},
     {pat = "infernado is occurring", mode = "Infernado"},
-    {pat = "a deadnado is occurring", mode = "Deadnado"},
-    {pat = "deadnado is occurring", mode = "Deadnado"},
-    {pat = "a chompnado is occurring", mode = "Chompnado"},
-    {pat = "chompnado is occurring", mode = "Chompnado"},
-    {pat = "a trollnado is occurring", mode = "Trollnado"},
-    {pat = "trollnado is occurring", mode = "Trollnado"},
-    {pat = "a megatornado is occurring", mode = "MegaTornado"},
-    {pat = "megatornado is occurring", mode = "MegaTornado"},
-    {pat = "a ghostnado is occurring", mode = "GhostNado"},
-    {pat = "ghostnado is occurring", mode = "GhostNado"},
-    {pat = "a riftnado is occurring", mode = "Riftnado"},
-    {pat = "riftnado is occurring", mode = "Riftnado"},
-    {pat = "a 4%-nado is occurring", mode = "4-Nado"}, -- won't match; real below
-    {pat = "4%-nado is occurring", mode = "4-Nado"},
-    {pat = "a 4-nado is occurring", mode = "4-Nado"},
-    {pat = "4-nado is occurring", mode = "4-Nado"},
-    {pat = "four tornadoes", mode = "4-Nado"},
+    {pat = "four tornadoes have touched down", mode = "4-Nado"},
+    {pat = "there are four tornadoes", mode = "4-Nado"},
     {pat = "there are two tornadoes", mode = "Double Trouble"},
     {pat = "double trouble", mode = "Double Trouble"},
     {pat = "triple threat", mode = "Triple Threat"},
-    {pat = "unstoppable is occurring", mode = "Unstoppable"},
+    {pat = "there's three", mode = "Triple Threat"},
+    {pat = "a deadnado is occurring", mode = "Deadnado"},
+    {pat = "deadnado is occurring", mode = "Deadnado"},
+    {pat = "chompnado is occurring", mode = "Chompnado"},
+    {pat = "trollnado is occurring", mode = "Trollnado"},
+    {pat = "megatornado is occurring", mode = "MegaTornado"},
+    {pat = "ghostnado is occurring", mode = "GhostNado"},
+    {pat = "riftnado is occurring", mode = "Riftnado"},
+    {pat = "unstoppable", mode = "Unstoppable"},
+    {pat = "lurker", mode = "Lurker"},
     {pat = "a doomsday is occurring", mode = "Doomsday"},
     {pat = "doomsday is occurring", mode = "Doomsday"},
-    {pat = "doomsday has begun", mode = "Doomsday"},
-    {pat = "this is doomsday", mode = "Doomsday"},
-    {pat = "a tartarus is occurring", mode = "Tartarus"},
+    {pat = "survive the end of the world", mode = "Doomsday"},
+    {pat = "may mother nature have mercy", mode = "Doomsday"},
+    {pat = "the end of humanity has arrived", mode = "Doomsday"},
     {pat = "tartarus is occurring", mode = "Tartarus"},
     {pat = "tartarus has been summoned", mode = "Tartarus"},
-    {pat = "tartarus has been awakened", mode = "Tartarus"},
+    {pat = "there is an ef", mode = "Normal Survival"},
     {pat = "normal survival", mode = "Normal Survival"},
 }
 
@@ -730,28 +754,42 @@ local function checkAlerts()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
 
-    local bestMode, bestLen = nil, 0
+    local bestCurrent, bestLen = nil, 0
+    local foundNext = nil
     local sawDoomsday, sawTartarus = false, false
 
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") then
             local raw = g.Text or ""
-            if #raw < 4 or #raw > 180 then continue end
+            if #raw < 5 or #raw > 220 then continue end
             local t = string.lower(raw)
 
-            for _, rule in ipairs(MODE_RULES) do
+            -- Next mode: "This round's gamemode is: X"
+            local n1, n2 = t:find("this round's gamemode is")
+            if n1 then
+                local after = raw:sub(n2 + 1):gsub("^[%s:]+", ""):gsub("%s+$", "")
+                if #after > 1 and #after < 40 then
+                    foundNext = after
+                end
+            end
+
+            -- Skip doomsday clock risk text
+            if t:find("unlikely the world will end") or t:find("chances are slim") then
+                continue
+            end
+
+            for _, rule in ipairs(CURRENT_RULES) do
                 if t:find(rule.pat, 1, true) then
                     local len = #rule.pat
                     if len > bestLen then
                         bestLen = len
-                        bestMode = rule.mode
+                        bestCurrent = rule.mode
                     end
                     if rule.mode == "Doomsday" then sawDoomsday = true end
                     if rule.mode == "Tartarus" then sawTartarus = true end
                 end
             end
 
-            -- 额外血月进度
             if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true))
                 and t:find("fragment", 1, true) then
                 sawTartarus = true
@@ -759,26 +797,91 @@ local function checkAlerts()
         end
     end
 
+    if foundNext then
+        nextMode = foundNext
+    end
+
     if sawTartarus and not tartarusUnlocked then
         tartarusUnlocked = true
-        Notify("Blood Moon / Tartarus unlocked (this server)")
+        Notify("Tartarus / Blood Moon unlocked (server)")
     end
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
-        Notify("Doomsday on this server!")
+        Notify("Doomsday detected!")
     end
 
-    if bestMode then
-        currentMode = bestMode
+    if bestCurrent then
+        currentMode = bestCurrent
         lastModeTime = tick()
-        if bestMode == "Doomsday" then doomsdayDetected = true end
-        if bestMode == "Tartarus" then tartarusUnlocked = true end
+        if bestCurrent == "Doomsday" then doomsdayDetected = true end
+        if bestCurrent == "Tartarus" then tartarusUnlocked = true end
     elseif tick() - lastModeTime > MODE_TIMEOUT then
         currentMode = "Unknown"
     end
 end
 
--- God / Pull / Fly / AFK (same structure)
+-- Weeping Angel start (no freeze)
+local function startWeepingAngelClient()
+    local ok, err = pcall(function()
+        local assets = ReplicatedStorage:FindFirstChild("Assets") or ReplicatedStorage:WaitForChild("Assets", 2)
+        if not assets then error("No Assets") end
+        local signals = assets:FindFirstChild("Signals") or assets:WaitForChild("Signals", 2)
+        if not signals then error("No Signals") end
+        local gamemodes = signals:FindFirstChild("Gamemodes") or signals:WaitForChild("Gamemodes", 2)
+        if not gamemodes then error("No Gamemodes") end
+        local angel = gamemodes:FindFirstChild("WeepingAngel") or gamemodes:WaitForChild("WeepingAngel", 2)
+        if not angel then error("No WeepingAngel") end
+
+        if angel:IsA("RemoteEvent") then
+            angel:FireServer()
+            Notify("WeepingAngel RemoteEvent fired")
+            return
+        end
+        if angel:IsA("RemoteFunction") then
+            angel:InvokeServer()
+            Notify("WeepingAngel InvokeServer")
+            return
+        end
+        if angel:IsA("BindableEvent") then
+            angel:Fire()
+            Notify("WeepingAngel Bindable fired")
+            return
+        end
+        if angel:IsA("Folder") or angel:IsA("Model") then
+            local n = 0
+            for _, child in ipairs(angel:GetDescendants()) do
+                if child:IsA("RemoteEvent") then
+                    pcall(function() child:FireServer() end)
+                    n = n + 1
+                elseif child:IsA("BindableEvent") then
+                    pcall(function() child:Fire() end)
+                    n = n + 1
+                end
+            end
+            Notify("WeepingAngel folder fired x" .. n)
+            return
+        end
+        if angel:IsA("ModuleScript") then
+            local mod = require(angel)
+            if typeof(mod) == "function" then mod()
+            elseif typeof(mod) == "table" then
+                if mod.Start then mod.Start()
+                elseif mod.Init then mod.Init()
+                elseif mod.Enable then mod.Enable()
+                end
+            end
+            Notify("WeepingAngel Module started")
+            return
+        end
+        error("Type: " .. angel.ClassName)
+    end)
+    if not ok then
+        Notify("Angel failed: " .. tostring(err))
+        warn("[WeepingAngel]", err)
+    end
+end
+
+-- God / pull / fly / click / afk
 local godConnection, healthConnection, antiFlingConnection
 local function getHumanoid()
     local char = LocalPlayer.Character
@@ -876,6 +979,32 @@ local function doFragmentFly()
     end
 end
 
+local function doClickPull()
+    if not Settings.ClickPull or not clickPullTarget then return end
+    local myChar = LocalPlayer.Character
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not obj.Anchored and obj.Parent then
+            if myChar and obj:IsDescendantOf(myChar) then continue end
+            local dist = (obj.Position - clickPullTarget).Magnitude
+            if dist < 4 or dist > CLICK_PULL_RANGE then continue end
+            local direction = (clickPullTarget - obj.Position).Unit
+            local sf = 1 - (dist / CLICK_PULL_RANGE)
+            local force = direction * (CLICK_PULL_STRENGTH * sf) + Vector3.new(0, 12 * sf, 0)
+            if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then force = force * 1.5 end
+            pcall(function() obj.AssemblyLinearVelocity = force end)
+        end
+    end
+end
+
+local mouse = LocalPlayer:GetMouse()
+mouse.Button1Down:Connect(function()
+    if not Settings.ClickPull then return end
+    if mouse.Hit then
+        clickPullTarget = mouse.Hit.Position
+        Notify("Pull target set")
+    end
+end)
+
 local function doAntiAFK()
     pcall(function()
         VirtualUser:CaptureController()
@@ -924,6 +1053,7 @@ local function applySettingsToUI()
     setToggleVisual(GodTrack, GodThumb, Settings.GodMode)
     setToggleVisual(TornadoTrack, TornadoThumb, Settings.TornadoPull)
     setToggleVisual(FlyTrack, FlyThumb, Settings.FragmentFly)
+    setToggleVisual(ClickTrack, ClickThumb, Settings.ClickPull)
     setToggleVisual(AutoSaveTrack, AutoSaveThumb, Settings.AutoSave)
     NameBox.Text = Settings.SaveName or "default"
     if Settings.OnlyFragments then
@@ -941,7 +1071,6 @@ local function applySettingsToUI()
     updateRangeLabel()
 end
 
--- Main loop
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -954,22 +1083,20 @@ task.spawn(function()
         FragLabel.Text = "Map Fragments: " .. frags
         CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
-
-        ModeLabel.Text = "Mode: " .. currentMode
+        ModeLabel.Text = "Current: " .. currentMode
         ModeLabel.TextColor3 = currentMode == "Unknown"
             and Color3.fromRGB(180, 180, 195) or Color3.fromRGB(255, 200, 100)
+        NextModeLabel.Text = "Next: " .. nextMode
+        NextModeLabel.TextColor3 = nextMode == "Unknown"
+            and Color3.fromRGB(180, 180, 195) or Color3.fromRGB(140, 200, 255)
 
         if tartarusUnlocked then
             BloodMoonLabel.Text = "Blood Moon: UNLOCKED (server)"
             BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
-        elseif collectedFragments >= 5 then
-            BloodMoonLabel.Text = "Blood Moon: My 5/5"
-            BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
         else
             BloodMoonLabel.Text = "Blood Moon: Map " .. frags .. " | My " .. collectedFragments .. "/5"
             BloodMoonLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
-
         if doomsdayDetected or currentMode == "Doomsday" then
             DoomsdayLabel.Text = "Doomsday: YES"
             DoomsdayLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
@@ -1004,6 +1131,7 @@ task.spawn(function()
         end
         if Settings.TornadoPull then doTornadoPull() end
         if Settings.FragmentFly then doFragmentFly() end
+        if Settings.ClickPull then doClickPull() end
         task.wait(0.15)
     end
 end)
@@ -1033,13 +1161,11 @@ FragOnlyBtn.MouseButton1Click:Connect(function()
     Settings.OnlyFragments = true
     applySettingsToUI()
     saveSettings()
-    Notify("Fragments Only")
 end)
 FragGlassBtn.MouseButton1Click:Connect(function()
     Settings.OnlyFragments = false
     applySettingsToUI()
     saveSettings()
-    Notify("Fragments + Glasses")
 end)
 AFKTrack.MouseButton1Click:Connect(function()
     Settings.AntiAFK = not Settings.AntiAFK
@@ -1062,10 +1188,20 @@ FlyTrack.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings()
 end)
+ClickTrack.MouseButton1Click:Connect(function()
+    Settings.ClickPull = not Settings.ClickPull
+    if not Settings.ClickPull then clickPullTarget = nil end
+    applySettingsToUI()
+    saveSettings()
+    Notify(Settings.ClickPull and "Click world to set pull point" or "Click To Pull OFF")
+end)
 AutoSaveTrack.MouseButton1Click:Connect(function()
     Settings.AutoSave = not Settings.AutoSave
     applySettingsToUI()
     saveSettings(true)
+end)
+AngelBtn.MouseButton1Click:Connect(function()
+    startWeepingAngelClient()
 end)
 NameBox.FocusLost:Connect(function()
     local t = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
@@ -1078,14 +1214,14 @@ SaveNowBtn.MouseButton1Click:Connect(function()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
-    Notify("Saved: " .. Settings.SaveName)
+    Notify("Saved")
 end)
 LoadBtn.MouseButton1Click:Connect(function()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     loadSettings()
     applySettingsToUI()
     SaveStatusLabel.Text = "Status: Loaded [" .. Settings.SaveName .. "]"
-    Notify("Loaded: " .. Settings.SaveName)
+    Notify("Loaded")
 end)
 ResetBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = false
@@ -1095,20 +1231,19 @@ ResetBtn.MouseButton1Click:Connect(function()
     Settings.TornadoPull = false
     Settings.GodMode = false
     Settings.FragmentFly = false
+    Settings.ClickPull = false
     Settings.AutoSave = true
     TORNADO_RANGE = 80
     applySettingsToUI()
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Reset"
-    Notify("Reset")
 end)
 ResetModeBtn.MouseButton1Click:Connect(function()
     currentMode = "Unknown"
+    nextMode = "Unknown"
     lastModeTime = 0
     doomsdayDetected = false
-    -- tartarusUnlocked 不强制清，除非你想一起清：
-    -- tartarusUnlocked = false
-    Notify("Mode / Doomsday display reset")
+    Notify("Mode display reset")
 end)
 RangeDown.MouseButton1Click:Connect(function()
     TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
@@ -1157,5 +1292,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("Fixed detection loaded")
-print("tau only apple - Fixed Detection Full")
+Notify("Full Fixed loaded")
+print("tau only apple - Full Fixed (Angel + ClickPull + Mode split)")
