@@ -1,5 +1,5 @@
--- tau only apple - Complete Full (UI Bug Fixed v2)
--- 修正 TabBar 超出視窗邊界問題 | 自動裁切與比例平分
+-- tau only apple - Complete Full (UI Bug Fixed v2 + Full Mode Detection)
+-- 修正 TabBar 超出視窗邊界問題 | 自動裁切與比例平分 + 全模式檢測
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -403,6 +403,7 @@ makeLabel(infoCard, "── 模式 ──", 164, Color3.fromRGB(120, 120, 140))
 local ModeLabel = makeLabel(infoCard, "当前模式: Unknown", 186)
 local NextModeLabel = makeLabel(infoCard, "下一模式: Unknown", 206)
 local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
+makeLabel(infoCard, "提示: 当前模式来自模式图标，最准", 226, Color3.fromRGB(160, 200, 160))
 makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
 local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待中...", 274)
 local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
@@ -830,6 +831,7 @@ local function checkFirstRoundNoFrag()
     end
 end
 
+-- ==================== FULL MODE DETECTION ====================
 local CURRENT_RULES = {
     {pat = "a toastnado is occurring", mode = "ToastNado"},
     {pat = "toastnado is occurring", mode = "ToastNado"},
@@ -854,40 +856,96 @@ local CURRENT_RULES = {
 local function checkAlerts()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
-    local bestCurrent, bestLen = nil, 0
+
+    local bestCurrent = "Unknown"
+    local bestLen = 0
     local foundNext = nil
-    local sawDoomsday, sawTartarus = false, false
+    local sawDoomsday = false
+    local sawTartarus = false
+
+    -- 图片关键词（游戏模式图标的描述文字）
+    local iconKeywords = {
+        ["toastnado"] = "ToastNado",
+        ["toast"] = "ToastNado",
+        ["tornado"] = "ToastNado",
+        ["dust devil"] = "Dust Devil",
+        ["4-nado"] = "4-Nado",
+        ["double trouble"] = "Double Trouble",
+        ["triple threat"] = "Triple Threat",
+        ["infernado"] = "Infernado",
+        ["deadnado"] = "Deadnado",
+        ["lurker"] = "Lurker",
+        ["doomsday"] = "Doomsday",
+        ["tartarus"] = "Tartarus",
+        ["blood moon"] = "Tartarus",
+        ["normal survival"] = "Normal Survival",
+        ["ef"] = "Normal Survival",
+        ["survive the end"] = "Doomsday",
+    }
+
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") then
             local raw = g.Text or ""
-            if #raw < 5 or #raw > 220 then continue end
             local t = string.lower(raw)
+
+            -- 跳过无关文字
             if t:find("unlikely the world will end") or t:find("chances are slim") then continue end
+
+            -- 获取下一轮模式（文字版）
             local n1, n2 = t:find("this round's gamemode is")
             if n1 then
                 local after = raw:sub(n2 + 1):gsub("^[%s:]+", ""):gsub("%s+$", "")
-                if #after > 1 and #after < 40 then foundNext = after end
+                if #after > 1 and #after < 40 then
+                    foundNext = after
+                end
             end
+
+            -- 当前模式：图片关键词 + 规则表双保险
+            for keyword, mode in pairs(iconKeywords) do
+                if t:find(keyword, 1, true) then
+                    if #keyword > bestLen then
+                        bestLen = #keyword
+                        bestCurrent = mode
+                    end
+                    if mode == "Doomsday" then sawDoomsday = true end
+                    if mode == "Tartarus" then sawTartarus = true end
+                end
+            end
+
+            -- 规则表备用
             for _, rule in ipairs(CURRENT_RULES) do
                 if t:find(rule.pat, 1, true) then
-                    if #rule.pat > bestLen then bestLen = #rule.pat bestCurrent = rule.mode end
+                    if #rule.pat > bestLen then
+                        bestLen = #rule.pat
+                        bestCurrent = rule.mode
+                    end
                     if rule.mode == "Doomsday" then sawDoomsday = true end
                     if rule.mode == "Tartarus" then sawTartarus = true end
                 end
             end
-            if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true)) and t:find("fragment", 1, true) then sawTartarus = true end
+
+            -- 额外：5个碎片直接解锁 Tartarus
+            if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true)) and t:find("fragment", 1, true) then
+                sawTartarus = true
+            end
         end
     end
-    if foundNext then nextMode = foundNext end
+
+    if foundNext then
+        nextMode = foundNext
+    end
+
     if sawTartarus and not tartarusUnlocked then
         tartarusUnlocked = true
         Notify("Tartarus 已解锁！", true)
     end
+
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
         Notify("检测到 Doomsday！", true)
     end
-    if bestCurrent then
+
+    if bestCurrent ~= "Unknown" then
         currentMode = bestCurrent
         lastModeTime = tick()
         if bestCurrent == "Doomsday" then doomsdayDetected = true end
@@ -1467,5 +1525,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | 標籤頁排版 Bug 已完全修復")
-print("tau only apple | UI Bug Fix v2 Loaded")
+Notify("已加载 | 標籤頁排版 Bug 已完全修復 + FULL 模式檢測已啟用")
+print("tau only apple | UI Bug Fix v2 + FULL MODE DETECTION Loaded")
