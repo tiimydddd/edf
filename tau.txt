@@ -1,5 +1,5 @@
 -- tau only apple - Complete Full
--- Info 实用化 | 换服修复 | Full Auto 可关避难所 | 效率分类
+-- Info 实用化 | 换服加强 | Full Auto 可关避难所 | 效率分类
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -354,7 +354,7 @@ local function makeActionBtn(parent, text, y, color)
     return btn
 end
 
--- ========== Info（实用版）==========
+-- ========== Info ==========
 local PageInfo = createPage("Info")
 local infoCard = makeCard(PageInfo, 4, 420)
 
@@ -375,7 +375,6 @@ local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
 makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
 local RejoinStatusLabel = makeLabel(infoCard, "重进: 等待中...", 274)
 local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
-
 local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 320, Color3.fromRGB(150, 150, 165))
 
 local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 348, Color3.fromRGB(55, 45, 45))
@@ -760,21 +759,39 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
--- ★ 更稳的换服
+-- ★ 加强换服：多方法尝试
 local function serverHop()
     Notify("正在换服，请稍候...")
     rejoinStatus = "正在换服..."
-    local ok, err = pcall(function()
+
+    local placeId = game.PlaceId
+
+    -- 1) TeleportAsync
+    local ok1 = pcall(function()
+        TeleportService:TeleportAsync(placeId, {LocalPlayer})
+    end)
+    if ok1 then return end
+
+    -- 2) Teleport(placeId, player)
+    local ok2 = pcall(function()
+        TeleportService:Teleport(placeId, LocalPlayer)
+    end)
+    if ok2 then return end
+
+    -- 3) 用常量 PLACE_ID
+    local ok3 = pcall(function()
         TeleportService:Teleport(PLACE_ID, LocalPlayer)
     end)
-    if not ok then
-        warn("Teleport failed:", err)
-        pcall(function()
-            TeleportService:Teleport(game.PlaceId)
-        end)
-        Notify("换服请求已发（若没跳转请再点一次）")
-        rejoinStatus = "换服失败，请再试"
-    end
+    if ok3 then return end
+
+    -- 4) 再试一次无 player 参数
+    local ok4 = pcall(function()
+        TeleportService:Teleport(placeId)
+    end)
+    if ok4 then return end
+
+    Notify("换服失败：执行器可能拦截传送，请手动退出再进，或再点一次")
+    rejoinStatus = "换服失败，请重试/手动退"
 end
 
 local function checkFirstRoundNoFrag()
@@ -1097,7 +1114,6 @@ local function applySettingsToUI()
     updateRangeLabel()
 end
 
--- 主循环 + 实用 Info 刷新
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -1107,7 +1123,6 @@ task.spawn(function()
             + (c.Illumina or 0) + (c.FearSign or 0) + (c.TeamYin or 0) + (c.TeamYang or 0)
             + (c.Idol or 0) + (c.CursedIdol or 0) + (c.AncientText or 0)
 
-        -- 状态
         if Settings.FullAuto then
             StatusLabel.Text = "状态: Full Auto" .. (Settings.FullAutoShelter and " (含避难所)" or " (不含避难所)")
             StatusLabel.TextColor3 = Color3.fromRGB(100, 220, 140)
@@ -1119,7 +1134,6 @@ task.spawn(function()
             StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
 
-        -- 目标提示
         if collectedFragments >= 5 or tartarusUnlocked then
             GoalLabel.Text = "目标: Tartarus 已可出 / 等模式"
         elseif glassesFound then
@@ -1128,7 +1142,6 @@ task.spawn(function()
             GoalLabel.Text = "目标: 优先捡碎片+眼镜"
         end
 
-        -- 稀有进度
         FragProgressLabel.Text = string.format("血月碎片: 地图%d | 我%d/5 → Tartarus", frags, collectedFragments)
         FragProgressLabel.TextColor3 = (collectedFragments >= 5 or tartarusUnlocked) and Color3.fromRGB(100, 255, 120) or Color3.fromRGB(180, 180, 195)
 
@@ -1168,7 +1181,6 @@ task.spawn(function()
         RejoinStatusLabel.Text = "重进: " .. rejoinStatus
         MapLootLabel.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d 其他%d", c.Key or 0, c.Ext or 0, c.Bat or 0, modeLoot)
 
-        -- 动态提示
         if not Settings.Enabled and not Settings.FullAuto then
             TipLabel.Text = "提示: 去 Loot 页开 Full Auto 或 Auto Loot"
         elseif Settings.RejoinNoFrag and not firstRoundChecked then
@@ -1230,7 +1242,6 @@ task.spawn(function()
     end
 end)
 
--- Buttons
 FullAutoTrack.MouseButton1Click:Connect(function()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
@@ -1427,5 +1438,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("实用Info + 换服修复版已加载")
-print("tau only apple | Info实用化 + ServerHop修复")
+Notify("换服加强版已加载")
+print("tau only apple | ServerHop multi-method")
