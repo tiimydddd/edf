@@ -1,5 +1,5 @@
--- tau only apple - Complete Full (UI Bug Fixed)
--- 自动换服改为仅提示+声音 | 所有提示/按钮都有声音
+-- tau only apple - Complete Full (UI Bug Fixed v2)
+-- 修正 TabBar 超出視窗邊界問題 | 自動裁切與比例平分
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -88,7 +88,7 @@ local UI_REFRESH_INTERVAL = 0.05
 
 local firstRoundChecked = false
 local joinTime = tick()
-local FIRST_ROUND_WAIT = 70
+local FIRST_ROUND_WAIT = 60
 local rejoinStatus = "等待检测..."
 local isAlerting = false
 
@@ -183,11 +183,13 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = guiParent
 
+-- 主視窗（加寬至 340，啟用 ClipsDescendants 防止任何溢出）
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 320, 0, 380)
+Main.Size = UDim2.new(0, 340, 0, 380)
 Main.Position = UDim2.new(0, 30, 0.04, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 Instance.new("UIStroke", Main).Color = Color3.fromRGB(50, 50, 60)
@@ -241,33 +243,32 @@ CloseBtn.ZIndex = 5
 CloseBtn.Parent = TitleBar
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- 【UI修复1】：将 TabBar 改为自动滚动的 ScrollingFrame 防止标签挤爆溢出
-local TabBar = Instance.new("ScrollingFrame")
-TabBar.Size = UDim2.new(1, -20, 0, 32)
-TabBar.Position = UDim2.new(0, 10, 0, 42)
+-- 標籤欄容器（開啟 ClipsDescendants）
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -16, 0, 32)
+TabBar.Position = UDim2.new(0, 8, 0, 42)
 TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
 TabBar.BorderSizePixel = 0
-TabBar.ScrollBarThickness = 0
-TabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
-TabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+TabBar.ClipsDescendants = true
 TabBar.Parent = Main
 Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
 local TabLayout = Instance.new("UIListLayout")
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.Padding = UDim.new(0, 4)
+TabLayout.Padding = UDim.new(0, 3)
 TabLayout.Parent = TabBar
 
 local TabPadding = Instance.new("UIPadding")
-TabPadding.PaddingLeft = UDim.new(0, 4)
-TabPadding.PaddingRight = UDim.new(0, 4)
+TabPadding.PaddingLeft = UDim.new(0, 3)
+TabPadding.PaddingRight = UDim.new(0, 3)
 TabPadding.PaddingTop = UDim.new(0, 3)
 TabPadding.PaddingBottom = UDim.new(0, 3)
 TabPadding.Parent = TabBar
 
+-- 6 個 Tab 平均分攤寬度 (Scale = 1/6)
 local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 52, 1, 0)
+    btn.Size = UDim2.new(1/6, -3, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -286,13 +287,13 @@ local TabExtra = makeTopTab("Extra")
 local TabSave = makeTopTab("储存")
 
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -20, 1, -86)
-Content.Position = UDim2.new(0, 10, 0, 80)
+Content.Size = UDim2.new(1, -16, 1, -84)
+Content.Position = UDim2.new(0, 8, 0, 78)
 Content.BackgroundTransparency = 1
+Content.ClipsDescendants = true
 Content.Parent = Main
 
 local Pages = {}
--- 【UI修复2】：开启 AutomaticCanvasSize 避免硬编码高度产生空白或截断
 local function createPage(name)
     local page = Instance.new("ScrollingFrame")
     page.Name = name
@@ -314,6 +315,7 @@ local function makeCard(parent, y, height)
     card.Position = UDim2.new(0, 0, 0, y)
     card.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
     card.BorderSizePixel = 0
+    card.ClipsDescendants = true
     card.Parent = parent
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
     return card
@@ -346,13 +348,13 @@ local function makeToggle(parent, text, y, defaultOn)
     label.Text = text
     label.TextColor3 = Color3.fromRGB(220, 220, 230)
     label.Font = Enum.Font.Gotham
-    label.TextSize = 13
+    label.TextSize = 12
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
 
     local track = Instance.new("TextButton")
     track.Size = UDim2.new(0, 44, 0, 22)
-    track.Position = UDim2.new(1, -50, 0.5, -11)
+    track.Position = UDim2.new(1, -48, 0.5, -11)
     track.BackgroundColor3 = defaultOn and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
     track.Text = ""
     track.Parent = row
@@ -389,7 +391,6 @@ end
 
 -- ==================== Info Page ====================
 local PageInfo = createPage("Info")
--- 【UI修复3】：扩大 infoCard 高度从 320 到 420，放置底部按钮不超界
 local infoCard = makeCard(PageInfo, 4, 420)
 local StatusLabel = makeLabel(infoCard, "状态: 关闭", 10)
 local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 30, Color3.fromRGB(140, 200, 255))
@@ -481,9 +482,8 @@ local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 88, 
 local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 118, false)
 local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 152)
 
--- 【UI修复4】：调整按钮尺寸和分布，防止 RangeReset 溢出屏幕边界
 local RangeDown = Instance.new("TextButton")
-RangeDown.Size = UDim2.new(0, 84, 0, 28)
+RangeDown.Size = UDim2.new(0.31, -4, 0, 28)
 RangeDown.Position = UDim2.new(0, 12, 0, 178)
 RangeDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeDown.Text = "Range -20"
@@ -494,8 +494,8 @@ RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
 
 local RangeUp = Instance.new("TextButton")
-RangeUp.Size = UDim2.new(0, 84, 0, 28)
-RangeUp.Position = UDim2.new(0, 102, 0, 178)
+RangeUp.Size = UDim2.new(0.31, -4, 0, 28)
+RangeUp.Position = UDim2.new(0.34, 4, 0, 178)
 RangeUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeUp.Text = "Range +20"
 RangeUp.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -505,8 +505,8 @@ RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
 
 local RangeReset = Instance.new("TextButton")
-RangeReset.Size = UDim2.new(0, 94, 0, 28)
-RangeReset.Position = UDim2.new(0, 192, 0, 178)
+RangeReset.Size = UDim2.new(0.31, -4, 0, 28)
+RangeReset.Position = UDim2.new(0.67, 4, 0, 178)
 RangeReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeReset.Text = "Reset (80)"
 RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -575,14 +575,14 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 320, 0, 380)
+        Main.Size = UDim2.new(0, 340, 0, 380)
         TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
     end
 end)
 
--- ==================== Core ====================
+-- ==================== Core 功能逻辑 ====================
 local function Notify(msg, isAlert)
     playNotifySound()
     if isAlert then playAlertSound() end
@@ -1242,7 +1242,7 @@ task.spawn(function()
     end
 end)
 
--- 按钮事件关联
+-- 按钮事件
 FullAutoTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.FullAuto = not Settings.FullAuto
@@ -1467,5 +1467,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | 无碎片只提示+声音，不自动换服")
-print("tau only apple | UI Bug Fix Complete")
+Notify("已加载 | 標籤頁排版 Bug 已完全修復")
+print("tau only apple | UI Bug Fix v2 Loaded")
