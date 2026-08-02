@@ -92,7 +92,7 @@ local FIRST_ROUND_WAIT = 60
 local rejoinStatus = "等待检测..."
 local isAlerting = false
 
--- 声音 ID（Roblox 常用 UI 音效）
+-- 声音 ID
 local SOUND_CLICK = "rbxassetid://6895079853"
 local SOUND_NOTIFY = "rbxassetid://4590662766"
 local SOUND_ALERT = "rbxassetid://5153789655"
@@ -105,30 +105,19 @@ local function playSound(soundId, volume)
         s.PlayOnRemove = false
         s.Parent = SoundService
         s:Play()
-        s.Ended:Connect(function()
-            s:Destroy()
-        end)
+        s.Ended:Connect(function() s:Destroy() end)
         task.delay(3, function()
             if s and s.Parent then s:Destroy() end
         end)
     end)
 end
 
-local function playClick()
-    playSound(SOUND_CLICK, 0.45)
-end
-
-local function playNotifySound()
-    playSound(SOUND_NOTIFY, 0.6)
-end
-
-local function playAlertSound()
-    playSound(SOUND_ALERT, 0.7)
-end
+local function playClick() playSound(SOUND_CLICK, 0.45) end
+local function playNotifySound() playSound(SOUND_NOTIFY, 0.6) end
+local function playAlertSound() playSound(SOUND_ALERT, 0.7) end
 
 local function getSettingsFile()
-    local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
-    if name == "" then name = "default" end
+    local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "") or "default"
     return "tau_apple_" .. name .. ".txt"
 end
 
@@ -136,18 +125,10 @@ local function saveSettings(force)
     if not writefile then return end
     if not force and not Settings.AutoSave then return end
     local data = table.concat({
-        tostring(Settings.Enabled),
-        tostring(Settings.OnlyFragments),
-        tostring(Settings.FullAuto),
-        tostring(Settings.FullAutoShelter),
-        tostring(Settings.AntiAFK),
-        tostring(Settings.TornadoPull),
-        tostring(Settings.GodMode),
-        tostring(Settings.FragmentFly),
-        tostring(Settings.RejoinNoFrag),
-        tostring(Settings.AutoSave),
-        tostring(TORNADO_RANGE),
-        tostring(Settings.SaveName or "default"),
+        tostring(Settings.Enabled), tostring(Settings.OnlyFragments), tostring(Settings.FullAuto),
+        tostring(Settings.FullAutoShelter), tostring(Settings.AntiAFK), tostring(Settings.TornadoPull),
+        tostring(Settings.GodMode), tostring(Settings.FragmentFly), tostring(Settings.RejoinNoFrag),
+        tostring(Settings.AutoSave), tostring(TORNADO_RANGE), tostring(Settings.SaveName or "default"),
     }, "\n")
     pcall(writefile, getSettingsFile(), data)
 end
@@ -203,7 +184,7 @@ ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = guiParent
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 440, 0, 500)
+Main.Size = UDim2.new(0, 320, 0, 380)
 Main.Position = UDim2.new(0, 30, 0.04, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -273,7 +254,7 @@ TabLayout.Parent = TabBar
 
 local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 68, 1, -6)
+    btn.Size = UDim2.new(0, 60, 1, -6)
     btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -391,45 +372,38 @@ local function makeActionBtn(parent, text, y, color)
     return btn
 end
 
--- ========== Info ==========
+-- ==================== Info Page ====================
 local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 420)
-
+local infoCard = makeCard(PageInfo, 4, 320)
 local StatusLabel = makeLabel(infoCard, "状态: 关闭", 10)
 local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 30, Color3.fromRGB(140, 200, 255))
-
 makeLabel(infoCard, "── 稀有进度 ──", 56, Color3.fromRGB(120, 120, 140))
 local FragProgressLabel = makeLabel(infoCard, "血月碎片: 地图0 | 我0/5 → Tartarus", 78)
 local GlassesProgressLabel = makeLabel(infoCard, "神秘眼镜: 未找到 → Chad", 98)
 local TartarusLabel = makeLabel(infoCard, "Tartarus: 未解锁", 118)
 local ChadReadyLabel = makeLabel(infoCard, "Chad条件: 未满足", 138)
-
 makeLabel(infoCard, "── 模式 ──", 164, Color3.fromRGB(120, 120, 140))
 local ModeLabel = makeLabel(infoCard, "当前模式: Unknown", 186)
 local NextModeLabel = makeLabel(infoCard, "下一模式: Unknown", 206)
 local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
-
 makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
 local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待中...", 274)
 local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
-local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 320, Color3.fromRGB(150, 150, 165))
+local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 310, Color3.fromRGB(150, 150, 165))
+local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 342, Color3.fromRGB(55, 45, 45))
+local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 376, Color3.fromRGB(40, 55, 70))
 
-local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 348, Color3.fromRGB(55, 45, 45))
-local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 382, Color3.fromRGB(40, 55, 70))
-
--- ========== Loot ==========
+-- ==================== Loot Page ====================
 local PageLoot = createPage("Loot")
-local lootCard = makeCard(PageLoot, 4, 280)
-
+local lootCard = makeCard(PageLoot, 4, 220)
 makeLabel(lootCard, "【自动捡取】", 8, Color3.fromRGB(140, 200, 255))
 local _, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 28, false)
 local _, ShelterTrack, ShelterThumb = makeToggle(lootCard, "Full Auto 时传避难所", 58, true)
 local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 88, false)
-
-makeLabel(lootCard, "【捡取模式】", 122, Color3.fromRGB(140, 200, 255))
+makeLabel(lootCard, "【捡取模式】", 112, Color3.fromRGB(140, 200, 255))
 local FragOnlyBtn = Instance.new("TextButton")
 FragOnlyBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragOnlyBtn.Position = UDim2.new(0, 10, 0, 148)
+FragOnlyBtn.Position = UDim2.new(0, 10, 0, 138)
 FragOnlyBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
 FragOnlyBtn.Text = "只有碎片"
 FragOnlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -437,10 +411,9 @@ FragOnlyBtn.Font = Enum.Font.GothamBold
 FragOnlyBtn.TextSize = 12
 FragOnlyBtn.Parent = lootCard
 Instance.new("UICorner", FragOnlyBtn).CornerRadius = UDim.new(0, 8)
-
 local FragGlassBtn = Instance.new("TextButton")
 FragGlassBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 148)
+FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 138)
 FragGlassBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 FragGlassBtn.Text = "碎片+眼镜"
 FragGlassBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
@@ -448,26 +421,23 @@ FragGlassBtn.Font = Enum.Font.GothamBold
 FragGlassBtn.TextSize = 12
 FragGlassBtn.Parent = lootCard
 Instance.new("UICorner", FragGlassBtn).CornerRadius = UDim.new(0, 8)
+makeLabel(lootCard, "碎片→Tartarus | 眼镜→Chad", 172, Color3.fromRGB(160, 160, 175))
+makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 192, Color3.fromRGB(160, 160, 175))
 
-makeLabel(lootCard, "碎片→Tartarus | 眼镜→Chad", 192, Color3.fromRGB(160, 160, 175))
-makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 212, Color3.fromRGB(160, 160, 175))
-
--- ========== 效率 ==========
+-- ==================== Eff Page ====================
 local PageEff = createPage("Eff")
-local effCard = makeCard(PageEff, 4, 300)
-
+local effCard = makeCard(PageEff, 4, 260)
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
 local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "第1局无碎片 → 仅提示+声音", 32, true)
 makeLabel(effCard, "约22秒检测 → 无碎片只弹提示和响声，不自动换服", 64, Color3.fromRGB(150, 150, 165))
-
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
 makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 140, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
 
--- ========== 传送 ==========
+-- ==================== Teleport Page ====================
 local PageTP = createPage("Teleport")
-local tpCard = makeCard(PageTP, 4, 300)
+local tpCard = makeCard(PageTP, 4, 260)
 local ShelterBtn = makeActionBtn(tpCard, "传送到避难所", 12, Color3.fromRGB(45, 45, 58))
 makeLabel(tpCard, "传送到玩家:", 52)
 
@@ -484,18 +454,15 @@ Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
 
 local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 250, Color3.fromRGB(45, 45, 58))
 
--- ========== Extra ==========
+-- ==================== Extra Page ====================
 local PageExtra = createPage("Extra")
-local extraCard = makeCard(PageExtra, 4, 380)
-
+local extraCard = makeCard(PageExtra, 4, 340)
 makeLabel(extraCard, "【功能】", 8, Color3.fromRGB(140, 200, 255))
 local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 28, true)
 local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 58, false)
 local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 88, false)
 local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 118, false)
-
 local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 152)
-
 local RangeDown = Instance.new("TextButton")
 RangeDown.Size = UDim2.new(0, 90, 0, 28)
 RangeDown.Position = UDim2.new(0, 12, 0, 178)
@@ -506,7 +473,6 @@ RangeDown.Font = Enum.Font.GothamBold
 RangeDown.TextSize = 12
 RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
-
 local RangeUp = Instance.new("TextButton")
 RangeUp.Size = UDim2.new(0, 90, 0, 28)
 RangeUp.Position = UDim2.new(0, 112, 0, 178)
@@ -517,7 +483,6 @@ RangeUp.Font = Enum.Font.GothamBold
 RangeUp.TextSize = 12
 RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
-
 local RangeReset = Instance.new("TextButton")
 RangeReset.Size = UDim2.new(0, 100, 0, 28)
 RangeReset.Position = UDim2.new(0, 212, 0, 178)
@@ -527,16 +492,13 @@ RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
 RangeReset.Font = Enum.Font.GothamBold
 RangeReset.TextSize = 12
 RangeReset.Parent = extraCard
-Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
-
 local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 220, Color3.fromRGB(40, 90, 120))
 local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 258, Color3.fromRGB(120, 80, 40))
 
--- ========== 储存 ==========
+-- ==================== Save Page ====================
 local PageSave = createPage("Save")
-local saveCard = makeCard(PageSave, 4, 300)
+local saveCard = makeCard(PageSave, 4, 260)
 makeLabel(saveCard, "Save Name:", 12)
-
 local NameBox = Instance.new("TextBox")
 NameBox.Size = UDim2.new(1, -24, 0, 30)
 NameBox.Position = UDim2.new(0, 12, 0, 34)
@@ -550,12 +512,11 @@ NameBox.TextSize = 13
 NameBox.ClearTextOnFocus = false
 NameBox.Parent = saveCard
 Instance.new("UICorner", NameBox).CornerRadius = UDim.new(0, 8)
-
 local _, AutoSaveTrack, AutoSaveThumb = makeToggle(saveCard, "Auto Save", 76, true)
 local SaveNowBtn = makeActionBtn(saveCard, "Save Settings Now", 118, Color3.fromRGB(50, 90, 160))
 local LoadBtn = makeActionBtn(saveCard, "Load Settings", 158, Color3.fromRGB(45, 45, 58))
 local ResetBtn = makeActionBtn(saveCard, "Reset to Default", 198, Color3.fromRGB(90, 50, 50))
-local SaveStatusLabel = makeLabel(saveCard, "Status: Ready", 242)
+local SaveStatusLabel = makeLabel(saveCard, "Status: Ready", 232)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
@@ -591,7 +552,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 440, 0, 500)
+        Main.Size = UDim2.new(0, 320, 0, 380)
         TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -601,15 +562,9 @@ end)
 -- ==================== Core ====================
 local function Notify(msg, isAlert)
     playNotifySound()
-    if isAlert then
-        playAlertSound()
-    end
+    if isAlert then playAlertSound() end
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "tau only apple",
-            Text = tostring(msg),
-            Duration = isAlert and 5 or 2.8
-        })
+        StarterGui:SetCore("SendNotification", { Title = "tau only apple", Text = tostring(msg), Duration = isAlert and 5 or 2.8 })
     end)
 end
 
@@ -666,9 +621,7 @@ local function scanMapLoot()
     for _, t in ipairs(LOOT_TYPES) do counts[t.key] = 0 end
     local seen = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if not (obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("BasePart") or obj:IsA("Folder")) then
-            continue
-        end
+        if not (obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("BasePart") or obj:IsA("Folder")) then continue end
         local id = tostring(obj)
         if seen[id] then continue end
         for _, t in ipairs(LOOT_TYPES) do
@@ -722,23 +675,14 @@ local function pickup(obj, typ)
     local part = getBestPart(obj)
     if not part then return end
 
-    local offsets = {
-        Vector3.new(0, 2.0, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(0, 1.6, -1.5),
-        Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0), Vector3.new(0, 2.8, 0),
-    }
+    local offsets = { Vector3.new(0, 2.0, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(0, 1.6, -1.5), Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0), Vector3.new(0, 2.8, 0) }
     for _, offset in ipairs(offsets) do
         if not obj.Parent then break end
         hrp.CFrame = part.CFrame + offset
         task.wait(0.028)
         tryFirePrompt(obj:FindFirstChildWhichIsA("ProximityPrompt", true))
         local touch = part:FindFirstChildOfClass("TouchInterest")
-        if touch then
-            pcall(function()
-                firetouchinterest(hrp, part, 0)
-                task.wait(0.02)
-                firetouchinterest(hrp, part, 1)
-            end)
-        end
+        if touch then pcall(function() firetouchinterest(hrp, part, 0) task.wait(0.02) firetouchinterest(hrp, part, 1) end) end
         local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
         if click then pcall(fireclickdetector, click) end
         task.wait(0.03)
@@ -809,12 +753,10 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
--- 手动换服（仍然真的换）
 local function serverHop()
     playClick()
     rejoinStatus = "正在换服..."
     Notify("正在换服，请稍候...", true)
-
     local placeId = game.PlaceId
     local ok1 = pcall(function() TeleportService:TeleportAsync(placeId, {LocalPlayer}) end)
     if ok1 then return end
@@ -824,17 +766,14 @@ local function serverHop()
     if ok3 then return end
     local ok4 = pcall(function() TeleportService:Teleport(placeId) end)
     if ok4 then return end
-
     Notify("换服失败：执行器可能拦截，请手动退出再进", true)
     rejoinStatus = "换服失败，请重试/手动退"
 end
 
--- ★ 无碎片：只提示 + 声音，不换服
 local function alertNoFragOnly()
     if isAlerting then return end
     isAlerting = true
     rejoinStatus = "无碎片！建议手动换服"
-
     for i = 1, 3 do
         Notify("第1局没有血月碎片！建议去效率页点「立即换服」", true)
         playAlertSound()
@@ -845,7 +784,6 @@ local function alertNoFragOnly()
             return
         end
     end
-
     isAlerting = false
     rejoinStatus = "无碎片（已提示，请手动换服）"
 end
@@ -856,13 +794,11 @@ local function checkFirstRoundNoFrag()
         return
     end
     if firstRoundChecked or isAlerting then return end
-
     local left = math.ceil(FIRST_ROUND_WAIT - (tick() - joinTime))
     if left > 0 then
         rejoinStatus = "检测倒计时: " .. left .. "秒"
         return
     end
-
     firstRoundChecked = true
     local frags = countFrags()
     if frags <= 0 then
@@ -901,37 +837,27 @@ local function checkAlerts()
     local bestCurrent, bestLen = nil, 0
     local foundNext = nil
     local sawDoomsday, sawTartarus = false, false
-
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") then
             local raw = g.Text or ""
             if #raw < 5 or #raw > 220 then continue end
             local t = string.lower(raw)
             if t:find("unlikely the world will end") or t:find("chances are slim") then continue end
-
             local n1, n2 = t:find("this round's gamemode is")
             if n1 then
                 local after = raw:sub(n2 + 1):gsub("^[%s:]+", ""):gsub("%s+$", "")
                 if #after > 1 and #after < 40 then foundNext = after end
             end
-
             for _, rule in ipairs(CURRENT_RULES) do
                 if t:find(rule.pat, 1, true) then
-                    if #rule.pat > bestLen then
-                        bestLen = #rule.pat
-                        bestCurrent = rule.mode
-                    end
+                    if #rule.pat > bestLen then bestLen = #rule.pat bestCurrent = rule.mode end
                     if rule.mode == "Doomsday" then sawDoomsday = true end
                     if rule.mode == "Tartarus" then sawTartarus = true end
                 end
             end
-            if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true))
-                and t:find("fragment", 1, true) then
-                sawTartarus = true
-            end
+            if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true)) and t:find("fragment", 1, true) then sawTartarus = true end
         end
     end
-
     if foundNext then nextMode = foundNext end
     if sawTartarus and not tartarusUnlocked then
         tartarusUnlocked = true
@@ -962,9 +888,7 @@ local function fireSignalObject(obj)
         pcall(function() obj:InvokeServer() end)
     elseif obj:IsA("Folder") or obj:IsA("Model") then
         for _, c in ipairs(obj:GetDescendants()) do
-            if c:IsA("RemoteEvent") or c:IsA("BindableEvent") or c:IsA("RemoteFunction") then
-                fireSignalObject(c)
-            end
+            if c:IsA("RemoteEvent") or c:IsA("BindableEvent") or c:IsA("RemoteFunction") then fireSignalObject(c) end
         end
     elseif obj:IsA("ModuleScript") then
         local m = require(obj)
@@ -1298,7 +1222,7 @@ task.spawn(function()
     end
 end)
 
--- 按钮（全部带点击音）
+-- 按钮
 FullAutoTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.FullAuto = not Settings.FullAuto
@@ -1510,7 +1434,7 @@ TitleBar.InputBegan:Connect(function(input)
     end
 end)
 TitleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType.Touch then
         dragging = false
     end
 end)
