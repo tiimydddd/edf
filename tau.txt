@@ -1,5 +1,5 @@
 -- tau only apple - Complete Full
--- Info 实用化 | 换服加强 | Full Auto 可关避难所 | 效率分类
+-- Info 实用化 | 换服加强 | 无碎片先倒数5秒再换服 | Full Auto 可关避难所
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 
 local PLACE_ID = 2313058949
+local REJOIN_COUNTDOWN = 5  -- 换服前倒数秒数
 
 local Settings = {
     Enabled = false,
@@ -86,8 +87,9 @@ local UI_REFRESH_INTERVAL = 0.05
 
 local firstRoundChecked = false
 local joinTime = tick()
-local FIRST_ROUND_WAIT = 22
+local FIRST_ROUND_WAIT = 60
 local rejoinStatus = "等待检测..."
+local isHopping = false
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -421,12 +423,12 @@ local effCard = makeCard(PageEff, 4, 280)
 
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
 local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "第1局无碎片就换服", 32, true)
-makeLabel(effCard, "约22秒后检测，没碎片自动换服", 64, Color3.fromRGB(150, 150, 165))
+makeLabel(effCard, "约22秒检测 → 无碎片则倒数5秒再换服", 64, Color3.fromRGB(150, 150, 165))
 
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
 makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片换服", 140, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "没东西就点换服继续找", 180, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "手动换服立即跳转；自动换服会先倒数5秒", 180, Color3.fromRGB(160, 160, 175))
 
 -- ========== 传送 ==========
 local PageTP = createPage("Teleport")
@@ -759,39 +761,60 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
--- ★ 加强换服：多方法尝试
+-- 实际换服（多方法）
 local function serverHop()
-    Notify("正在换服，请稍候...")
+    if isHopping then return end
+    isHopping = true
     rejoinStatus = "正在换服..."
+    Notify("正在换服，请稍候...")
 
     local placeId = game.PlaceId
 
-    -- 1) TeleportAsync
     local ok1 = pcall(function()
         TeleportService:TeleportAsync(placeId, {LocalPlayer})
     end)
     if ok1 then return end
 
-    -- 2) Teleport(placeId, player)
     local ok2 = pcall(function()
         TeleportService:Teleport(placeId, LocalPlayer)
     end)
     if ok2 then return end
 
-    -- 3) 用常量 PLACE_ID
     local ok3 = pcall(function()
         TeleportService:Teleport(PLACE_ID, LocalPlayer)
     end)
     if ok3 then return end
 
-    -- 4) 再试一次无 player 参数
     local ok4 = pcall(function()
         TeleportService:Teleport(placeId)
     end)
     if ok4 then return end
 
-    Notify("换服失败：执行器可能拦截传送，请手动退出再进，或再点一次")
+    isHopping = false
+    Notify("换服失败：执行器可能拦截，请手动退出再进")
     rejoinStatus = "换服失败，请重试/手动退"
+end
+
+-- ★ 自动重进：先倒数 5 秒，再换服
+local function serverHopWithCountdown()
+    if isHopping then return end
+    isHopping = true
+    rejoinStatus = "即将换服..."
+
+    for i = REJOIN_COUNTDOWN, 1, -1 do
+        rejoinStatus = "换服倒计时: " .. i .. " 秒"
+        Notify("无碎片，" .. i .. " 秒后换服...")
+        task.wait(1)
+        if not Settings.RejoinNoFrag then
+            isHopping = false
+            rejoinStatus = "已取消"
+            Notify("已取消自动换服")
+            return
+        end
+    end
+
+    isHopping = false
+    serverHop()
 end
 
 local function checkFirstRoundNoFrag()
@@ -799,7 +822,7 @@ local function checkFirstRoundNoFrag()
         rejoinStatus = "已关闭"
         return
     end
-    if firstRoundChecked then return end
+    if firstRoundChecked or isHopping then return end
 
     local left = math.ceil(FIRST_ROUND_WAIT - (tick() - joinTime))
     if left > 0 then
@@ -810,10 +833,9 @@ local function checkFirstRoundNoFrag()
     firstRoundChecked = true
     local frags = countFrags()
     if frags <= 0 then
-        rejoinStatus = "无碎片 → 换服中"
-        Notify("第1局没有血月碎片，正在换服...")
-        task.wait(0.6)
-        serverHop()
+        rejoinStatus = "无碎片 → 准备换服"
+        Notify("第1局没有血月碎片")
+        task.spawn(serverHopWithCountdown)
     else
         rejoinStatus = "有碎片(" .. frags .. ") 留在此服"
         Notify("第1局检测到碎片: " .. frags .. "，留在此服")
@@ -1290,8 +1312,9 @@ RejoinTrack.MouseButton1Click:Connect(function()
     if Settings.RejoinNoFrag then
         firstRoundChecked = false
         joinTime = tick()
+        isHopping = false
         rejoinStatus = "已重新开始计时"
-        Notify("已开启：第1局无碎片自动换服")
+        Notify("已开启：第1局无碎片 → 倒数5秒换服")
     else
         rejoinStatus = "已关闭"
         Notify("已关闭自动换服")
@@ -1300,7 +1323,11 @@ RejoinTrack.MouseButton1Click:Connect(function()
     saveSettings()
 end)
 
-HopBtn.MouseButton1Click:Connect(serverHop)
+-- 手动换服：立即跳转（不倒数）
+HopBtn.MouseButton1Click:Connect(function()
+    isHopping = false
+    serverHop()
+end)
 
 AFKTrack.MouseButton1Click:Connect(function()
     Settings.AntiAFK = not Settings.AntiAFK
@@ -1438,5 +1465,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("换服加强版已加载")
-print("tau only apple | ServerHop multi-method")
+Notify("已加载 | 无碎片会倒数5秒再换服")
+print("tau only apple | 自动换服倒数5秒")
