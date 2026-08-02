@@ -1,4 +1,4 @@
--- tau only apple - Clean + Anti AFK + Simple Shelter TP
+-- tau only apple - Full Auto includes Shelter TP
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -33,8 +33,10 @@ local glassesFound = false
 local knownFragments = {}
 local knownGlasses = {}
 local lastScan = 0
+local lastShelterTP = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.4
+local SHELTER_TP_INTERVAL = 25   -- Full Auto 时每隔25秒传一次避难所
 local recentlyTried = {}
 local TRIED_COOLDOWN = 2.8
 
@@ -200,7 +202,7 @@ local StatusLabel = makeLabel(PageInfo, "Status: Off", 10)
 local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 32)
 local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 54)
 local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 76)
-local TipLabel = makeLabel(PageInfo, "提示: Full Auto 一键全开", 110)
+local TipLabel = makeLabel(PageInfo, "提示: Full Auto 会顺便传避难所", 110)
 
 local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
@@ -211,7 +213,7 @@ local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
 local TPBloodBtn = makeToggle(PageTP, "血月祭坛前", 46, false)
 local TPDoomBtn = makeToggle(PageTP, "末日祭坛前", 82, false)
-local ForceShelterBtn = makeToggle(PageTP, "传送到避难所 (点一次)", 118, false)  -- 改名
+local ForceShelterBtn = makeToggle(PageTP, "传送到避难所 (点一次)", 118, false)
 local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 156)
 
 local PlayerListFrame = Instance.new("ScrollingFrame")
@@ -426,34 +428,33 @@ local function pickup(obj, typ)
     end)
 end
 
--- 简单传送到避难所（点一次，到区域就行）
-local function forceToShelter()
+local function forceToShelter(silent)
     local hrp = getHRP()
     if not hrp then
-        Notify("没有角色")
+        if not silent then Notify("没有角色") end
         return
     end
 
     local targetPart = nil
-
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isShelter(obj) then
             local part = getBestPart(obj)
             if part then
                 targetPart = part
-                break  -- 找到第一个就用，不要求精准门中间
+                break
             end
         end
     end
 
     if not targetPart then
-        Notify("没找到避难所")
+        if not silent then Notify("没找到避难所") end
         return
     end
 
-    -- 直接传送到上方一点的位置
     hrp.CFrame = targetPart.CFrame + Vector3.new(0, 5, 0)
-    Notify("已传送到避难所")
+    if not silent then
+        Notify("已传送到避难所")
+    end
 end
 
 local function teleportToKeyword(keywords, label)
@@ -614,6 +615,12 @@ task.spawn(function()
             end
         end
 
+        -- Full Auto 时自动传避难所（间隔较长，不会狂跳）
+        if Settings.FullAuto and (now - lastShelterTP) >= SHELTER_TP_INTERVAL then
+            lastShelterTP = now
+            forceToShelter(true)  -- 静默传送
+        end
+
         task.wait(0.22)
     end
 end)
@@ -624,13 +631,19 @@ FullAutoBtn.MouseButton1Click:Connect(function()
     if Settings.FullAuto then
         Settings.Enabled = true
         Settings.OnlyFragments = false
+
         FullAutoBtn.Text = "★ Full Auto: ON"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
         ToggleBtn.Text = "Auto Loot: ON"
         ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
         ModeBtn.Text = "Mode: Fragments + Glasses"
         ModeBtn.BackgroundColor3 = Theme.BgButtonOn
-        Notify("Full Auto ON")
+
+        -- 开启时立刻传一次避难所
+        forceToShelter(false)
+        lastShelterTP = tick()
+
+        Notify("Full Auto ON（含避难所传送）")
     else
         Settings.Enabled = false
         FullAutoBtn.Text = "★ Full Auto: OFF"
@@ -664,7 +677,7 @@ end)
 
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-    forceToShelter()
+    forceToShelter(false)
     task.delay(1.2, function()
         if ForceShelterBtn then
             ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
@@ -715,4 +728,4 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 Notify("tau only apple loaded")
-print("tau only apple - Simple Shelter TP")
+print("tau only apple - Full Auto + Shelter TP")
