@@ -1,4 +1,4 @@
--- tau only apple - Optimized (Faster Loot + Smart Rejoin)
+-- tau only apple - Optimized + Safe Hop (Reduce 277)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -18,8 +18,8 @@ local Settings = {
     TornadoPull = false,
     GodMode = false,
     AutoRejoin = true,
-    NoFragmentTime = 75,      -- 75秒没找到碎片就换服
-    MinStayTime = 25,         -- 进入服务器至少待25秒才允许换服
+    NoFragmentTime = 75,
+    MinStayTime = 28,
 }
 
 local FragmentNames = {
@@ -42,10 +42,11 @@ local lastFoundTime = tick()
 local serverJoinTime = tick()
 local foundAnyFragment = false
 local isMinimized = false
+local isHopping = false
 
-local SCAN_INTERVAL = 0.25          -- 更快扫描
+local SCAN_INTERVAL = 0.25
 local SHELTER_TP_INTERVAL = 25
-local TRIED_COOLDOWN = 1.6          -- 更短冷却，提高拾取效率
+local TRIED_COOLDOWN = 1.6
 
 local TORNADO_RANGE = 80
 local TORNADO_STRENGTH = 110
@@ -70,7 +71,7 @@ local Theme = {
 
 -- ==================== UI ====================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TORNADO ALLEY SUPER "
+ScreenGui.Name = "tau_only_apple"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
@@ -107,7 +108,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "tau only apple (Optimized)"
+Title.Text = "tau only apple (Safe Hop)"
 Title.TextColor3 = Theme.TextWhite
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
@@ -224,7 +225,7 @@ local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
 
 local PageTP = createPage("Teleport")
-local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
+local TPHopBtn = makeToggle(PageTP, "Server Hop (Safe)", 10, false)
 local ForceShelterBtn = makeToggle(PageTP, "Teleport to Shelter", 46, false)
 local TPPlayerLabel = makeLabel(PageTP, "Teleport to Player:", 90)
 
@@ -521,6 +522,29 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
+-- Safe Server Hop (Reduce Error 277)
+local function safeServerHop()
+    if isHopping then return end
+    isHopping = true
+    Notify("Safe hopping (reducing 277)...")
+
+    task.wait(0.8)
+
+    pcall(function()
+        TeleportService:Teleport(PLACE_ID)
+    end)
+
+    task.delay(2.5, function()
+        pcall(function()
+            TeleportService:Teleport(PLACE_ID, LocalPlayer)
+        end)
+    end)
+
+    task.delay(5, function()
+        isHopping = false
+    end)
+end
+
 -- God Mode
 local godConnection, healthConnection, antiFlingConnection
 
@@ -662,7 +686,7 @@ task.spawn(function()
     refreshPlayerList()
 end)
 
--- Main Loop (Optimized)
+-- Main Loop
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -718,15 +742,14 @@ task.spawn(function()
             doTornadoPull()
         end
 
-        -- Smart Auto Rejoin
+        -- Smart Safe Auto Rejoin
         if Settings.AutoRejoin
             and not foundAnyFragment
+            and not isHopping
             and (now - serverJoinTime) > Settings.MinStayTime
             and (now - lastFoundTime) > Settings.NoFragmentTime then
 
-            Notify("No fragments found, hopping servers...")
-            task.wait(1.1)
-            TeleportService:Teleport(PLACE_ID, LocalPlayer)
+            safeServerHop()
         end
 
         task.wait(0.12)
@@ -799,7 +822,7 @@ end)
 
 AutoRejoinBtn.MouseButton1Click:Connect(function()
     if foundAnyFragment then
-        Notify("Already found fragment, cannot enable Auto Rejoin")
+        Notify("Already found fragment, cannot enable")
         return
     end
     Settings.AutoRejoin = not Settings.AutoRejoin
@@ -827,8 +850,7 @@ ForceShelterBtn.MouseButton1Click:Connect(function()
 end)
 
 TPHopBtn.MouseButton1Click:Connect(function()
-    Notify("Server Hopping...")
-    TeleportService:Teleport(PLACE_ID, LocalPlayer)
+    safeServerHop()
 end)
 
 RefreshPlayersBtn.MouseButton1Click:Connect(function()
@@ -862,5 +884,5 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 updateRangeLabel()
-Notify("Optimized script loaded")
-print("tau only apple - Optimized (Faster Loot + Smart Rejoin)")
+Notify("Safe Hop version loaded")
+print("tau only apple - Safe Hop (Reduce 277)")
