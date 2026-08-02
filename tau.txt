@@ -1,4 +1,4 @@
--- tau only apple - Complete Full
+-- tau only apple - Complete Full (UI Bug Fixed)
 -- 自动换服改为仅提示+声音 | 所有提示/按钮都有声音
 
 local Players = game:GetService("Players")
@@ -88,7 +88,7 @@ local UI_REFRESH_INTERVAL = 0.05
 
 local firstRoundChecked = false
 local joinTime = tick()
-local FIRST_ROUND_WAIT = 60
+local FIRST_ROUND_WAIT = 70
 local rejoinStatus = "等待检测..."
 local isAlerting = false
 
@@ -225,6 +225,7 @@ MinBtn.Text = "–"
 MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 16
+MinBtn.ZIndex = 5
 MinBtn.Parent = TitleBar
 Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
 
@@ -236,14 +237,19 @@ CloseBtn.Text = "×"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 14
+CloseBtn.ZIndex = 5
 CloseBtn.Parent = TitleBar
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
-local TabBar = Instance.new("Frame")
+-- 【UI修复1】：将 TabBar 改为自动滚动的 ScrollingFrame 防止标签挤爆溢出
+local TabBar = Instance.new("ScrollingFrame")
 TabBar.Size = UDim2.new(1, -20, 0, 32)
 TabBar.Position = UDim2.new(0, 10, 0, 42)
 TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
 TabBar.BorderSizePixel = 0
+TabBar.ScrollBarThickness = 0
+TabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
+TabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
 TabBar.Parent = Main
 Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
@@ -252,9 +258,16 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 4)
 TabLayout.Parent = TabBar
 
+local TabPadding = Instance.new("UIPadding")
+TabPadding.PaddingLeft = UDim.new(0, 4)
+TabPadding.PaddingRight = UDim.new(0, 4)
+TabPadding.PaddingTop = UDim.new(0, 3)
+TabPadding.PaddingBottom = UDim.new(0, 3)
+TabPadding.Parent = TabBar
+
 local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 60, 1, -6)
+    btn.Size = UDim2.new(0, 52, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -279,6 +292,7 @@ Content.BackgroundTransparency = 1
 Content.Parent = Main
 
 local Pages = {}
+-- 【UI修复2】：开启 AutomaticCanvasSize 避免硬编码高度产生空白或截断
 local function createPage(name)
     local page = Instance.new("ScrollingFrame")
     page.Name = name
@@ -286,7 +300,8 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 580)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -374,7 +389,8 @@ end
 
 -- ==================== Info Page ====================
 local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 320)
+-- 【UI修复3】：扩大 infoCard 高度从 320 到 420，放置底部按钮不超界
+local infoCard = makeCard(PageInfo, 4, 420)
 local StatusLabel = makeLabel(infoCard, "状态: 关闭", 10)
 local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 30, Color3.fromRGB(140, 200, 255))
 makeLabel(infoCard, "── 稀有进度 ──", 56, Color3.fromRGB(120, 120, 140))
@@ -389,9 +405,9 @@ local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
 makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
 local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待中...", 274)
 local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
-local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 310, Color3.fromRGB(150, 150, 165))
-local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 342, Color3.fromRGB(55, 45, 45))
-local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 376, Color3.fromRGB(40, 55, 70))
+local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 314, Color3.fromRGB(150, 150, 165))
+local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 338, Color3.fromRGB(55, 45, 45))
+local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 374, Color3.fromRGB(40, 55, 70))
 
 -- ==================== Loot Page ====================
 local PageLoot = createPage("Loot")
@@ -426,74 +442,81 @@ makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 192, Color3.fr
 
 -- ==================== Eff Page ====================
 local PageEff = createPage("Eff")
-local effCard = makeCard(PageEff, 4, 260)
+local effCard = makeCard(PageEff, 4, 210)
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
 local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "第1局无碎片 → 仅提示+声音", 32, true)
 makeLabel(effCard, "约22秒检测 → 无碎片只弹提示和响声，不自动换服", 64, Color3.fromRGB(150, 150, 165))
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
-makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 140, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 136, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 156, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 176, Color3.fromRGB(160, 160, 175))
 
 -- ==================== Teleport Page ====================
 local PageTP = createPage("Teleport")
-local tpCard = makeCard(PageTP, 4, 260)
+local tpCard = makeCard(PageTP, 4, 290)
 local ShelterBtn = makeActionBtn(tpCard, "传送到避难所", 12, Color3.fromRGB(45, 45, 58))
 makeLabel(tpCard, "传送到玩家:", 52)
 
 local PlayerListFrame = Instance.new("ScrollingFrame")
-PlayerListFrame.Size = UDim2.new(1, -20, 0, 160)
-PlayerListFrame.Position = UDim2.new(0, 10, 0, 78)
+PlayerListFrame.Size = UDim2.new(1, -24, 0, 160)
+PlayerListFrame.Position = UDim2.new(0, 12, 0, 78)
 PlayerListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 PlayerListFrame.BorderSizePixel = 0
 PlayerListFrame.ScrollBarThickness = 3
 PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 PlayerListFrame.Parent = tpCard
 Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
 
-local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 250, Color3.fromRGB(45, 45, 58))
+local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 248, Color3.fromRGB(45, 45, 58))
 
 -- ==================== Extra Page ====================
 local PageExtra = createPage("Extra")
-local extraCard = makeCard(PageExtra, 4, 340)
+local extraCard = makeCard(PageExtra, 4, 300)
 makeLabel(extraCard, "【功能】", 8, Color3.fromRGB(140, 200, 255))
 local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 28, true)
 local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 58, false)
 local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 88, false)
 local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 118, false)
 local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 152)
+
+-- 【UI修复4】：调整按钮尺寸和分布，防止 RangeReset 溢出屏幕边界
 local RangeDown = Instance.new("TextButton")
-RangeDown.Size = UDim2.new(0, 90, 0, 28)
+RangeDown.Size = UDim2.new(0, 84, 0, 28)
 RangeDown.Position = UDim2.new(0, 12, 0, 178)
 RangeDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeDown.Text = "Range -20"
 RangeDown.TextColor3 = Color3.fromRGB(240, 240, 245)
 RangeDown.Font = Enum.Font.GothamBold
-RangeDown.TextSize = 12
+RangeDown.TextSize = 11
 RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
+
 local RangeUp = Instance.new("TextButton")
-RangeUp.Size = UDim2.new(0, 90, 0, 28)
-RangeUp.Position = UDim2.new(0, 112, 0, 178)
+RangeUp.Size = UDim2.new(0, 84, 0, 28)
+RangeUp.Position = UDim2.new(0, 102, 0, 178)
 RangeUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeUp.Text = "Range +20"
 RangeUp.TextColor3 = Color3.fromRGB(240, 240, 245)
 RangeUp.Font = Enum.Font.GothamBold
-RangeUp.TextSize = 12
+RangeUp.TextSize = 11
 RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
+
 local RangeReset = Instance.new("TextButton")
-RangeReset.Size = UDim2.new(0, 100, 0, 28)
-RangeReset.Position = UDim2.new(0, 212, 0, 178)
+RangeReset.Size = UDim2.new(0, 94, 0, 28)
+RangeReset.Position = UDim2.new(0, 192, 0, 178)
 RangeReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeReset.Text = "Reset (80)"
 RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
 RangeReset.Font = Enum.Font.GothamBold
-RangeReset.TextSize = 12
+RangeReset.TextSize = 11
 RangeReset.Parent = extraCard
-local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 220, Color3.fromRGB(40, 90, 120))
-local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 258, Color3.fromRGB(120, 80, 40))
+Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
+
+local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 218, Color3.fromRGB(40, 90, 120))
+local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 256, Color3.fromRGB(120, 80, 40))
 
 -- ==================== Save Page ====================
 local PageSave = createPage("Save")
@@ -731,7 +754,6 @@ local function refreshPlayerList()
     for _, child in ipairs(PlayerListFrame:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-    local y = 0
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
             local btn = Instance.new("TextButton")
@@ -747,10 +769,8 @@ local function refreshPlayerList()
                 playClick()
                 teleportToPlayer(plr)
             end)
-            y = y + 30
         end
     end
-    PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
 local function serverHop()
@@ -1222,7 +1242,7 @@ task.spawn(function()
     end
 end)
 
--- 按钮
+-- 按钮事件关联
 FullAutoTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.FullAuto = not Settings.FullAuto
@@ -1434,7 +1454,7 @@ TitleBar.InputBegan:Connect(function(input)
     end
 end)
 TitleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
@@ -1448,4 +1468,4 @@ end)
 loadSettings()
 applySettingsToUI()
 Notify("已加载 | 无碎片只提示+声音，不自动换服")
-print("tau only apple | 提示音 + 按钮音 + 无碎片仅提醒")
+print("tau only apple | UI Bug Fix Complete")
