@@ -1,5 +1,5 @@
--- tau only apple - Modern UI Full
--- Top Tabs | Pill Toggles | 2-Choice Loot Mode | Save Name + Auto Save
+-- tau only apple - Fixed Detection Full
+-- Strict Mode / Doomsday / Blood Moon | Modern UI | 2-Choice Loot | Save
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -21,17 +21,19 @@ local Settings = {
     SaveName = "default",
 }
 
+-- 只认真正的血月碎片名，避免误计
 local FragmentNames = {
-    "Blood Moon Fragment", "BloodMoonFragment", "血月碎片",
-    "Blood Moon", "BloodMoon", "Fragment", "碎片"
+    "Blood Moon Fragment",
+    "BloodMoonFragment",
+    "血月碎片",
 }
 local GlassesNames = {
     "Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜",
-    "Mysterious Shades", "Shades", "Glasses", "眼镜", "墨镜"
+    "Mysterious Shades", "Shades", "眼镜", "墨镜",
 }
 local ShelterNames = {
     "Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor",
-    "Entrance", "避难所", "ControlRoom", "Control Room"
+    "Entrance", "避难所", "ControlRoom", "Control Room",
 }
 
 local collectedFragments = 0
@@ -59,6 +61,7 @@ local tartarusUnlocked = false
 local doomsdayDetected = false
 local currentMode = "Unknown"
 local lastModeTime = 0
+local MODE_TIMEOUT = 12
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -174,7 +177,6 @@ CloseBtn.TextSize = 14
 CloseBtn.Parent = TitleBar
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- Top Tabs
 local TabBar = Instance.new("Frame")
 TabBar.Size = UDim2.new(1, -20, 0, 32)
 TabBar.Position = UDim2.new(0, 10, 0, 42)
@@ -271,7 +273,6 @@ local function makeToggle(parent, text, y, defaultOn)
     label.Parent = row
 
     local track = Instance.new("TextButton")
-    track.Name = "Track"
     track.Size = UDim2.new(0, 44, 0, 22)
     track.Position = UDim2.new(1, -50, 0.5, -11)
     track.BackgroundColor3 = defaultOn and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
@@ -280,14 +281,13 @@ local function makeToggle(parent, text, y, defaultOn)
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
     local thumb = Instance.new("Frame")
-    thumb.Name = "Thumb"
     thumb.Size = UDim2.new(0, 18, 0, 18)
     thumb.Position = defaultOn and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
     thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     thumb.Parent = track
     Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
 
-    return row, track, thumb, label
+    return row, track, thumb
 end
 
 local function setToggleVisual(track, thumb, on)
@@ -297,22 +297,31 @@ end
 
 -- Info
 local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 200)
-local StatusLabel = makeLabel(infoCard, "Status: Off", 12)
-local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 36)
-local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 60)
-local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 84)
-local ModeLabel = makeLabel(infoCard, "Mode: Unknown", 108)
-local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: ?", 132)
-local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 156)
+local infoCard = makeCard(PageInfo, 4, 210)
+local StatusLabel = makeLabel(infoCard, "Status: Off", 10)
+local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 34)
+local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 58)
+local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 82)
+local ModeLabel = makeLabel(infoCard, "Mode: Unknown", 106)
+local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: Map 0 | My 0/5", 130)
+local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 154)
+local ResetModeBtn = Instance.new("TextButton")
+ResetModeBtn.Size = UDim2.new(1, -24, 0, 26)
+ResetModeBtn.Position = UDim2.new(0, 12, 0, 178)
+ResetModeBtn.BackgroundColor3 = Color3.fromRGB(55, 45, 45)
+ResetModeBtn.Text = "Reset Mode / Doomsday Display"
+ResetModeBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
+ResetModeBtn.Font = Enum.Font.GothamBold
+ResetModeBtn.TextSize = 11
+ResetModeBtn.Parent = infoCard
+Instance.new("UICorner", ResetModeBtn).CornerRadius = UDim.new(0, 6)
 
 -- Loot
 local PageLoot = createPage("Loot")
 local lootCard = makeCard(PageLoot, 4, 170)
-local FullAutoRow, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 10, false)
-local LootRow, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 48, false)
-
-local ModeTitle = makeLabel(lootCard, "Loot Mode (2 choose 1):", 86)
+local _, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 10, false)
+local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 48, false)
+makeLabel(lootCard, "Loot Mode (choose 1):", 86)
 local FragOnlyBtn = Instance.new("TextButton")
 FragOnlyBtn.Size = UDim2.new(0.48, -8, 0, 32)
 FragOnlyBtn.Position = UDim2.new(0, 10, 0, 110)
@@ -323,7 +332,6 @@ FragOnlyBtn.Font = Enum.Font.GothamBold
 FragOnlyBtn.TextSize = 12
 FragOnlyBtn.Parent = lootCard
 Instance.new("UICorner", FragOnlyBtn).CornerRadius = UDim.new(0, 8)
-
 local FragGlassBtn = Instance.new("TextButton")
 FragGlassBtn.Size = UDim2.new(0.48, -8, 0, 32)
 FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 110)
@@ -348,7 +356,6 @@ ShelterBtn.Font = Enum.Font.GothamBold
 ShelterBtn.TextSize = 13
 ShelterBtn.Parent = tpCard
 Instance.new("UICorner", ShelterBtn).CornerRadius = UDim.new(0, 8)
-
 makeLabel(tpCard, "Teleport to Player:", 52)
 local PlayerListFrame = Instance.new("ScrollingFrame")
 PlayerListFrame.Size = UDim2.new(1, -20, 0, 160)
@@ -360,7 +367,6 @@ PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 PlayerListFrame.Parent = tpCard
 Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
-
 local RefreshBtn = Instance.new("TextButton")
 RefreshBtn.Size = UDim2.new(1, -20, 0, 28)
 RefreshBtn.Position = UDim2.new(0, 10, 0, 250)
@@ -375,12 +381,11 @@ Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 8)
 -- Extra
 local PageExtra = createPage("Extra")
 local extraCard = makeCard(PageExtra, 4, 270)
-local AFKRow, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 10, true)
-local GodRow, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 48, false)
-local TornadoRow, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 86, false)
-local FlyRow, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 124, false)
+local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 10, true)
+local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 48, false)
+local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 86, false)
+local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 124, false)
 local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 165)
-
 local RangeDown = Instance.new("TextButton")
 RangeDown.Size = UDim2.new(0, 90, 0, 28)
 RangeDown.Position = UDim2.new(0, 12, 0, 195)
@@ -391,7 +396,6 @@ RangeDown.Font = Enum.Font.GothamBold
 RangeDown.TextSize = 12
 RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
-
 local RangeUp = Instance.new("TextButton")
 RangeUp.Size = UDim2.new(0, 90, 0, 28)
 RangeUp.Position = UDim2.new(0, 112, 0, 195)
@@ -402,7 +406,6 @@ RangeUp.Font = Enum.Font.GothamBold
 RangeUp.TextSize = 12
 RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
-
 local RangeReset = Instance.new("TextButton")
 RangeReset.Size = UDim2.new(0, 100, 0, 28)
 RangeReset.Position = UDim2.new(0, 212, 0, 195)
@@ -414,7 +417,7 @@ RangeReset.TextSize = 12
 RangeReset.Parent = extraCard
 Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
 
--- 储存
+-- Save
 local PageSave = createPage("Save")
 local saveCard = makeCard(PageSave, 4, 300)
 makeLabel(saveCard, "Save Name:", 12)
@@ -431,9 +434,7 @@ NameBox.TextSize = 13
 NameBox.ClearTextOnFocus = false
 NameBox.Parent = saveCard
 Instance.new("UICorner", NameBox).CornerRadius = UDim.new(0, 8)
-
-local AutoSaveRow, AutoSaveTrack, AutoSaveThumb = makeToggle(saveCard, "Auto Save", 76, true)
-
+local _, AutoSaveTrack, AutoSaveThumb = makeToggle(saveCard, "Auto Save", 76, true)
 local SaveNowBtn = Instance.new("TextButton")
 SaveNowBtn.Size = UDim2.new(1, -24, 0, 32)
 SaveNowBtn.Position = UDim2.new(0, 12, 0, 118)
@@ -444,7 +445,6 @@ SaveNowBtn.Font = Enum.Font.GothamBold
 SaveNowBtn.TextSize = 13
 SaveNowBtn.Parent = saveCard
 Instance.new("UICorner", SaveNowBtn).CornerRadius = UDim.new(0, 8)
-
 local LoadBtn = Instance.new("TextButton")
 LoadBtn.Size = UDim2.new(1, -24, 0, 32)
 LoadBtn.Position = UDim2.new(0, 12, 0, 158)
@@ -455,7 +455,6 @@ LoadBtn.Font = Enum.Font.GothamBold
 LoadBtn.TextSize = 13
 LoadBtn.Parent = saveCard
 Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 8)
-
 local ResetBtn = Instance.new("TextButton")
 ResetBtn.Size = UDim2.new(1, -24, 0, 32)
 ResetBtn.Position = UDim2.new(0, 12, 0, 198)
@@ -466,7 +465,6 @@ ResetBtn.Font = Enum.Font.GothamBold
 ResetBtn.TextSize = 13
 ResetBtn.Parent = saveCard
 Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 8)
-
 local SaveStatusLabel = makeLabel(saveCard, "Status: Ready", 242)
 
 Pages["Info"].Visible = true
@@ -507,7 +505,7 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================== Functions ====================
+-- ==================== Core ====================
 local function Notify(msg)
     pcall(function()
         StarterGui:SetCore("SendNotification", {Title = "tau only apple", Text = tostring(msg), Duration = 2.5})
@@ -527,7 +525,7 @@ local function isFragment(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(FragmentNames) do
-        if n:find(v:lower()) then
+        if n == v:lower() or n:find(v:lower(), 1, true) then
             if obj.Parent and isFragment(obj.Parent) then return false end
             return true
         end
@@ -539,7 +537,7 @@ local function isGlasses(obj)
     if not obj or not obj.Parent then return false end
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(GlassesNames) do
-        if n:find(v:lower()) then
+        if n:find(v:lower(), 1, true) then
             if obj.Parent and isGlasses(obj.Parent) then return false end
             return true
         end
@@ -550,7 +548,7 @@ end
 local function isShelter(obj)
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(ShelterNames) do
-        if n:find(v:lower()) then return true end
+        if n:find(v:lower(), 1, true) then return true end
     end
     return false
 end
@@ -687,34 +685,100 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
+-- ========== 修好的模式 / 末日 / 血月检测 ==========
+-- 优先匹配「A xxx is occurring」完整句，避免残留误判
+local MODE_RULES = {
+    {pat = "a toastnado is occurring", mode = "ToastNado"},
+    {pat = "toastnado is occurring", mode = "ToastNado"},
+    {pat = "a dust devil is occurring", mode = "Dust Devil"},
+    {pat = "dust devil is occurring", mode = "Dust Devil"},
+    {pat = "an infernado is occurring", mode = "Infernado"},
+    {pat = "infernado is occurring", mode = "Infernado"},
+    {pat = "a deadnado is occurring", mode = "Deadnado"},
+    {pat = "deadnado is occurring", mode = "Deadnado"},
+    {pat = "a chompnado is occurring", mode = "Chompnado"},
+    {pat = "chompnado is occurring", mode = "Chompnado"},
+    {pat = "a trollnado is occurring", mode = "Trollnado"},
+    {pat = "trollnado is occurring", mode = "Trollnado"},
+    {pat = "a megatornado is occurring", mode = "MegaTornado"},
+    {pat = "megatornado is occurring", mode = "MegaTornado"},
+    {pat = "a ghostnado is occurring", mode = "GhostNado"},
+    {pat = "ghostnado is occurring", mode = "GhostNado"},
+    {pat = "a riftnado is occurring", mode = "Riftnado"},
+    {pat = "riftnado is occurring", mode = "Riftnado"},
+    {pat = "a 4%-nado is occurring", mode = "4-Nado"}, -- won't match; real below
+    {pat = "4%-nado is occurring", mode = "4-Nado"},
+    {pat = "a 4-nado is occurring", mode = "4-Nado"},
+    {pat = "4-nado is occurring", mode = "4-Nado"},
+    {pat = "four tornadoes", mode = "4-Nado"},
+    {pat = "there are two tornadoes", mode = "Double Trouble"},
+    {pat = "double trouble", mode = "Double Trouble"},
+    {pat = "triple threat", mode = "Triple Threat"},
+    {pat = "unstoppable is occurring", mode = "Unstoppable"},
+    {pat = "a doomsday is occurring", mode = "Doomsday"},
+    {pat = "doomsday is occurring", mode = "Doomsday"},
+    {pat = "doomsday has begun", mode = "Doomsday"},
+    {pat = "this is doomsday", mode = "Doomsday"},
+    {pat = "a tartarus is occurring", mode = "Tartarus"},
+    {pat = "tartarus is occurring", mode = "Tartarus"},
+    {pat = "tartarus has been summoned", mode = "Tartarus"},
+    {pat = "tartarus has been awakened", mode = "Tartarus"},
+    {pat = "normal survival", mode = "Normal Survival"},
+}
+
 local function checkAlerts()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
+
+    local bestMode, bestLen = nil, 0
+    local sawDoomsday, sawTartarus = false, false
+
     for _, g in ipairs(pg:GetDescendants()) do
         if g:IsA("TextLabel") or g:IsA("TextButton") then
-            local t = (g.Text or ""):lower()
-            if (t:find("5th") or t:find("fifth") or t:find("all five")) and t:find("fragment") then
-                if not tartarusUnlocked then tartarusUnlocked = true Notify("Blood Moon complete!") end
-            elseif t:find("tartarus has been summoned") or t:find("tartarus has been awakened") then
-                if not tartarusUnlocked then tartarusUnlocked = true Notify("Tartarus unlocked") end
+            local raw = g.Text or ""
+            if #raw < 4 or #raw > 180 then continue end
+            local t = string.lower(raw)
+
+            for _, rule in ipairs(MODE_RULES) do
+                if t:find(rule.pat, 1, true) then
+                    local len = #rule.pat
+                    if len > bestLen then
+                        bestLen = len
+                        bestMode = rule.mode
+                    end
+                    if rule.mode == "Doomsday" then sawDoomsday = true end
+                    if rule.mode == "Tartarus" then sawTartarus = true end
+                end
             end
-            if t:find("doomsday") then
-                if not doomsdayDetected then doomsdayDetected = true Notify("Doomsday!") end
-                currentMode = "Doomsday" lastModeTime = tick()
-            end
-            if t:find("toastnado") then currentMode = "ToastNado" lastModeTime = tick()
-            elseif t:find("double trouble") then currentMode = "Double Trouble" lastModeTime = tick()
-            elseif t:find("dust devil") then currentMode = "Dust Devil" lastModeTime = tick()
-            elseif t:find("infernado") then currentMode = "Infernado" lastModeTime = tick()
-            elseif t:find("tartarus") then currentMode = "Tartarus" lastModeTime = tick()
-            elseif t:find("4-nado") or t:find("four tornadoes") then currentMode = "4-Nado" lastModeTime = tick()
-            elseif t:find("normal survival") then currentMode = "Normal Survival" lastModeTime = tick()
+
+            -- 额外血月进度
+            if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true))
+                and t:find("fragment", 1, true) then
+                sawTartarus = true
             end
         end
     end
-    if tick() - lastModeTime > 20 then currentMode = "Unknown" end
+
+    if sawTartarus and not tartarusUnlocked then
+        tartarusUnlocked = true
+        Notify("Blood Moon / Tartarus unlocked (this server)")
+    end
+    if sawDoomsday and not doomsdayDetected then
+        doomsdayDetected = true
+        Notify("Doomsday on this server!")
+    end
+
+    if bestMode then
+        currentMode = bestMode
+        lastModeTime = tick()
+        if bestMode == "Doomsday" then doomsdayDetected = true end
+        if bestMode == "Tartarus" then tartarusUnlocked = true end
+    elseif tick() - lastModeTime > MODE_TIMEOUT then
+        currentMode = "Unknown"
+    end
 end
 
+-- God / Pull / Fly / AFK (same structure)
 local godConnection, healthConnection, antiFlingConnection
 local function getHumanoid()
     local char = LocalPlayer.Character
@@ -862,8 +926,6 @@ local function applySettingsToUI()
     setToggleVisual(FlyTrack, FlyThumb, Settings.FragmentFly)
     setToggleVisual(AutoSaveTrack, AutoSaveThumb, Settings.AutoSave)
     NameBox.Text = Settings.SaveName or "default"
-
-    -- 2-choice mode
     if Settings.OnlyFragments then
         FragOnlyBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
         FragOnlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -875,7 +937,6 @@ local function applySettingsToUI()
         FragGlassBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
         FragGlassBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     end
-
     if Settings.GodMode then enableGodMode() else disableGodMode() end
     updateRangeLabel()
 end
@@ -888,19 +949,27 @@ task.spawn(function()
         checkAlerts()
 
         StatusLabel.Text = "Status: " .. ((Settings.Enabled or Settings.FullAuto) and "Running" or "Off")
-        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto)
+            and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
         FragLabel.Text = "Map Fragments: " .. frags
         CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
-        ModeLabel.Text = "Mode: " .. currentMode
 
-        if tartarusUnlocked or collectedFragments >= 5 then
-            BloodMoonLabel.Text = "Blood Moon: UNLOCKED (5/5)"
+        ModeLabel.Text = "Mode: " .. currentMode
+        ModeLabel.TextColor3 = currentMode == "Unknown"
+            and Color3.fromRGB(180, 180, 195) or Color3.fromRGB(255, 200, 100)
+
+        if tartarusUnlocked then
+            BloodMoonLabel.Text = "Blood Moon: UNLOCKED (server)"
             BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
+        elseif collectedFragments >= 5 then
+            BloodMoonLabel.Text = "Blood Moon: My 5/5"
+            BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
         else
             BloodMoonLabel.Text = "Blood Moon: Map " .. frags .. " | My " .. collectedFragments .. "/5"
             BloodMoonLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
+
         if doomsdayDetected or currentMode == "Doomsday" then
             DoomsdayLabel.Text = "Doomsday: YES"
             DoomsdayLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
@@ -935,7 +1004,7 @@ task.spawn(function()
         end
         if Settings.TornadoPull then doTornadoPull() end
         if Settings.FragmentFly then doFragmentFly() end
-        task.wait(0.12)
+        task.wait(0.15)
     end
 end)
 
@@ -955,60 +1024,49 @@ FullAutoTrack.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings()
 end)
-
 LootTrack.MouseButton1Click:Connect(function()
     Settings.Enabled = not Settings.Enabled
     applySettingsToUI()
     saveSettings()
 end)
-
--- 二选一
 FragOnlyBtn.MouseButton1Click:Connect(function()
     Settings.OnlyFragments = true
     applySettingsToUI()
     saveSettings()
-    Notify("Mode: Fragments Only")
+    Notify("Fragments Only")
 end)
-
 FragGlassBtn.MouseButton1Click:Connect(function()
     Settings.OnlyFragments = false
     applySettingsToUI()
     saveSettings()
-    Notify("Mode: Fragments + Glasses")
+    Notify("Fragments + Glasses")
 end)
-
 AFKTrack.MouseButton1Click:Connect(function()
     Settings.AntiAFK = not Settings.AntiAFK
     applySettingsToUI()
     saveSettings()
 end)
-
 GodTrack.MouseButton1Click:Connect(function()
     Settings.GodMode = not Settings.GodMode
     if Settings.GodMode then enableGodMode() else disableGodMode() end
     applySettingsToUI()
     saveSettings()
 end)
-
 TornadoTrack.MouseButton1Click:Connect(function()
     Settings.TornadoPull = not Settings.TornadoPull
     applySettingsToUI()
     saveSettings()
 end)
-
 FlyTrack.MouseButton1Click:Connect(function()
     Settings.FragmentFly = not Settings.FragmentFly
     applySettingsToUI()
     saveSettings()
 end)
-
 AutoSaveTrack.MouseButton1Click:Connect(function()
     Settings.AutoSave = not Settings.AutoSave
     applySettingsToUI()
     saveSettings(true)
-    Notify(Settings.AutoSave and "Auto Save ON" or "Auto Save OFF")
 end)
-
 NameBox.FocusLost:Connect(function()
     local t = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
     if t == "" then t = "default" end
@@ -1016,24 +1074,19 @@ NameBox.FocusLost:Connect(function()
     NameBox.Text = t
     saveSettings(true)
 end)
-
 SaveNowBtn.MouseButton1Click:Connect(function()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
-    SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 220, 120)
     Notify("Saved: " .. Settings.SaveName)
 end)
-
 LoadBtn.MouseButton1Click:Connect(function()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     loadSettings()
     applySettingsToUI()
     SaveStatusLabel.Text = "Status: Loaded [" .. Settings.SaveName .. "]"
-    SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
     Notify("Loaded: " .. Settings.SaveName)
 end)
-
 ResetBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = false
     Settings.OnlyFragments = true
@@ -1047,10 +1100,16 @@ ResetBtn.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Reset"
-    SaveStatusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
-    Notify("Reset to default")
+    Notify("Reset")
 end)
-
+ResetModeBtn.MouseButton1Click:Connect(function()
+    currentMode = "Unknown"
+    lastModeTime = 0
+    doomsdayDetected = false
+    -- tartarusUnlocked 不强制清，除非你想一起清：
+    -- tartarusUnlocked = false
+    Notify("Mode / Doomsday display reset")
+end)
 RangeDown.MouseButton1Click:Connect(function()
     TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
     updateRangeLabel()
@@ -1066,19 +1125,16 @@ RangeReset.MouseButton1Click:Connect(function()
     updateRangeLabel()
     saveSettings()
 end)
-
 ShelterBtn.MouseButton1Click:Connect(function() forceToShelter(false) end)
 RefreshBtn.MouseButton1Click:Connect(function()
     refreshPlayerList()
-    Notify("Player list refreshed")
+    Notify("Refreshed")
 end)
-
 CloseBtn.MouseButton1Click:Connect(function()
     saveSettings(true)
     ScreenGui:Destroy()
 end)
 
--- Drag
 local dragging, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1101,5 +1157,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("Modern UI Full loaded")
-print("tau only apple - Modern UI Full (2-choice mode)")
+Notify("Fixed detection loaded")
+print("tau only apple - Fixed Detection Full")
