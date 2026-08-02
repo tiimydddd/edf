@@ -1,10 +1,11 @@
--- tau only apple - Clean Version (ControlRoom button in Teleport tab)
+-- tau only apple - Clean + Anti AFK + Simple Shelter TP
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 local PLACE_ID = 2313058949
 
@@ -12,6 +13,7 @@ local Settings = {
     Enabled = false,
     OnlyFragments = true,
     FullAuto = false,
+    AntiAFK = true,
 }
 
 local FragmentNames = {
@@ -22,7 +24,7 @@ local GlassesNames = {
     "Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜",
     "Mysterious Shades", "Shades", "Glasses", "眼镜", "墨镜"
 }
-local ControlRoomNames = {"ControlRoom", "Control Room", "Camera", "Cameras", "观看", "旁观", "Monitor", "Screen", "控制室", "Spectator", "View"}
+local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlRoom", "Control Room"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
 
@@ -209,7 +211,7 @@ local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
 local TPBloodBtn = makeToggle(PageTP, "血月祭坛前", 46, false)
 local TPDoomBtn = makeToggle(PageTP, "末日祭坛前", 82, false)
-local ForceShelterBtn = makeToggle(PageTP, "强制进控制室 (点一次)", 118, false)  -- 已移到这里
+local ForceShelterBtn = makeToggle(PageTP, "传送到避难所 (点一次)", 118, false)  -- 改名
 local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 156)
 
 local PlayerListFrame = Instance.new("ScrollingFrame")
@@ -232,6 +234,7 @@ local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 288, false)
 local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
+local AntiAFKBtn = makeToggle(PageExtra, "防止挂机踢出: ON", 74, true)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
@@ -312,9 +315,9 @@ local function isGlasses(obj)
     return false
 end
 
-local function isControlRoom(obj)
-    local n = obj.Name:lower()
-    for _, v in ipairs(ControlRoomNames) do
+local function isShelter(obj)
+    local n = (obj.Name or ""):lower()
+    for _, v in ipairs(ShelterNames) do
         if n:find(v:lower()) then return true end
     end
     return false
@@ -423,53 +426,34 @@ local function pickup(obj, typ)
     end)
 end
 
-local function forceToControlRoom()
+-- 简单传送到避难所（点一次，到区域就行）
+local function forceToShelter()
     local hrp = getHRP()
     if not hrp then
         Notify("没有角色")
         return
     end
 
-    local bestPart = nil
-    local bestScore = -1
+    local targetPart = nil
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if isControlRoom(obj) then
+        if isShelter(obj) then
             local part = getBestPart(obj)
             if part then
-                local score = 1
-                if obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                    score = score + 5
-                end
-                if score > bestScore then
-                    bestScore = score
-                    bestPart = part
-                end
+                targetPart = part
+                break  -- 找到第一个就用，不要求精准门中间
             end
         end
     end
 
-    if not bestPart then
-        Notify("没找到控制室")
+    if not targetPart then
+        Notify("没找到避难所")
         return
     end
 
-    hrp.CFrame = bestPart.CFrame + Vector3.new(0, 3, 0)
-    task.wait(0.1)
-
-    local parent = bestPart.Parent
-    if parent then
-        for _, child in ipairs(parent:GetDescendants()) do
-            if child:IsA("ProximityPrompt") then
-                local text = ((child.ActionText or "") .. (child.ObjectText or "")):lower()
-                if text:find("观看") or text:find("旁观") or text:find("spectat") or text:find("camera") or text:find("view") or text:find("monitor") then
-                    tryFirePrompt(child)
-                end
-            end
-        end
-    end
-
-    Notify("已传送到控制室（仅一次）")
+    -- 直接传送到上方一点的位置
+    hrp.CFrame = targetPart.CFrame + Vector3.new(0, 5, 0)
+    Notify("已传送到避难所")
 end
 
 local function teleportToKeyword(keywords, label)
@@ -532,6 +516,29 @@ local function refreshPlayerList()
     end
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
+
+-- ==================== Anti AFK ====================
+local function doAntiAFK()
+    pcall(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
+
+LocalPlayer.Idled:Connect(function()
+    if Settings.AntiAFK then
+        doAntiAFK()
+    end
+end)
+
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        if Settings.AntiAFK then
+            doAntiAFK()
+        end
+        task.wait(30)
+    end
+end)
 
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
@@ -648,9 +655,16 @@ ModeBtn.MouseButton1Click:Connect(function()
     ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
 end)
 
+AntiAFKBtn.MouseButton1Click:Connect(function()
+    Settings.AntiAFK = not Settings.AntiAFK
+    AntiAFKBtn.Text = Settings.AntiAFK and "防止挂机踢出: ON" or "防止挂机踢出: OFF"
+    AntiAFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
+    Notify(Settings.AntiAFK and "防挂机已开启" or "防挂机已关闭")
+end)
+
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-    forceToControlRoom()
+    forceToShelter()
     task.delay(1.2, function()
         if ForceShelterBtn then
             ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
@@ -700,5 +714,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("tau only apple loaded (Clean)")
-print("tau only apple - ControlRoom button moved to Teleport")
+Notify("tau only apple loaded")
+print("tau only apple - Simple Shelter TP")
