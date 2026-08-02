@@ -1,5 +1,5 @@
--- tau only apple - Full Version
--- Save Page | Fragment Fly | Blood Moon/Doomsday Alert | No Hop | Auto Save
+-- tau only apple - Modern UI Full
+-- Top Tabs | Toggle Switches | Save Name TextBox | Auto Save On/Off
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -17,6 +17,8 @@ local Settings = {
     TornadoPull = false,
     GodMode = false,
     FragmentFly = false,
+    AutoSave = true,
+    SaveName = "default",
 }
 
 local FragmentNames = {
@@ -58,24 +60,16 @@ local doomsdayDetected = false
 local currentMode = "Unknown"
 local lastModeTime = 0
 
-local SETTINGS_FILE = "tau_only_apple_settings.txt"
-
-local Theme = {
-    BgMain = Color3.fromRGB(18, 20, 28),
-    BgTitle = Color3.fromRGB(22, 28, 42),
-    BgSidebar = Color3.fromRGB(14, 16, 24),
-    BgContent = Color3.fromRGB(20, 24, 34),
-    BgButtonOff = Color3.fromRGB(35, 42, 58),
-    BgButtonOn = Color3.fromRGB(30, 90, 160),
-    BgButtonFull = Color3.fromRGB(20, 70, 140),
-    TextWhite = Color3.fromRGB(230, 235, 245),
-    TextGray = Color3.fromRGB(160, 170, 190),
-    CloseRed = Color3.fromRGB(160, 50, 50),
-}
+local function getSettingsFile()
+    local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
+    if name == "" then name = "default" end
+    return "tau_apple_" .. name .. ".txt"
+end
 
 -- ==================== Save / Load ====================
-local function saveSettings()
+local function saveSettings(force)
     if not writefile then return end
+    if not force and not Settings.AutoSave then return end
     local data = table.concat({
         tostring(Settings.Enabled),
         tostring(Settings.OnlyFragments),
@@ -84,21 +78,22 @@ local function saveSettings()
         tostring(Settings.TornadoPull),
         tostring(Settings.GodMode),
         tostring(Settings.FragmentFly),
+        tostring(Settings.AutoSave),
         tostring(TORNADO_RANGE),
+        tostring(Settings.SaveName or "default"),
     }, "\n")
-    pcall(writefile, SETTINGS_FILE, data)
+    pcall(writefile, getSettingsFile(), data)
 end
 
 local function loadSettings()
     if not (isfile and readfile) then return end
-    if not isfile(SETTINGS_FILE) then return end
-    local ok, content = pcall(readfile, SETTINGS_FILE)
+    local file = getSettingsFile()
+    if not isfile(file) then return end
+    local ok, content = pcall(readfile, file)
     if not ok or not content then return end
     local lines = {}
-    for line in content:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-    if #lines < 7 then return end
+    for line in content:gmatch("[^\r\n]+") do table.insert(lines, line) end
+    if #lines < 8 then return end
     Settings.Enabled = lines[1] == "true"
     Settings.OnlyFragments = lines[2] == "true"
     Settings.FullAuto = lines[3] == "true"
@@ -106,13 +101,15 @@ local function loadSettings()
     Settings.TornadoPull = lines[5] == "true"
     Settings.GodMode = lines[6] == "true"
     Settings.FragmentFly = lines[7] == "true"
-    if lines[8] then
-        local r = tonumber(lines[8])
+    Settings.AutoSave = lines[8] == "true"
+    if lines[9] then
+        local r = tonumber(lines[9])
         if r then TORNADO_RANGE = math.clamp(r, MIN_RANGE, MAX_RANGE) end
     end
+    if lines[10] then Settings.SaveName = lines[10] end
 end
 
--- ==================== UI ====================
+-- ==================== Modern UI ====================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "tau_only_apple"
 ScreenGui.ResetOnSpawn = false
@@ -120,121 +117,140 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 460)
-Main.Position = UDim2.new(0, 25, 0.1, 0)
-Main.BackgroundColor3 = Theme.BgMain
+Main.Size = UDim2.new(0, 420, 0, 380)
+Main.Position = UDim2.new(0, 40, 0.15, 0)
+Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
 local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(40, 80, 140)
-Stroke.Thickness = 1.2
-Stroke.Transparency = 0.6
+Stroke.Color = Color3.fromRGB(50, 50, 60)
+Stroke.Thickness = 1
 Stroke.Parent = Main
 
+-- Title bar
 local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 32)
-TitleBar.BackgroundColor3 = Theme.BgTitle
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
+TitleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = Main
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
-
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
 local TitleFix = Instance.new("Frame")
-TitleFix.Size = UDim2.new(1, 0, 0, 12)
-TitleFix.Position = UDim2.new(0, 0, 1, -12)
-TitleFix.BackgroundColor3 = Theme.BgTitle
+TitleFix.Size = UDim2.new(1, 0, 0, 14)
+TitleFix.Position = UDim2.new(0, 0, 1, -14)
+TitleFix.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
 TitleFix.BorderSizePixel = 0
 TitleFix.Parent = TitleBar
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -70, 1, 0)
-Title.Position = UDim2.new(0, 12, 0, 0)
+Title.Size = UDim2.new(1, -80, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "tau only apple"
-Title.TextColor3 = Theme.TextWhite
+Title.TextColor3 = Color3.fromRGB(240, 240, 245)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TitleBar
 
 local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 24, 0, 24)
-MinBtn.Position = UDim2.new(1, -56, 0, 4)
-MinBtn.BackgroundColor3 = Color3.fromRGB(40, 55, 80)
+MinBtn.Size = UDim2.new(0, 26, 0, 26)
+MinBtn.Position = UDim2.new(1, -60, 0, 5)
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 MinBtn.Text = "–"
-MinBtn.TextColor3 = Theme.TextWhite
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 16
 MinBtn.Parent = TitleBar
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
 
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 24, 0, 24)
-CloseBtn.Position = UDim2.new(1, -28, 0, 4)
-CloseBtn.BackgroundColor3 = Theme.CloseRed
+CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseBtn.Position = UDim2.new(1, -30, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Theme.TextWhite
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 14
 CloseBtn.Parent = TitleBar
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 100, 1, -32)
-Sidebar.Position = UDim2.new(0, 0, 0, 32)
-Sidebar.BackgroundColor3 = Theme.BgSidebar
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = Main
+-- Top Tabs (horizontal like screenshot)
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -20, 0, 32)
+TabBar.Position = UDim2.new(0, 10, 0, 42)
+TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -100, 1, -32)
-Content.Position = UDim2.new(0, 100, 0, 32)
-Content.BackgroundColor3 = Theme.BgContent
-Content.BorderSizePixel = 0
-Content.Parent = Main
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 4)
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+TabLayout.Parent = TabBar
 
-local function makeTab(name, text, y)
+local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(1, -8, 0, 30)
-    btn.Position = UDim2.new(0, 4, 0, y)
-    btn.BackgroundColor3 = Theme.BgSidebar
-    btn.Text = " " .. text
-    btn.TextColor3 = Theme.TextGray
+    btn.Size = UDim2.new(0, 72, 1, -6)
+    btn.Position = UDim2.new(0, 0, 0, 3)
+    btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(160, 160, 175)
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 12
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Parent = Sidebar
+    btn.Parent = TabBar
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     return btn
 end
 
-local TabInfo = makeTab("Info", "Info", 8)
-local TabLoot = makeTab("Loot", "Loot", 42)
-local TabTP = makeTab("Teleport", "Teleport", 76)
-local TabExtra = makeTab("Extra", "Extra", 110)
-local TabSave = makeTab("Save", "储存", 144)
+local TabInfo = makeTopTab("Info")
+local TabLoot = makeTopTab("Loot")
+local TabTP = makeTopTab("Teleport")
+local TabExtra = makeTopTab("Extra")
+local TabSave = makeTopTab("储存")
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -20, 1, -86)
+Content.Position = UDim2.new(0, 10, 0, 80)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
 
 local Pages = {}
 local function createPage(name)
-    local page = Instance.new("Frame")
+    local page = Instance.new("ScrollingFrame")
     page.Name = name
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3
+    page.CanvasSize = UDim2.new(0, 0, 0, 320)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
     return page
 end
 
-local function makeLabel(parent, text, y)
+-- Card helper
+local function makeCard(parent, y, height)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, height)
+    card.Position = UDim2.new(0, 0, 0, y)
+    card.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    card.BorderSizePixel = 0
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    return card
+end
+
+local function makeLabel(parent, text, y, color)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -16, 0, 18)
-    l.Position = UDim2.new(0, 10, 0, y)
+    l.Size = UDim2.new(1, -20, 0, 18)
+    l.Position = UDim2.new(0, 12, 0, y)
     l.BackgroundTransparency = 1
     l.Text = text
-    l.TextColor3 = Theme.TextGray
+    l.TextColor3 = color or Color3.fromRGB(180, 180, 195)
     l.Font = Enum.Font.Gotham
     l.TextSize = 12
     l.TextXAlignment = Enum.TextXAlignment.Left
@@ -242,93 +258,208 @@ local function makeLabel(parent, text, y)
     return l
 end
 
-local function makeToggle(parent, text, y, on)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -20, 0, 28)
-    btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = on and Theme.BgButtonOn or Theme.BgButtonOff
-    btn.Text = text
-    btn.TextColor3 = Theme.TextWhite
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 12
-    btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    return btn
+-- Modern toggle (pill style)
+local function makeToggle(parent, text, y, defaultOn)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -16, 0, 32)
+    row.Position = UDim2.new(0, 8, 0, y)
+    row.BackgroundTransparency = 1
+    row.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -60, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(220, 220, 230)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local track = Instance.new("TextButton")
+    track.Name = "Track"
+    track.Size = UDim2.new(0, 44, 0, 22)
+    track.Position = UDim2.new(1, -50, 0.5, -11)
+    track.BackgroundColor3 = defaultOn and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
+    track.Text = ""
+    track.Parent = row
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+    local thumb = Instance.new("Frame")
+    thumb.Name = "Thumb"
+    thumb.Size = UDim2.new(0, 18, 0, 18)
+    thumb.Position = defaultOn and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    thumb.Parent = track
+    Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
+
+    return row, track, thumb, label
 end
 
--- Info
+local function setToggleVisual(track, thumb, on)
+    track.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
+    thumb.Position = on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+end
+
+-- ===== Pages =====
 local PageInfo = createPage("Info")
-local StatusLabel = makeLabel(PageInfo, "Status: Off", 10)
-local FragLabel = makeLabel(PageInfo, "Map Fragments: 0", 32)
-local CollectLabel = makeLabel(PageInfo, "My Collected: 0 / 5", 54)
-local GlassesLabel = makeLabel(PageInfo, "Glasses: Not Found", 76)
-local ModeLabel = makeLabel(PageInfo, "Mode: Unknown", 98)
-local BloodMoonLabel = makeLabel(PageInfo, "Blood Moon: ?", 120)
-local DoomsdayLabel = makeLabel(PageInfo, "Doomsday: No", 142)
+local infoCard = makeCard(PageInfo, 4, 200)
+local StatusLabel = makeLabel(infoCard, "Status: Off", 12)
+local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 36)
+local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 60)
+local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 84)
+local ModeLabel = makeLabel(infoCard, "Mode: Unknown", 108)
+local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: ?", 132)
+local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 156)
 
--- Loot
 local PageLoot = createPage("Loot")
-local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
-local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
-local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
+local lootCard = makeCard(PageLoot, 4, 140)
+local FullAutoRow, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 10, false)
+local LootRow, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 48, false)
+local ModeRow, ModeTrack, ModeThumb, ModeLabelBtn = makeToggle(lootCard, "Fragments Only", 86, true)
 
--- Teleport
 local PageTP = createPage("Teleport")
-local ForceShelterBtn = makeToggle(PageTP, "Teleport to Shelter", 10, false)
-local TPPlayerLabel = makeLabel(PageTP, "Teleport to Player:", 50)
-local PlayerListFrame = Instance.new("ScrollingFrame")
-PlayerListFrame.Size = UDim2.new(1, -20, 0, 180)
-PlayerListFrame.Position = UDim2.new(0, 10, 0, 75)
-PlayerListFrame.BackgroundColor3 = Color3.fromRGB(28, 34, 48)
-PlayerListFrame.BorderSizePixel = 0
-PlayerListFrame.ScrollBarThickness = 4
-PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-PlayerListFrame.Parent = PageTP
-Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 6)
-Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
-local RefreshPlayersBtn = makeToggle(PageTP, "Refresh Player List", 270, false)
+local tpCard = makeCard(PageTP, 4, 280)
+local ShelterBtn = Instance.new("TextButton")
+ShelterBtn.Size = UDim2.new(1, -20, 0, 32)
+ShelterBtn.Position = UDim2.new(0, 10, 0, 12)
+ShelterBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+ShelterBtn.Text = "Teleport to Shelter"
+ShelterBtn.TextColor3 = Color3.fromRGB(240, 240, 245)
+ShelterBtn.Font = Enum.Font.GothamBold
+ShelterBtn.TextSize = 13
+ShelterBtn.Parent = tpCard
+Instance.new("UICorner", ShelterBtn).CornerRadius = UDim.new(0, 8)
 
--- Extra
+local TPLabel = makeLabel(tpCard, "Teleport to Player:", 52)
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size = UDim2.new(1, -20, 0, 150)
+PlayerListFrame.Position = UDim2.new(0, 10, 0, 78)
+PlayerListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+PlayerListFrame.BorderSizePixel = 0
+PlayerListFrame.ScrollBarThickness = 3
+PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.Parent = tpCard
+Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
+Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Size = UDim2.new(1, -20, 0, 28)
+RefreshBtn.Position = UDim2.new(0, 10, 0, 240)
+RefreshBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+RefreshBtn.Text = "Refresh Player List"
+RefreshBtn.TextColor3 = Color3.fromRGB(240, 240, 245)
+RefreshBtn.Font = Enum.Font.GothamBold
+RefreshBtn.TextSize = 12
+RefreshBtn.Parent = tpCard
+Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 8)
+
 local PageExtra = createPage("Extra")
-local AntiAFKBtn = makeToggle(PageExtra, "Anti-AFK: ON", 8, true)
-local GodModeBtn = makeToggle(PageExtra, "God Mode: OFF", 42, false)
-local TornadoBtn = makeToggle(PageExtra, "Tornado Pull: OFF", 76, false)
-local FragFlyBtn = makeToggle(PageExtra, "Fragment Fly: OFF", 110, false)
-local RangeLabel = makeLabel(PageExtra, "Pull Range: 80", 148)
-local RangeDownBtn = makeToggle(PageExtra, "Range -20", 172, false)
-local RangeUpBtn = makeToggle(PageExtra, "Range +20", 206, false)
-local RangeResetBtn = makeToggle(PageExtra, "Reset Range (80)", 240, false)
+local extraCard = makeCard(PageExtra, 4, 260)
+local AFKRow, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 10, true)
+local GodRow, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 48, false)
+local TornadoRow, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 86, false)
+local FlyRow, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 124, false)
+local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 165)
+local RangeDown = Instance.new("TextButton")
+RangeDown.Size = UDim2.new(0, 90, 0, 28)
+RangeDown.Position = UDim2.new(0, 12, 0, 190)
+RangeDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+RangeDown.Text = "Range -20"
+RangeDown.TextColor3 = Color3.fromRGB(240, 240, 245)
+RangeDown.Font = Enum.Font.GothamBold
+RangeDown.TextSize = 12
+RangeDown.Parent = extraCard
+Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
+local RangeUp = Instance.new("TextButton")
+RangeUp.Size = UDim2.new(0, 90, 0, 28)
+RangeUp.Position = UDim2.new(0, 112, 0, 190)
+RangeUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+RangeUp.Text = "Range +20"
+RangeUp.TextColor3 = Color3.fromRGB(240, 240, 245)
+RangeUp.Font = Enum.Font.GothamBold
+RangeUp.TextSize = 12
+RangeUp.Parent = extraCard
+Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
+local RangeReset = Instance.new("TextButton")
+RangeReset.Size = UDim2.new(0, 100, 0, 28)
+RangeReset.Position = UDim2.new(0, 212, 0, 190)
+RangeReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+RangeReset.Text = "Reset (80)"
+RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
+RangeReset.Font = Enum.Font.GothamBold
+RangeReset.TextSize = 12
+RangeReset.Parent = extraCard
+Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
 
 -- 储存 Page
 local PageSave = createPage("Save")
-local SaveInfoLabel = makeLabel(PageSave, "Settings auto-save when changed.", 12)
-local SaveBtn = makeToggle(PageSave, "Save Settings Now", 40, false)
-local LoadBtn = makeToggle(PageSave, "Load Settings", 78, false)
-local ResetSaveBtn = makeToggle(PageSave, "Reset to Default", 116, false)
-local SaveStatusLabel = makeLabel(PageSave, "Status: Ready", 160)
+local saveCard = makeCard(PageSave, 4, 280)
+local NameLabel = makeLabel(saveCard, "Save Name:", 12)
+local NameBox = Instance.new("TextBox")
+NameBox.Size = UDim2.new(1, -24, 0, 30)
+NameBox.Position = UDim2.new(0, 12, 0, 34)
+NameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+NameBox.Text = "default"
+NameBox.PlaceholderText = "Enter save name..."
+NameBox.TextColor3 = Color3.fromRGB(240, 240, 245)
+NameBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 140)
+NameBox.Font = Enum.Font.Gotham
+NameBox.TextSize = 13
+NameBox.ClearTextOnFocus = false
+NameBox.Parent = saveCard
+Instance.new("UICorner", NameBox).CornerRadius = UDim.new(0, 8)
+
+local AutoSaveRow, AutoSaveTrack, AutoSaveThumb = makeToggle(saveCard, "Auto Save", 76, true)
+local SaveNowBtn = Instance.new("TextButton")
+SaveNowBtn.Size = UDim2.new(1, -24, 0, 32)
+SaveNowBtn.Position = UDim2.new(0, 12, 0, 118)
+SaveNowBtn.BackgroundColor3 = Color3.fromRGB(50, 90, 160)
+SaveNowBtn.Text = "Save Settings Now"
+SaveNowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SaveNowBtn.Font = Enum.Font.GothamBold
+SaveNowBtn.TextSize = 13
+SaveNowBtn.Parent = saveCard
+Instance.new("UICorner", SaveNowBtn).CornerRadius = UDim.new(0, 8)
+
+local LoadBtn = Instance.new("TextButton")
+LoadBtn.Size = UDim2.new(1, -24, 0, 32)
+LoadBtn.Position = UDim2.new(0, 12, 0, 158)
+LoadBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+LoadBtn.Text = "Load Settings"
+LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadBtn.Font = Enum.Font.GothamBold
+LoadBtn.TextSize = 13
+LoadBtn.Parent = saveCard
+Instance.new("UICorner", LoadBtn).CornerRadius = UDim.new(0, 8)
+
+local ResetBtn = Instance.new("TextButton")
+ResetBtn.Size = UDim2.new(1, -24, 0, 32)
+ResetBtn.Position = UDim2.new(0, 12, 0, 198)
+ResetBtn.BackgroundColor3 = Color3.fromRGB(90, 50, 50)
+ResetBtn.Text = "Reset to Default"
+ResetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResetBtn.Font = Enum.Font.GothamBold
+ResetBtn.TextSize = 13
+ResetBtn.Parent = saveCard
+Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 8)
+
+local SaveStatusLabel = makeLabel(saveCard, "Status: Ready", 240)
 
 Pages["Info"].Visible = true
-TabInfo.BackgroundColor3 = Theme.BgButtonOn
-TabInfo.TextColor3 = Theme.TextWhite
+TabInfo.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
+TabInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
 
 local function switchTab(name)
-    for n, page in pairs(Pages) do
-        page.Visible = (n == name)
-    end
+    for n, page in pairs(Pages) do page.Visible = (n == name) end
     for _, tab in pairs({TabInfo, TabLoot, TabTP, TabExtra, TabSave}) do
-        tab.BackgroundColor3 = Theme.BgSidebar
-        tab.TextColor3 = Theme.TextGray
+        tab.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        tab.TextColor3 = Color3.fromRGB(160, 160, 175)
     end
-    local map = {
-        Info = TabInfo,
-        Loot = TabLoot,
-        Teleport = TabTP,
-        Extra = TabExtra,
-        Save = TabSave
-    }
+    local map = {Info = TabInfo, Loot = TabLoot, Teleport = TabTP, Extra = TabExtra, Save = TabSave}
     if map[name] then
-        map[name].BackgroundColor3 = Theme.BgButtonOn
-        map[name].TextColor3 = Theme.TextWhite
+        map[name].BackgroundColor3 = Color3.fromRGB(50, 50, 62)
+        map[name].TextColor3 = Color3.fromRGB(255, 255, 255)
     end
 end
 
@@ -341,26 +472,22 @@ TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        Main.Size = UDim2.new(0, 180, 0, 32)
-        Sidebar.Visible = false
+        Main.Size = UDim2.new(0, 200, 0, 36)
+        TabBar.Visible = false
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 460)
-        Sidebar.Visible = true
+        Main.Size = UDim2.new(0, 420, 0, 380)
+        TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
     end
 end)
 
--- ==================== Functions ====================
+-- ==================== Logic (same as before) ====================
 local function Notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "tau only apple",
-            Text = tostring(msg),
-            Duration = 2.5
-        })
+        StarterGui:SetCore("SendNotification", {Title = "tau only apple", Text = tostring(msg), Duration = 2.5})
     end)
 end
 
@@ -454,19 +581,14 @@ local function pickup(obj, typ)
     local part = getBestPart(obj)
     if not part then return end
     local offsets = {
-        Vector3.new(0, 2.0, 0),
-        Vector3.new(0, 1.6, 1.5),
-        Vector3.new(0, 1.6, -1.5),
-        Vector3.new(1.5, 1.6, 0),
-        Vector3.new(-1.5, 1.6, 0),
-        Vector3.new(0, 2.8, 0),
+        Vector3.new(0, 2.0, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(0, 1.6, -1.5),
+        Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0), Vector3.new(0, 2.8, 0),
     }
     for _, offset in ipairs(offsets) do
         if not obj.Parent then break end
         hrp.CFrame = part.CFrame + offset
         task.wait(0.028)
-        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-        tryFirePrompt(prompt)
+        tryFirePrompt(obj:FindFirstChildWhichIsA("ProximityPrompt", true))
         local touch = part:FindFirstChildOfClass("TouchInterest")
         if touch then
             pcall(function()
@@ -494,21 +616,15 @@ end
 
 local function forceToShelter(silent)
     local hrp = getHRP()
-    if not hrp then
-        if not silent then Notify("No character") end
-        return
-    end
-    local targetPart = nil
+    if not hrp then if not silent then Notify("No character") end return end
+    local targetPart
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isShelter(obj) then
             local part = getBestPart(obj)
             if part then targetPart = part break end
         end
     end
-    if not targetPart then
-        if not silent then Notify("Shelter not found") end
-        return
-    end
+    if not targetPart then if not silent then Notify("Shelter not found") end return end
     hrp.CFrame = targetPart.CFrame + Vector3.new(0, 5, 0)
     if not silent then Notify("Teleported to Shelter") end
 end
@@ -517,10 +633,7 @@ local function teleportToPlayer(player)
     local hrp = getHRP()
     if not hrp then return end
     local targetChar = player.Character
-    if not targetChar then
-        Notify(player.Name .. " has no character")
-        return
-    end
+    if not targetChar then Notify(player.Name .. " has no character") return end
     local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
     if targetHRP then
         hrp.CFrame = targetHRP.CFrame + Vector3.new(0, 3, 0)
@@ -537,18 +650,18 @@ local function refreshPlayerList()
         if plr ~= LocalPlayer then
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -8, 0, 26)
-            btn.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
             btn.Text = plr.Name
-            btn.TextColor3 = Theme.TextWhite
+            btn.TextColor3 = Color3.fromRGB(240, 240, 245)
             btn.Font = Enum.Font.Gotham
             btn.TextSize = 12
             btn.Parent = PlayerListFrame
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
             btn.MouseButton1Click:Connect(function() teleportToPlayer(plr) end)
             y = y + 30
         end
     end
-    PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+    PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
 local function checkAlerts()
@@ -558,23 +671,13 @@ local function checkAlerts()
         if g:IsA("TextLabel") or g:IsA("TextButton") then
             local t = (g.Text or ""):lower()
             if (t:find("5th") or t:find("fifth") or t:find("all five")) and t:find("fragment") then
-                if not tartarusUnlocked then
-                    tartarusUnlocked = true
-                    Notify("Blood Moon complete! Tartarus unlocked")
-                end
+                if not tartarusUnlocked then tartarusUnlocked = true Notify("Blood Moon complete!") end
             elseif t:find("tartarus has been summoned") or t:find("tartarus has been awakened") then
-                if not tartarusUnlocked then
-                    tartarusUnlocked = true
-                    Notify("Tartarus unlocked on this server")
-                end
+                if not tartarusUnlocked then tartarusUnlocked = true Notify("Tartarus unlocked") end
             end
             if t:find("doomsday") then
-                if not doomsdayDetected then
-                    doomsdayDetected = true
-                    Notify("Doomsday on this server!")
-                end
-                currentMode = "Doomsday"
-                lastModeTime = tick()
+                if not doomsdayDetected then doomsdayDetected = true Notify("Doomsday!") end
+                currentMode = "Doomsday" lastModeTime = tick()
             end
             if t:find("toastnado") then currentMode = "ToastNado" lastModeTime = tick()
             elseif t:find("double trouble") then currentMode = "Double Trouble" lastModeTime = tick()
@@ -589,7 +692,6 @@ local function checkAlerts()
     if tick() - lastModeTime > 20 then currentMode = "Unknown" end
 end
 
--- God Mode
 local godConnection, healthConnection, antiFlingConnection
 local function getHumanoid()
     local char = LocalPlayer.Character
@@ -628,8 +730,7 @@ local function enableGodMode()
     antiFlingConnection = RunService.Heartbeat:Connect(function()
         if not Settings.GodMode then return end
         local hrp = getHRP()
-        if not hrp then return end
-        if hrp.AssemblyLinearVelocity.Magnitude > 80 then
+        if hrp and hrp.AssemblyLinearVelocity.Magnitude > 80 then
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
         end
@@ -648,18 +749,14 @@ local function doTornadoPull()
         if obj:IsA("BasePart") and not obj.Anchored and obj.Parent then
             if myChar and obj:IsDescendantOf(myChar) then continue end
             local dist = (obj.Position - myPos).Magnitude
-            if dist < SAFE_DISTANCE then continue end
-            if dist < TORNADO_RANGE then
-                local direction = (myPos - obj.Position).Unit
-                local strengthFactor = 1 - (dist / TORNADO_RANGE)
-                if dist < 20 then strengthFactor = strengthFactor * 0.3 end
-                local force = direction * (TORNADO_STRENGTH * strengthFactor)
-                force = force + Vector3.new(0, TORNADO_UP_FORCE * strengthFactor * 0.5, 0)
-                if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then
-                    force = force * 1.45
-                end
-                pcall(function() obj.AssemblyLinearVelocity = force end)
-            end
+            if dist < SAFE_DISTANCE or dist >= TORNADO_RANGE then continue end
+            local direction = (myPos - obj.Position).Unit
+            local strengthFactor = 1 - (dist / TORNADO_RANGE)
+            if dist < 20 then strengthFactor = strengthFactor * 0.3 end
+            local force = direction * (TORNADO_STRENGTH * strengthFactor)
+            force = force + Vector3.new(0, TORNADO_UP_FORCE * strengthFactor * 0.5, 0)
+            if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then force = force * 1.45 end
+            pcall(function() obj.AssemblyLinearVelocity = force end)
         end
     end
 end
@@ -686,9 +783,7 @@ local function doFragmentFly()
                         (math.random() - 0.5) * 2 * FRAG_FLY_SIDE
                     )
                     bv.Parent = part
-                    task.delay(1.2, function()
-                        if bv and bv.Parent then bv:Destroy() end
-                    end)
+                    task.delay(1.2, function() if bv and bv.Parent then bv:Destroy() end end)
                 end
             end
         end
@@ -701,9 +796,7 @@ local function doAntiAFK()
         VirtualUser:ClickButton2(Vector2.new())
     end)
 end
-LocalPlayer.Idled:Connect(function()
-    if Settings.AntiAFK then doAntiAFK() end
-end)
+LocalPlayer.Idled:Connect(function() if Settings.AntiAFK then doAntiAFK() end end)
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         if Settings.AntiAFK then doAntiAFK() end
@@ -715,15 +808,11 @@ workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
             knownFragments[obj] = true
-            if Settings.Enabled or Settings.FullAuto then
-                task.wait(0.1)
-                pickup(obj, "Fragment")
-            end
+            if Settings.Enabled or Settings.FullAuto then task.wait(0.1) pickup(obj, "Fragment") end
         elseif isGlasses(obj) then
             knownGlasses[obj] = true
             if (Settings.Enabled or Settings.FullAuto) and not Settings.OnlyFragments then
-                task.wait(0.1)
-                pickup(obj, "Glasses")
+                task.wait(0.1) pickup(obj, "Glasses")
             end
         end
     end)
@@ -742,97 +831,68 @@ task.spawn(function()
     refreshPlayerList()
 end)
 
--- Apply settings to all buttons
 local function applySettingsToUI()
-    if Settings.FullAuto then
-        Settings.Enabled = true
-        Settings.OnlyFragments = false
-        FullAutoBtn.Text = "★ Full Auto: ON"
-        FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
-        ToggleBtn.Text = "Auto Loot: ON"
-        ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
-        ModeBtn.Text = "Mode: Fragments + Glasses"
-        ModeBtn.BackgroundColor3 = Theme.BgButtonOn
-    else
-        FullAutoBtn.Text = "★ Full Auto: OFF"
-        FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
-        ToggleBtn.Text = Settings.Enabled and "Auto Loot: ON" or "Auto Loot: OFF"
-        ToggleBtn.BackgroundColor3 = Settings.Enabled and Theme.BgButtonOn or Theme.BgButtonOff
-        ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
-        ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
-    end
-    AntiAFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
-    AntiAFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
-    TornadoBtn.Text = Settings.TornadoPull and "Tornado Pull: ON" or "Tornado Pull: OFF"
-    TornadoBtn.BackgroundColor3 = Settings.TornadoPull and Theme.BgButtonOn or Theme.BgButtonOff
-    FragFlyBtn.Text = Settings.FragmentFly and "Fragment Fly: ON" or "Fragment Fly: OFF"
-    FragFlyBtn.BackgroundColor3 = Settings.FragmentFly and Theme.BgButtonOn or Theme.BgButtonOff
-    GodModeBtn.Text = Settings.GodMode and "God Mode: ON" or "God Mode: OFF"
-    GodModeBtn.BackgroundColor3 = Settings.GodMode and Theme.BgButtonOn or Theme.BgButtonOff
+    setToggleVisual(FullAutoTrack, FullAutoThumb, Settings.FullAuto)
+    setToggleVisual(LootTrack, LootThumb, Settings.Enabled)
+    setToggleVisual(ModeTrack, ModeThumb, Settings.OnlyFragments)
+    ModeLabelBtn.Text = Settings.OnlyFragments and "Fragments Only" or "Fragments + Glasses"
+    setToggleVisual(AFKTrack, AFKThumb, Settings.AntiAFK)
+    setToggleVisual(GodTrack, GodThumb, Settings.GodMode)
+    setToggleVisual(TornadoTrack, TornadoThumb, Settings.TornadoPull)
+    setToggleVisual(FlyTrack, FlyThumb, Settings.FragmentFly)
+    setToggleVisual(AutoSaveTrack, AutoSaveThumb, Settings.AutoSave)
+    NameBox.Text = Settings.SaveName or "default"
     if Settings.GodMode then enableGodMode() else disableGodMode() end
     updateRangeLabel()
 end
 
--- Main Loop
+-- Main loop
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
         local frags = countFrags()
         checkAlerts()
-
         StatusLabel.Text = "Status: " .. ((Settings.Enabled or Settings.FullAuto) and "Running" or "Off")
-        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(100, 200, 255) or Color3.fromRGB(255, 100, 100)
+        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto) and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
         FragLabel.Text = "Map Fragments: " .. frags
         CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
         GlassesLabel.Text = "Glasses: " .. (glassesFound and "FOUND" or "Not Found")
         ModeLabel.Text = "Mode: " .. currentMode
-
         if tartarusUnlocked or collectedFragments >= 5 then
             BloodMoonLabel.Text = "Blood Moon: UNLOCKED (5/5)"
-            BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
         else
             BloodMoonLabel.Text = "Blood Moon: Map " .. frags .. " | My " .. collectedFragments .. "/5"
-            BloodMoonLabel.TextColor3 = Theme.TextGray
+            BloodMoonLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
-
         if doomsdayDetected or currentMode == "Doomsday" then
             DoomsdayLabel.Text = "Doomsday: YES"
-            DoomsdayLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            DoomsdayLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
         else
             DoomsdayLabel.Text = "Doomsday: No"
-            DoomsdayLabel.TextColor3 = Theme.TextGray
+            DoomsdayLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
 
         if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
             cleanCache(knownFragments)
             cleanCache(knownGlasses)
-            local fragList = {}
-            local hrp = getHRP()
+            local fragList, hrp = {}, getHRP()
             local myPos = hrp and hrp.Position or Vector3.zero
             for obj in pairs(knownFragments) do
                 if obj and obj.Parent then
                     local part = getBestPart(obj)
-                    if part then
-                        table.insert(fragList, {obj = obj, dist = (part.Position - myPos).Magnitude})
-                    end
+                    if part then table.insert(fragList, {obj = obj, dist = (part.Position - myPos).Magnitude}) end
                 end
             end
             table.sort(fragList, function(a, b) return a.dist < b.dist end)
-            for _, data in ipairs(fragList) do
-                pickup(data.obj, "Fragment")
-                task.wait(0.07)
-            end
+            for _, data in ipairs(fragList) do pickup(data.obj, "Fragment") task.wait(0.07) end
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
-                    if obj and obj.Parent then
-                        pickup(obj, "Glasses")
-                        task.wait(0.07)
-                    end
+                    if obj and obj.Parent then pickup(obj, "Glasses") task.wait(0.07) end
                 end
             end
         end
-
         if Settings.FullAuto and (now - lastShelterTP) >= SHELTER_TP_INTERVAL then
             lastShelterTP = now
             forceToShelter(true)
@@ -843,118 +903,93 @@ task.spawn(function()
     end
 end)
 
--- Buttons
-FullAutoBtn.MouseButton1Click:Connect(function()
+-- Toggle clicks
+FullAutoTrack.MouseButton1Click:Connect(function()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
         Settings.Enabled = true
         Settings.OnlyFragments = false
-        FullAutoBtn.Text = "★ Full Auto: ON"
-        FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
-        ToggleBtn.Text = "Auto Loot: ON"
-        ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
-        ModeBtn.Text = "Mode: Fragments + Glasses"
-        ModeBtn.BackgroundColor3 = Theme.BgButtonOn
         forceToShelter(false)
         lastShelterTP = tick()
         Notify("Full Auto ON")
     else
         Settings.Enabled = false
-        FullAutoBtn.Text = "★ Full Auto: OFF"
-        FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
-        ToggleBtn.Text = "Auto Loot: OFF"
-        ToggleBtn.BackgroundColor3 = Theme.BgButtonOff
-        ModeBtn.Text = "Mode: Fragments Only"
-        ModeBtn.BackgroundColor3 = Theme.BgButtonOff
         Notify("Full Auto OFF")
     end
+    applySettingsToUI()
     saveSettings()
 end)
 
-ToggleBtn.MouseButton1Click:Connect(function()
+LootTrack.MouseButton1Click:Connect(function()
     Settings.Enabled = not Settings.Enabled
-    ToggleBtn.Text = Settings.Enabled and "Auto Loot: ON" or "Auto Loot: OFF"
-    ToggleBtn.BackgroundColor3 = Settings.Enabled and Theme.BgButtonOn or Theme.BgButtonOff
+    applySettingsToUI()
     saveSettings()
 end)
 
-ModeBtn.MouseButton1Click:Connect(function()
+ModeTrack.MouseButton1Click:Connect(function()
     Settings.OnlyFragments = not Settings.OnlyFragments
-    ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
-    ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
+    applySettingsToUI()
     saveSettings()
 end)
 
-GodModeBtn.MouseButton1Click:Connect(function()
-    Settings.GodMode = not Settings.GodMode
-    GodModeBtn.Text = Settings.GodMode and "God Mode: ON" or "God Mode: OFF"
-    GodModeBtn.BackgroundColor3 = Settings.GodMode and Theme.BgButtonOn or Theme.BgButtonOff
-    if Settings.GodMode then enableGodMode() Notify("God Mode ON")
-    else disableGodMode() Notify("God Mode OFF") end
-    saveSettings()
-end)
-
-TornadoBtn.MouseButton1Click:Connect(function()
-    Settings.TornadoPull = not Settings.TornadoPull
-    TornadoBtn.Text = Settings.TornadoPull and "Tornado Pull: ON" or "Tornado Pull: OFF"
-    TornadoBtn.BackgroundColor3 = Settings.TornadoPull and Theme.BgButtonOn or Theme.BgButtonOff
-    saveSettings()
-end)
-
-FragFlyBtn.MouseButton1Click:Connect(function()
-    Settings.FragmentFly = not Settings.FragmentFly
-    FragFlyBtn.Text = Settings.FragmentFly and "Fragment Fly: ON" or "Fragment Fly: OFF"
-    FragFlyBtn.BackgroundColor3 = Settings.FragmentFly and Theme.BgButtonOn or Theme.BgButtonOff
-    Notify(Settings.FragmentFly and "Fragment Fly ON" or "Fragment Fly OFF")
-    saveSettings()
-end)
-
-AntiAFKBtn.MouseButton1Click:Connect(function()
+AFKTrack.MouseButton1Click:Connect(function()
     Settings.AntiAFK = not Settings.AntiAFK
-    AntiAFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
-    AntiAFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
+    applySettingsToUI()
     saveSettings()
 end)
 
-RangeDownBtn.MouseButton1Click:Connect(function()
-    TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
-    updateRangeLabel()
-    saveSettings()
-end)
-RangeUpBtn.MouseButton1Click:Connect(function()
-    TORNADO_RANGE = math.min(MAX_RANGE, TORNADO_RANGE + RANGE_STEP)
-    updateRangeLabel()
-    saveSettings()
-end)
-RangeResetBtn.MouseButton1Click:Connect(function()
-    TORNADO_RANGE = 80
-    updateRangeLabel()
+GodTrack.MouseButton1Click:Connect(function()
+    Settings.GodMode = not Settings.GodMode
+    if Settings.GodMode then enableGodMode() else disableGodMode() end
+    applySettingsToUI()
     saveSettings()
 end)
 
-ForceShelterBtn.MouseButton1Click:Connect(function() forceToShelter(false) end)
-RefreshPlayersBtn.MouseButton1Click:Connect(function()
-    refreshPlayerList()
-    Notify("Player list refreshed")
+TornadoTrack.MouseButton1Click:Connect(function()
+    Settings.TornadoPull = not Settings.TornadoPull
+    applySettingsToUI()
+    saveSettings()
 end)
 
--- 储存 Page buttons
-SaveBtn.MouseButton1Click:Connect(function()
+FlyTrack.MouseButton1Click:Connect(function()
+    Settings.FragmentFly = not Settings.FragmentFly
+    applySettingsToUI()
     saveSettings()
-    SaveStatusLabel.Text = "Status: Saved"
+end)
+
+AutoSaveTrack.MouseButton1Click:Connect(function()
+    Settings.AutoSave = not Settings.AutoSave
+    applySettingsToUI()
+    saveSettings(true)
+    Notify(Settings.AutoSave and "Auto Save ON" or "Auto Save OFF")
+end)
+
+NameBox.FocusLost:Connect(function()
+    local t = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if t == "" then t = "default" end
+    Settings.SaveName = t
+    NameBox.Text = t
+    saveSettings(true)
+end)
+
+SaveNowBtn.MouseButton1Click:Connect(function()
+    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
+    saveSettings(true)
+    SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
     SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 220, 120)
-    Notify("Settings saved")
+    Notify("Saved: " .. Settings.SaveName)
 end)
 
 LoadBtn.MouseButton1Click:Connect(function()
+    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     loadSettings()
     applySettingsToUI()
-    SaveStatusLabel.Text = "Status: Loaded"
+    SaveStatusLabel.Text = "Status: Loaded [" .. Settings.SaveName .. "]"
     SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
-    Notify("Settings loaded")
+    Notify("Loaded: " .. Settings.SaveName)
 end)
 
-ResetSaveBtn.MouseButton1Click:Connect(function()
+ResetBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = false
     Settings.OnlyFragments = true
     Settings.FullAuto = false
@@ -962,16 +997,39 @@ ResetSaveBtn.MouseButton1Click:Connect(function()
     Settings.TornadoPull = false
     Settings.GodMode = false
     Settings.FragmentFly = false
+    Settings.AutoSave = true
     TORNADO_RANGE = 80
     applySettingsToUI()
-    saveSettings()
-    SaveStatusLabel.Text = "Status: Reset to default"
+    saveSettings(true)
+    SaveStatusLabel.Text = "Status: Reset"
     SaveStatusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
-    Notify("Settings reset")
+    Notify("Reset to default")
+end)
+
+RangeDown.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
+    updateRangeLabel()
+    saveSettings()
+end)
+RangeUp.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = math.min(MAX_RANGE, TORNADO_RANGE + RANGE_STEP)
+    updateRangeLabel()
+    saveSettings()
+end)
+RangeReset.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = 80
+    updateRangeLabel()
+    saveSettings()
+end)
+
+ShelterBtn.MouseButton1Click:Connect(function() forceToShelter(false) end)
+RefreshBtn.MouseButton1Click:Connect(function()
+    refreshPlayerList()
+    Notify("Player list refreshed")
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
-    saveSettings()
+    saveSettings(true)
     ScreenGui:Destroy()
 end)
 
@@ -996,9 +1054,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Load on start
 loadSettings()
 applySettingsToUI()
-
-Notify("Full version loaded")
-print("tau only apple - Full (Save Page + Fragment Fly + Alerts)")
+Notify("Modern UI loaded")
+print("tau only apple - Modern UI Full")
