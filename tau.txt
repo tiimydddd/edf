@@ -1,4 +1,4 @@
--- tau only apple - ControlRoom Lock + Multi-Fragment Fixed
+-- tau only apple - Clean Version (ControlRoom button in Teleport tab)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -11,9 +11,7 @@ local PLACE_ID = 2313058949
 local Settings = {
     Enabled = false,
     OnlyFragments = true,
-    AutoGoShelter = false,      -- 现在这个会直接锁控制室
     FullAuto = false,
-    LockControlRoom = false,    -- 新增：强制锁定控制室（防踢）
 }
 
 local FragmentNames = {
@@ -24,7 +22,6 @@ local GlassesNames = {
     "Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜",
     "Mysterious Shades", "Shades", "Glasses", "眼镜", "墨镜"
 }
-local ShelterNames = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所"}
 local ControlRoomNames = {"ControlRoom", "Control Room", "Camera", "Cameras", "观看", "旁观", "Monitor", "Screen", "控制室", "Spectator", "View"}
 local BloodAltarKeywords = {"blood", "moon", "altar", "tartarus", "fragment", "血月", "祭坛"}
 local DoomsdayAltarKeywords = {"doomsday", "doom", "altar", "末日", "祭坛"}
@@ -33,13 +30,9 @@ local collectedFragments = 0
 local glassesFound = false
 local knownFragments = {}
 local knownGlasses = {}
-local knownShelters = {}
-local knownControlRooms = {}
 local lastScan = 0
-local lastShelterCheck = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.4
-local SHELTER_CHECK_INTERVAL = 1.8
 local recentlyTried = {}
 local TRIED_COOLDOWN = 2.8
 
@@ -211,18 +204,17 @@ local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
 local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
-local AutoShelterBtn = makeToggle(PageLoot, "锁控制室 (防踢): OFF", 110, false)  -- 改名
-local ForceShelterBtn = makeToggle(PageLoot, "强制进控制室", 144, false)
 
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
 local TPBloodBtn = makeToggle(PageTP, "血月祭坛前", 46, false)
 local TPDoomBtn = makeToggle(PageTP, "末日祭坛前", 82, false)
-local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 118)
+local ForceShelterBtn = makeToggle(PageTP, "强制进控制室 (点一次)", 118, false)  -- 已移到这里
+local TPPlayerLabel = makeLabel(PageTP, "传送到玩家:", 156)
 
 local PlayerListFrame = Instance.new("ScrollingFrame")
-PlayerListFrame.Size = UDim2.new(1, -20, 0, 120)
-PlayerListFrame.Position = UDim2.new(0, 10, 0, 140)
+PlayerListFrame.Size = UDim2.new(1, -20, 0, 100)
+PlayerListFrame.Position = UDim2.new(0, 10, 0, 178)
 PlayerListFrame.BackgroundColor3 = Color3.fromRGB(28, 34, 48)
 PlayerListFrame.BorderSizePixel = 0
 PlayerListFrame.ScrollBarThickness = 4
@@ -235,7 +227,7 @@ PlayerListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 PlayerListLayout.Padding = UDim.new(0, 4)
 PlayerListLayout.Parent = PlayerListFrame
 
-local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 268, false)
+local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 288, false)
 
 local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
@@ -301,9 +293,7 @@ local function isFragment(obj)
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(FragmentNames) do
         if n:find(v:lower()) then
-            if obj.Parent and isFragment(obj.Parent) then
-                return false
-            end
+            if obj.Parent and isFragment(obj.Parent) then return false end
             return true
         end
     end
@@ -315,19 +305,9 @@ local function isGlasses(obj)
     local n = (obj.Name or ""):lower()
     for _, v in ipairs(GlassesNames) do
         if n:find(v:lower()) then
-            if obj.Parent and isGlasses(obj.Parent) then
-                return false
-            end
+            if obj.Parent and isGlasses(obj.Parent) then return false end
             return true
         end
-    end
-    return false
-end
-
-local function isShelter(obj)
-    local n = obj.Name:lower()
-    for _, v in ipairs(ShelterNames) do
-        if n:find(v:lower()) then return true end
     end
     return false
 end
@@ -365,16 +345,10 @@ end
 
 local function getBestPart(obj)
     if obj:IsA("BasePart") then return obj end
-
     local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt and prompt.Parent:IsA("BasePart") then
-        return prompt.Parent
-    end
+    if prompt and prompt.Parent:IsA("BasePart") then return prompt.Parent end
     local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
-    if click and click.Parent:IsA("BasePart") then
-        return click.Parent
-    end
-
+    if click and click.Parent:IsA("BasePart") then return click.Parent end
     local prefer = {"Handle", "Head", "Main", "Part", "MeshPart", "Union", "Primary"}
     for _, name in ipairs(prefer) do
         local p = obj:FindFirstChild(name, true)
@@ -396,16 +370,12 @@ end
 
 local function pickup(obj, typ)
     if not obj or not obj.Parent then return end
-
     local key = tostring(obj)
-    if recentlyTried[key] and tick() - recentlyTried[key] < TRIED_COOLDOWN then
-        return
-    end
+    if recentlyTried[key] and tick() - recentlyTried[key] < TRIED_COOLDOWN then return end
     recentlyTried[key] = tick()
 
     local hrp = getHRP()
     if not hrp then return end
-
     local part = getBestPart(obj)
     if not part then return end
 
@@ -416,46 +386,28 @@ local function pickup(obj, typ)
         Vector3.new(1.8, 1.8, 0),
         Vector3.new(-1.8, 1.8, 0),
         Vector3.new(0, 3.2, 0),
-        Vector3.new(1.2, 2.5, 1.2),
-        Vector3.new(-1.2, 2.5, -1.2),
     }
 
-    for round = 1, 2 do
-        for _, offset in ipairs(offsets) do
-            if not obj.Parent then break end
-            hrp.CFrame = part.CFrame + offset
-            task.wait(0.035)
+    for _, offset in ipairs(offsets) do
+        if not obj.Parent then break end
+        hrp.CFrame = part.CFrame + offset
+        task.wait(0.035)
 
-            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-            tryFirePrompt(prompt)
+        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        tryFirePrompt(prompt)
 
-            local touchPart = part
-            local touch = touchPart:FindFirstChildOfClass("TouchInterest")
-            if not touch then
-                for _, p in ipairs(obj:GetDescendants()) do
-                    if p:IsA("BasePart") and p:FindFirstChildOfClass("TouchInterest") then
-                        touchPart = p
-                        touch = p:FindFirstChildOfClass("TouchInterest")
-                        break
-                    end
-                end
-            end
-            if touch then
-                pcall(function()
-                    firetouchinterest(hrp, touchPart, 0)
-                    task.wait(0.025)
-                    firetouchinterest(hrp, touchPart, 1)
-                end)
-            end
-
-            local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
-            if click then
-                pcall(fireclickdetector, click)
-            end
-
-            task.wait(0.045)
+        local touch = part:FindFirstChildOfClass("TouchInterest")
+        if touch then
+            pcall(function()
+                firetouchinterest(hrp, part, 0)
+                task.wait(0.025)
+                firetouchinterest(hrp, part, 1)
+            end)
         end
-        task.wait(0.08)
+
+        local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
+        if click then pcall(fireclickdetector, click) end
+        task.wait(0.04)
     end
 
     task.delay(0.7, function()
@@ -471,85 +423,53 @@ local function pickup(obj, typ)
     end)
 end
 
--- ★ 核心：直接找控制室并传送 + 触发观看
-local function getControlRoomTargets()
-    local targets = {}
+local function forceToControlRoom()
+    local hrp = getHRP()
+    if not hrp then
+        Notify("没有角色")
+        return
+    end
+
+    local bestPart = nil
+    local bestScore = -1
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isControlRoom(obj) then
             local part = getBestPart(obj)
             if part then
-                table.insert(targets, {part = part, obj = obj})
-            end
-        end
-    end
-    return targets
-end
-
-local function forceToControlRoom(silent)
-    local hrp = getHRP()
-    if not hrp then
-        if not silent then Notify("没有角色") end
-        return false
-    end
-
-    local targets = getControlRoomTargets()
-    if #targets == 0 then
-        if not silent then Notify("没找到控制室") end
-        return false
-    end
-
-    local offsets = {
-        Vector3.new(0, 2.5, 0),
-        Vector3.new(0, 2, 3),
-        Vector3.new(0, 2, -3),
-        Vector3.new(3, 2, 0),
-        Vector3.new(-3, 2, 0),
-        Vector3.new(0, 3.5, 0),
-        Vector3.new(2, 2.5, 2),
-        Vector3.new(-2, 2.5, -2),
-    }
-
-    for _, data in ipairs(targets) do
-        local part = data.part
-        for _, offset in ipairs(offsets) do
-            hrp.CFrame = part.CFrame + offset
-            task.wait(0.05)
-
-            -- 强制触发观看/旁观 Prompt
-            local parent = part.Parent or data.obj
-            if parent then
-                for _, child in ipairs(parent:GetDescendants()) do
-                    if child:IsA("ProximityPrompt") then
-                        local text = ((child.ActionText or "") .. (child.ObjectText or "")):lower()
-                        if text:find("观看") or text:find("旁观") or text:find("spectat") or text:find("camera") or text:find("view") or text:find("monitor") or text:find("interact") then
-                            tryFirePrompt(child)
-                        end
-                    end
+                local score = 1
+                if obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                    score = score + 5
                 end
-                -- 也直接 fire 所有 Prompt（保底）
-                for _, child in ipairs(parent:GetDescendants()) do
-                    if child:IsA("ProximityPrompt") then
-                        tryFirePrompt(child)
-                    end
+                if score > bestScore then
+                    bestScore = score
+                    bestPart = part
                 end
             end
         end
     end
 
-    if not silent then
-        Notify("已强制进入控制室")
+    if not bestPart then
+        Notify("没找到控制室")
+        return
     end
-    return true
-end
 
--- 持续锁定控制室（防踢核心）
-local function startControlRoomLock()
-    task.spawn(function()
-        while Settings.LockControlRoom or Settings.AutoGoShelter or Settings.FullAuto do
-            forceToControlRoom(true)  -- 静默持续传送
-            task.wait(1.6)            -- 每隔1.6秒重新锁一次，防止被踢
+    hrp.CFrame = bestPart.CFrame + Vector3.new(0, 3, 0)
+    task.wait(0.1)
+
+    local parent = bestPart.Parent
+    if parent then
+        for _, child in ipairs(parent:GetDescendants()) do
+            if child:IsA("ProximityPrompt") then
+                local text = ((child.ActionText or "") .. (child.ObjectText or "")):lower()
+                if text:find("观看") or text:find("旁观") or text:find("spectat") or text:find("camera") or text:find("view") or text:find("monitor") then
+                    tryFirePrompt(child)
+                end
+            end
         end
-    end)
+    end
+
+    Notify("已传送到控制室（仅一次）")
 end
 
 local function teleportToKeyword(keywords, label)
@@ -558,7 +478,6 @@ local function teleportToKeyword(keywords, label)
         Notify("没有角色")
         return
     end
-
     for _, obj in ipairs(workspace:GetDescendants()) do
         if matchKeywords(obj, keywords) then
             local part = getBestPart(obj)
@@ -593,7 +512,6 @@ local function refreshPlayerList()
             child:Destroy()
         end
     end
-
     local y = 0
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
@@ -606,7 +524,6 @@ local function refreshPlayerList()
             btn.TextSize = 12
             btn.Parent = PlayerListFrame
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-
             btn.MouseButton1Click:Connect(function()
                 teleportToPlayer(plr)
             end)
@@ -630,10 +547,6 @@ workspace.DescendantAdded:Connect(function(obj)
                 task.wait(0.15)
                 pickup(obj, "Glasses")
             end
-        elseif isShelter(obj) then
-            knownShelters[obj] = true
-        elseif isControlRoom(obj) then
-            knownControlRooms[obj] = true
         end
     end)
 end)
@@ -641,8 +554,6 @@ end)
 workspace.DescendantRemoving:Connect(function(obj)
     knownFragments[obj] = nil
     knownGlasses[obj] = nil
-    knownShelters[obj] = nil
-    knownControlRooms[obj] = nil
 end)
 
 task.spawn(function()
@@ -650,8 +561,6 @@ task.spawn(function()
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isFragment(obj) then knownFragments[obj] = true end
         if isGlasses(obj) then knownGlasses[obj] = true end
-        if isShelter(obj) then knownShelters[obj] = true end
-        if isControlRoom(obj) then knownControlRooms[obj] = true end
     end
     refreshPlayerList()
 end)
@@ -698,12 +607,6 @@ task.spawn(function()
             end
         end
 
-        -- 自动锁控制室
-        if (Settings.AutoGoShelter or Settings.FullAuto or Settings.LockControlRoom) and (now - lastShelterCheck) >= SHELTER_CHECK_INTERVAL then
-            lastShelterCheck = now
-            forceToControlRoom(true)
-        end
-
         task.wait(0.22)
     end
 end)
@@ -714,32 +617,21 @@ FullAutoBtn.MouseButton1Click:Connect(function()
     if Settings.FullAuto then
         Settings.Enabled = true
         Settings.OnlyFragments = false
-        Settings.AutoGoShelter = true
-        Settings.LockControlRoom = true
-
         FullAutoBtn.Text = "★ Full Auto: ON"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
         ToggleBtn.Text = "Auto Loot: ON"
         ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
         ModeBtn.Text = "Mode: Fragments + Glasses"
         ModeBtn.BackgroundColor3 = Theme.BgButtonOn
-        AutoShelterBtn.Text = "锁控制室 (防踢): ON"
-        AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-        Notify("Full Auto ON（已锁控制室）")
-        startControlRoomLock()
+        Notify("Full Auto ON")
     else
         Settings.Enabled = false
-        Settings.AutoGoShelter = false
-        Settings.LockControlRoom = false
-
         FullAutoBtn.Text = "★ Full Auto: OFF"
         FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
         ToggleBtn.Text = "Auto Loot: OFF"
         ToggleBtn.BackgroundColor3 = Theme.BgButtonOff
         ModeBtn.Text = "Mode: Fragments Only"
         ModeBtn.BackgroundColor3 = Theme.BgButtonOff
-        AutoShelterBtn.Text = "锁控制室 (防踢): OFF"
-        AutoShelterBtn.BackgroundColor3 = Theme.BgButtonOff
         Notify("Full Auto OFF")
     end
 end)
@@ -756,26 +648,9 @@ ModeBtn.MouseButton1Click:Connect(function()
     ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
 end)
 
--- 锁控制室按钮（防踢）
-AutoShelterBtn.MouseButton1Click:Connect(function()
-    Settings.LockControlRoom = not Settings.LockControlRoom
-    Settings.AutoGoShelter = Settings.LockControlRoom
-    AutoShelterBtn.Text = Settings.LockControlRoom and "锁控制室 (防踢): ON" or "锁控制室 (防踢): OFF"
-    AutoShelterBtn.BackgroundColor3 = Settings.LockControlRoom and Theme.BgButtonOn or Theme.BgButtonOff
-
-    if Settings.LockControlRoom then
-        Notify("已开启控制室锁定（防踢）")
-        forceToControlRoom(false)
-        startControlRoomLock()
-    else
-        Notify("已关闭控制室锁定")
-    end
-end)
-
--- 强制进控制室按钮（点一下就传送一次）
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
-    forceToControlRoom(false)
+    forceToControlRoom()
     task.delay(1.2, function()
         if ForceShelterBtn then
             ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOff
@@ -825,5 +700,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("tau only apple loaded (ControlRoom Lock)")
-print("tau only apple - ControlRoom Lock + Anti Kick")
+Notify("tau only apple loaded (Clean)")
+print("tau only apple - ControlRoom button moved to Teleport")
