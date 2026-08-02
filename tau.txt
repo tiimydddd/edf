@@ -1,5 +1,5 @@
 -- tau only apple - Full Version
--- No Rejoin/Hop | Blood Moon & Doomsday Alert | Save Settings | Fragment Fly
+-- Save Page | Fragment Fly | Blood Moon/Doomsday Alert | No Hop | Auto Save
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -120,8 +120,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 450)
-Main.Position = UDim2.new(0, 25, 0.12, 0)
+Main.Size = UDim2.new(0, 380, 0, 460)
+Main.Position = UDim2.new(0, 25, 0.1, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -214,6 +214,7 @@ local TabInfo = makeTab("Info", "Info", 8)
 local TabLoot = makeTab("Loot", "Loot", 42)
 local TabTP = makeTab("Teleport", "Teleport", 76)
 local TabExtra = makeTab("Extra", "Extra", 110)
+local TabSave = makeTab("Save", "储存", 144)
 
 local Pages = {}
 local function createPage(name)
@@ -271,7 +272,7 @@ local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
 local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
 
--- Teleport (no hop)
+-- Teleport
 local PageTP = createPage("Teleport")
 local ForceShelterBtn = makeToggle(PageTP, "Teleport to Shelter", 10, false)
 local TPPlayerLabel = makeLabel(PageTP, "Teleport to Player:", 50)
@@ -298,17 +299,33 @@ local RangeDownBtn = makeToggle(PageExtra, "Range -20", 172, false)
 local RangeUpBtn = makeToggle(PageExtra, "Range +20", 206, false)
 local RangeResetBtn = makeToggle(PageExtra, "Reset Range (80)", 240, false)
 
+-- 储存 Page
+local PageSave = createPage("Save")
+local SaveInfoLabel = makeLabel(PageSave, "Settings auto-save when changed.", 12)
+local SaveBtn = makeToggle(PageSave, "Save Settings Now", 40, false)
+local LoadBtn = makeToggle(PageSave, "Load Settings", 78, false)
+local ResetSaveBtn = makeToggle(PageSave, "Reset to Default", 116, false)
+local SaveStatusLabel = makeLabel(PageSave, "Status: Ready", 160)
+
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
 TabInfo.TextColor3 = Theme.TextWhite
 
 local function switchTab(name)
-    for n, page in pairs(Pages) do page.Visible = (n == name) end
-    for _, tab in pairs({TabInfo, TabLoot, TabTP, TabExtra}) do
+    for n, page in pairs(Pages) do
+        page.Visible = (n == name)
+    end
+    for _, tab in pairs({TabInfo, TabLoot, TabTP, TabExtra, TabSave}) do
         tab.BackgroundColor3 = Theme.BgSidebar
         tab.TextColor3 = Theme.TextGray
     end
-    local map = {Info = TabInfo, Loot = TabLoot, Teleport = TabTP, Extra = TabExtra}
+    local map = {
+        Info = TabInfo,
+        Loot = TabLoot,
+        Teleport = TabTP,
+        Extra = TabExtra,
+        Save = TabSave
+    }
     if map[name] then
         map[name].BackgroundColor3 = Theme.BgButtonOn
         map[name].TextColor3 = Theme.TextWhite
@@ -319,6 +336,7 @@ TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
 TabLoot.MouseButton1Click:Connect(function() switchTab("Loot") end)
 TabTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
+TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
 
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
@@ -328,7 +346,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 450)
+        Main.Size = UDim2.new(0, 380, 0, 460)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -724,6 +742,37 @@ task.spawn(function()
     refreshPlayerList()
 end)
 
+-- Apply settings to all buttons
+local function applySettingsToUI()
+    if Settings.FullAuto then
+        Settings.Enabled = true
+        Settings.OnlyFragments = false
+        FullAutoBtn.Text = "★ Full Auto: ON"
+        FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
+        ToggleBtn.Text = "Auto Loot: ON"
+        ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
+        ModeBtn.Text = "Mode: Fragments + Glasses"
+        ModeBtn.BackgroundColor3 = Theme.BgButtonOn
+    else
+        FullAutoBtn.Text = "★ Full Auto: OFF"
+        FullAutoBtn.BackgroundColor3 = Theme.BgButtonOff
+        ToggleBtn.Text = Settings.Enabled and "Auto Loot: ON" or "Auto Loot: OFF"
+        ToggleBtn.BackgroundColor3 = Settings.Enabled and Theme.BgButtonOn or Theme.BgButtonOff
+        ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
+        ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
+    end
+    AntiAFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
+    AntiAFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
+    TornadoBtn.Text = Settings.TornadoPull and "Tornado Pull: ON" or "Tornado Pull: OFF"
+    TornadoBtn.BackgroundColor3 = Settings.TornadoPull and Theme.BgButtonOn or Theme.BgButtonOff
+    FragFlyBtn.Text = Settings.FragmentFly and "Fragment Fly: ON" or "Fragment Fly: OFF"
+    FragFlyBtn.BackgroundColor3 = Settings.FragmentFly and Theme.BgButtonOn or Theme.BgButtonOff
+    GodModeBtn.Text = Settings.GodMode and "God Mode: ON" or "God Mode: OFF"
+    GodModeBtn.BackgroundColor3 = Settings.GodMode and Theme.BgButtonOn or Theme.BgButtonOff
+    if Settings.GodMode then enableGodMode() else disableGodMode() end
+    updateRangeLabel()
+end
+
 -- Main Loop
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
@@ -889,6 +938,38 @@ RefreshPlayersBtn.MouseButton1Click:Connect(function()
     Notify("Player list refreshed")
 end)
 
+-- 储存 Page buttons
+SaveBtn.MouseButton1Click:Connect(function()
+    saveSettings()
+    SaveStatusLabel.Text = "Status: Saved"
+    SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 220, 120)
+    Notify("Settings saved")
+end)
+
+LoadBtn.MouseButton1Click:Connect(function()
+    loadSettings()
+    applySettingsToUI()
+    SaveStatusLabel.Text = "Status: Loaded"
+    SaveStatusLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+    Notify("Settings loaded")
+end)
+
+ResetSaveBtn.MouseButton1Click:Connect(function()
+    Settings.Enabled = false
+    Settings.OnlyFragments = true
+    Settings.FullAuto = false
+    Settings.AntiAFK = true
+    Settings.TornadoPull = false
+    Settings.GodMode = false
+    Settings.FragmentFly = false
+    TORNADO_RANGE = 80
+    applySettingsToUI()
+    saveSettings()
+    SaveStatusLabel.Text = "Status: Reset to default"
+    SaveStatusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
+    Notify("Settings reset")
+end)
+
 CloseBtn.MouseButton1Click:Connect(function()
     saveSettings()
     ScreenGui:Destroy()
@@ -915,33 +996,9 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Load saved settings and apply UI
+-- Load on start
 loadSettings()
-if Settings.FullAuto then
-    Settings.Enabled = true
-    Settings.OnlyFragments = false
-    FullAutoBtn.Text = "★ Full Auto: ON"
-    FullAutoBtn.BackgroundColor3 = Theme.BgButtonFull
-    ToggleBtn.Text = "Auto Loot: ON"
-    ToggleBtn.BackgroundColor3 = Theme.BgButtonOn
-    ModeBtn.Text = "Mode: Fragments + Glasses"
-    ModeBtn.BackgroundColor3 = Theme.BgButtonOn
-else
-    ToggleBtn.Text = Settings.Enabled and "Auto Loot: ON" or "Auto Loot: OFF"
-    ToggleBtn.BackgroundColor3 = Settings.Enabled and Theme.BgButtonOn or Theme.BgButtonOff
-    ModeBtn.Text = Settings.OnlyFragments and "Mode: Fragments Only" or "Mode: Fragments + Glasses"
-    ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
-end
-AntiAFKBtn.Text = Settings.AntiAFK and "Anti-AFK: ON" or "Anti-AFK: OFF"
-AntiAFKBtn.BackgroundColor3 = Settings.AntiAFK and Theme.BgButtonOn or Theme.BgButtonOff
-TornadoBtn.Text = Settings.TornadoPull and "Tornado Pull: ON" or "Tornado Pull: OFF"
-TornadoBtn.BackgroundColor3 = Settings.TornadoPull and Theme.BgButtonOn or Theme.BgButtonOff
-FragFlyBtn.Text = Settings.FragmentFly and "Fragment Fly: ON" or "Fragment Fly: OFF"
-FragFlyBtn.BackgroundColor3 = Settings.FragmentFly and Theme.BgButtonOn or Theme.BgButtonOff
-GodModeBtn.Text = Settings.GodMode and "God Mode: ON" or "God Mode: OFF"
-GodModeBtn.BackgroundColor3 = Settings.GodMode and Theme.BgButtonOn or Theme.BgButtonOff
-if Settings.GodMode then enableGodMode() end
-updateRangeLabel()
+applySettingsToUI()
 
 Notify("Full version loaded")
-print("tau only apple - Full (Save + Fragment Fly + Alerts, No Hop)")
+print("tau only apple - Full (Save Page + Fragment Fly + Alerts)")
