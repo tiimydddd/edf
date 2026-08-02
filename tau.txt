@@ -1,9 +1,9 @@
--- tau only apple - Full Clean
--- Spectate + Chad buttons | No Angel | No ClickPull | Mode Current/Next | Save
+-- tau only apple - Complete Full
+-- Workspace loot scan (all official loot) | UI CoreGui/PlayerGui fallback
+-- Spectate + Chad | No Angel | No ClickPull | Current/Next mode | Save
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
@@ -22,15 +22,28 @@ local Settings = {
     SaveName = "default",
 }
 
-local FragmentNames = {
-    "Blood Moon Fragment",
-    "BloodMoonFragment",
-    "血月碎片",
+-- Official map loot names (wiki Loot System)
+local LOOT_TYPES = {
+    { key = "Fragment",  names = { "Blood Moon Fragment", "BloodMoonFragment", "血月碎片" } },
+    { key = "Glasses",   names = { "Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜" } },
+    { key = "Key",       names = { "Shelter Key", "ShelterKey", "避难所钥匙" } },
+    { key = "Ext",       names = { "Fire Extinguisher", "Extinguisher", "灭火器" } },
+    { key = "Bat",       names = { "Baseball Bat", "BaseballBat", "棒球棒" } },
+    { key = "EvilDucky", names = { "Evil Ducky", "EvilDucky" } },
+    { key = "RubberDucky", names = { "Rubber Ducky", "RubberDucky" } },
+    { key = "Axe",       names = { "Axe", "Ax" } },
+    { key = "Sword",     names = { "Sword" } },
+    { key = "Illumina",  names = { "Illumina" } },
+    { key = "FearSign",  names = { "Fear Sign", "FearSign" } },
+    { key = "TeamYin",   names = { "Team Yin", "TeamYin" } },
+    { key = "TeamYang",  names = { "Team Yang", "TeamYang" } },
+    { key = "Idol",      names = { "Idol" } },
+    { key = "CursedIdol", names = { "Cursed Idol", "CursedIdol" } },
+    { key = "AncientText", names = { "Ancient Text", "Ancient Text Books", "Ancient Textbook" } },
 }
-local GlassesNames = {
-    "Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "神秘眼镜",
-    "Mysterious Shades", "Shades", "眼镜", "墨镜",
-}
+
+local FragmentNames = LOOT_TYPES[1].names
+local GlassesNames = LOOT_TYPES[2].names
 local ShelterNames = {
     "Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor",
     "Entrance", "避难所", "ControlRoom", "Control Room",
@@ -41,9 +54,11 @@ local glassesFound = false
 local knownFragments = {}
 local knownGlasses = {}
 local lastScan = 0
+local lastLootScan = 0
 local lastShelterTP = 0
 local isMinimized = false
 local SCAN_INTERVAL = 0.25
+local LOOT_SCAN_INTERVAL = 1.25
 local SHELTER_TP_INTERVAL = 25
 local TRIED_COOLDOWN = 1.6
 local TORNADO_RANGE = 80
@@ -63,6 +78,7 @@ local currentMode = "Unknown"
 local nextMode = "Unknown"
 local lastModeTime = 0
 local MODE_TIMEOUT = 14
+local mapLootCounts = {}
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -112,16 +128,37 @@ local function loadSettings()
     if lines[10] then Settings.SaveName = lines[10] end
 end
 
--- ==================== UI ====================
+-- ==================== UI parent fallback ====================
+local function getGuiParent()
+    local ok, core = pcall(function() return game:GetService("CoreGui") end)
+    if ok and core then
+        local test = Instance.new("Folder")
+        local ok2 = pcall(function() test.Parent = core end)
+        if ok2 then
+            test:Destroy()
+            return core
+        end
+        test:Destroy()
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local guiParent = getGuiParent()
+pcall(function()
+    local old = guiParent:FindFirstChild("tau_only_apple")
+    if old then old:Destroy() end
+end)
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "tau_only_apple"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = CoreGui
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = guiParent
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 430, 0, 430)
-Main.Position = UDim2.new(0, 40, 0.08, 0)
+Main.Size = UDim2.new(0, 440, 0, 460)
+Main.Position = UDim2.new(0, 30, 0.06, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -219,7 +256,7 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 400)
+    page.CanvasSize = UDim2.new(0, 0, 0, 520)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -239,7 +276,7 @@ end
 
 local function makeLabel(parent, text, y, color)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -20, 0, 18)
+    l.Size = UDim2.new(1, -20, 0, 16)
     l.Position = UDim2.new(0, 12, 0, y)
     l.BackgroundTransparency = 1
     l.Text = text
@@ -253,7 +290,7 @@ end
 
 local function makeToggle(parent, text, y, defaultOn)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -16, 0, 32)
+    row.Size = UDim2.new(1, -16, 0, 30)
     row.Position = UDim2.new(0, 8, 0, y)
     row.BackgroundTransparency = 1
     row.Parent = parent
@@ -287,20 +324,25 @@ local function setToggleVisual(track, thumb, on)
     thumb.Position = on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
 end
 
--- Info
+-- Info (workspace loot counts)
 local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 230)
-local StatusLabel = makeLabel(infoCard, "Status: Off", 10)
-local FragLabel = makeLabel(infoCard, "Map Fragments: 0", 32)
-local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 54)
-local GlassesLabel = makeLabel(infoCard, "Glasses: Not Found", 76)
-local ModeLabel = makeLabel(infoCard, "Current: Unknown", 98)
-local NextModeLabel = makeLabel(infoCard, "Next: Unknown", 120)
-local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: Map 0 | My 0/5", 142)
-local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 164)
+local infoCard = makeCard(PageInfo, 4, 340)
+local StatusLabel = makeLabel(infoCard, "Status: Off", 8)
+local FragLabel = makeLabel(infoCard, "Fragments: 0", 28)
+local KeyLabel = makeLabel(infoCard, "Shelter Keys: 0", 46)
+local ExtLabel = makeLabel(infoCard, "Extinguishers: 0", 64)
+local BatLabel = makeLabel(infoCard, "Baseball Bats: 0", 82)
+local GlassesMapLabel = makeLabel(infoCard, "Glasses (map): 0", 100)
+local ExtraLootLabel = makeLabel(infoCard, "Mode Loot: 0", 118)
+local CollectLabel = makeLabel(infoCard, "My Collected: 0 / 5", 142)
+local GlassesLabel = makeLabel(infoCard, "Glasses Found: No", 160)
+local ModeLabel = makeLabel(infoCard, "Current: Unknown", 184)
+local NextModeLabel = makeLabel(infoCard, "Next: Unknown", 202)
+local BloodMoonLabel = makeLabel(infoCard, "Blood Moon: Map 0 | My 0/5", 220)
+local DoomsdayLabel = makeLabel(infoCard, "Doomsday: No", 238)
 local ResetModeBtn = Instance.new("TextButton")
 ResetModeBtn.Size = UDim2.new(1, -24, 0, 26)
-ResetModeBtn.Position = UDim2.new(0, 12, 0, 192)
+ResetModeBtn.Position = UDim2.new(0, 12, 0, 265)
 ResetModeBtn.BackgroundColor3 = Color3.fromRGB(55, 45, 45)
 ResetModeBtn.Text = "Reset Mode Display"
 ResetModeBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
@@ -308,16 +350,26 @@ ResetModeBtn.Font = Enum.Font.GothamBold
 ResetModeBtn.TextSize = 11
 ResetModeBtn.Parent = infoCard
 Instance.new("UICorner", ResetModeBtn).CornerRadius = UDim.new(0, 6)
+local RescanBtn = Instance.new("TextButton")
+RescanBtn.Size = UDim2.new(1, -24, 0, 26)
+RescanBtn.Position = UDim2.new(0, 12, 0, 298)
+RescanBtn.BackgroundColor3 = Color3.fromRGB(40, 55, 70)
+RescanBtn.Text = "Rescan Workspace Loot"
+RescanBtn.TextColor3 = Color3.fromRGB(200, 220, 255)
+RescanBtn.Font = Enum.Font.GothamBold
+RescanBtn.TextSize = 11
+RescanBtn.Parent = infoCard
+Instance.new("UICorner", RescanBtn).CornerRadius = UDim.new(0, 6)
 
 -- Loot
 local PageLoot = createPage("Loot")
 local lootCard = makeCard(PageLoot, 4, 170)
 local _, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 10, false)
-local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 48, false)
-makeLabel(lootCard, "Loot Mode (choose 1):", 86)
+local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 46, false)
+makeLabel(lootCard, "Loot Mode (choose 1):", 82)
 local FragOnlyBtn = Instance.new("TextButton")
 FragOnlyBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragOnlyBtn.Position = UDim2.new(0, 10, 0, 110)
+FragOnlyBtn.Position = UDim2.new(0, 10, 0, 108)
 FragOnlyBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
 FragOnlyBtn.Text = "Fragments Only"
 FragOnlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -327,7 +379,7 @@ FragOnlyBtn.Parent = lootCard
 Instance.new("UICorner", FragOnlyBtn).CornerRadius = UDim.new(0, 8)
 local FragGlassBtn = Instance.new("TextButton")
 FragGlassBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 110)
+FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 108)
 FragGlassBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 FragGlassBtn.Text = "Frag + Glasses"
 FragGlassBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
@@ -513,7 +565,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 430, 0, 430)
+        Main.Size = UDim2.new(0, 440, 0, 460)
         TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -536,36 +588,30 @@ local function getHRP()
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function isFragment(obj)
-    if not obj or not obj.Parent then return false end
-    local n = (obj.Name or ""):lower()
-    for _, v in ipairs(FragmentNames) do
-        if n:find(v:lower(), 1, true) then
-            if obj.Parent and isFragment(obj.Parent) then return false end
-            return true
-        end
+local function nameInList(objName, list)
+    local n = (objName or ""):lower()
+    for _, v in ipairs(list) do
+        if n == v:lower() or n:find(v:lower(), 1, true) then return true end
     end
     return false
+end
+
+local function isFragment(obj)
+    if not obj or not obj.Parent then return false end
+    if not nameInList(obj.Name, FragmentNames) then return false end
+    if obj.Parent and nameInList(obj.Parent.Name, FragmentNames) then return false end
+    return true
 end
 
 local function isGlasses(obj)
     if not obj or not obj.Parent then return false end
-    local n = (obj.Name or ""):lower()
-    for _, v in ipairs(GlassesNames) do
-        if n:find(v:lower(), 1, true) then
-            if obj.Parent and isGlasses(obj.Parent) then return false end
-            return true
-        end
-    end
-    return false
+    if not nameInList(obj.Name, GlassesNames) then return false end
+    if obj.Parent and nameInList(obj.Parent.Name, GlassesNames) then return false end
+    return true
 end
 
 local function isShelter(obj)
-    local n = (obj.Name or ""):lower()
-    for _, v in ipairs(ShelterNames) do
-        if n:find(v:lower(), 1, true) then return true end
-    end
-    return false
+    return nameInList(obj.Name, ShelterNames)
 end
 
 local function cleanCache(cache)
@@ -579,6 +625,36 @@ local function countFrags()
     local c = 0
     for _ in pairs(knownFragments) do c = c + 1 end
     return c
+end
+
+-- Full workspace loot scan
+local function scanMapLoot()
+    local counts = {}
+    for _, t in ipairs(LOOT_TYPES) do counts[t.key] = 0 end
+    local seen = {}
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if not (obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("BasePart") or obj:IsA("Folder")) then
+            continue
+        end
+        local id = tostring(obj)
+        if seen[id] then continue end
+
+        for _, t in ipairs(LOOT_TYPES) do
+            if nameInList(obj.Name, t.names) then
+                if obj.Parent and nameInList(obj.Parent.Name, t.names) then
+                    break
+                end
+                counts[t.key] = counts[t.key] + 1
+                seen[id] = true
+                if t.key == "Fragment" then knownFragments[obj] = true end
+                if t.key == "Glasses" then knownGlasses[obj] = true end
+                break
+            end
+        end
+    end
+    mapLootCounts = counts
+    return counts
 end
 
 local function getBestPart(obj)
@@ -711,11 +787,6 @@ local CURRENT_RULES = {
     {pat = "triple threat", mode = "Triple Threat"},
     {pat = "infernado is occurring", mode = "Infernado"},
     {pat = "deadnado is occurring", mode = "Deadnado"},
-    {pat = "chompnado is occurring", mode = "Chompnado"},
-    {pat = "trollnado is occurring", mode = "Trollnado"},
-    {pat = "megatornado is occurring", mode = "MegaTornado"},
-    {pat = "ghostnado is occurring", mode = "GhostNado"},
-    {pat = "riftnado is occurring", mode = "Riftnado"},
     {pat = "this tornado targets specific players", mode = "Lurker"},
     {pat = "survive the end of the world", mode = "Doomsday"},
     {pat = "may mother nature have mercy", mode = "Doomsday"},
@@ -766,7 +837,7 @@ local function checkAlerts()
     if foundNext then nextMode = foundNext end
     if sawTartarus and not tartarusUnlocked then
         tartarusUnlocked = true
-        Notify("Tartarus / Blood Moon unlocked")
+        Notify("Tartarus unlocked")
     end
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
@@ -819,7 +890,7 @@ local function startSpectate()
         if ev then fireSignalObject(ev) end
     end)
     if ok then Notify("Spectate fired")
-    else Notify("Spectate failed: " .. tostring(err)) warn("[Spectate]", err) end
+    else Notify("Spectate failed: " .. tostring(err)) end
 end
 
 local function tryChadSignal()
@@ -830,11 +901,10 @@ local function tryChadSignal()
             :WaitForChild("Chad", 3)
         fireSignalObject(chad)
     end)
-    if ok then Notify("Chad signal fired (best on Chad round)")
-    else Notify("Chad failed: " .. tostring(err)) warn("[Chad]", err) end
+    if ok then Notify("Chad signal fired")
+    else Notify("Chad failed: " .. tostring(err)) end
 end
 
--- God / Pull / Fly / AFK
 local godConnection, healthConnection, antiFlingConnection
 local function getHumanoid()
     local char = LocalPlayer.Character
@@ -965,11 +1035,8 @@ workspace.DescendantRemoving:Connect(function(obj)
 end)
 
 task.spawn(function()
-    task.wait(1)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isFragment(obj) then knownFragments[obj] = true end
-        if isGlasses(obj) then knownGlasses[obj] = true end
-    end
+    task.wait(1.2)
+    scanMapLoot()
     refreshPlayerList()
 end)
 
@@ -993,4 +1060,238 @@ local function applySettingsToUI()
         FragGlassBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
         FragGlassBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     end
-    if Settings.GodMode then enableGodMode() else disableGodMode()
+    if Settings.GodMode then enableGodMode() else disableGodMode() end
+    updateRangeLabel()
+end
+
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        local now = tick()
+        checkAlerts()
+
+        if now - lastLootScan >= LOOT_SCAN_INTERVAL then
+            lastLootScan = now
+            scanMapLoot()
+        end
+
+        local c = mapLootCounts
+        local frags = c.Fragment or countFrags()
+        local modeLoot = (c.EvilDucky or 0) + (c.RubberDucky or 0) + (c.Axe or 0) + (c.Sword or 0)
+            + (c.Illumina or 0) + (c.FearSign or 0) + (c.TeamYin or 0) + (c.TeamYang or 0)
+            + (c.Idol or 0) + (c.CursedIdol or 0) + (c.AncientText or 0)
+
+        StatusLabel.Text = "Status: " .. ((Settings.Enabled or Settings.FullAuto) and "Running" or "Off")
+        StatusLabel.TextColor3 = (Settings.Enabled or Settings.FullAuto)
+            and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+        FragLabel.Text = "Fragments: " .. (c.Fragment or 0)
+        KeyLabel.Text = "Shelter Keys: " .. (c.Key or 0)
+        ExtLabel.Text = "Extinguishers: " .. (c.Ext or 0)
+        BatLabel.Text = "Baseball Bats: " .. (c.Bat or 0)
+        GlassesMapLabel.Text = "Glasses (map): " .. (c.Glasses or 0)
+        ExtraLootLabel.Text = "Mode Loot: " .. modeLoot
+        CollectLabel.Text = "My Collected: " .. collectedFragments .. " / 5"
+        GlassesLabel.Text = "Glasses Found: " .. (glassesFound and "YES" or "No")
+        ModeLabel.Text = "Current: " .. currentMode
+        ModeLabel.TextColor3 = currentMode == "Unknown" and Color3.fromRGB(180, 180, 195) or Color3.fromRGB(255, 200, 100)
+        NextModeLabel.Text = "Next: " .. nextMode
+        NextModeLabel.TextColor3 = nextMode == "Unknown" and Color3.fromRGB(180, 180, 195) or Color3.fromRGB(140, 200, 255)
+
+        if tartarusUnlocked then
+            BloodMoonLabel.Text = "Blood Moon: UNLOCKED"
+            BloodMoonLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
+        else
+            BloodMoonLabel.Text = "Blood Moon: Map " .. frags .. " | My " .. collectedFragments .. "/5"
+            BloodMoonLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
+        end
+        if doomsdayDetected or currentMode == "Doomsday" then
+            DoomsdayLabel.Text = "Doomsday: YES"
+            DoomsdayLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
+        else
+            DoomsdayLabel.Text = "Doomsday: No"
+            DoomsdayLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
+        end
+
+        if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
+            lastScan = now
+            cleanCache(knownFragments)
+            cleanCache(knownGlasses)
+            local fragList, hrp = {}, getHRP()
+            local myPos = hrp and hrp.Position or Vector3.zero
+            for obj in pairs(knownFragments) do
+                if obj and obj.Parent then
+                    local part = getBestPart(obj)
+                    if part then table.insert(fragList, {obj = obj, dist = (part.Position - myPos).Magnitude}) end
+                end
+            end
+            table.sort(fragList, function(a, b) return a.dist < b.dist end)
+            for _, data in ipairs(fragList) do pickup(data.obj, "Fragment") task.wait(0.07) end
+            if not Settings.OnlyFragments then
+                for obj in pairs(knownGlasses) do
+                    if obj and obj.Parent then pickup(obj, "Glasses") task.wait(0.07) end
+                end
+            end
+        end
+        if Settings.FullAuto and (now - lastShelterTP) >= SHELTER_TP_INTERVAL then
+            lastShelterTP = now
+            forceToShelter(true)
+        end
+        if Settings.TornadoPull then doTornadoPull() end
+        if Settings.FragmentFly then doFragmentFly() end
+        task.wait(0.15)
+    end
+end)
+
+-- Buttons
+FullAutoTrack.MouseButton1Click:Connect(function()
+    Settings.FullAuto = not Settings.FullAuto
+    if Settings.FullAuto then
+        Settings.Enabled = true
+        Settings.OnlyFragments = false
+        forceToShelter(false)
+        lastShelterTP = tick()
+        Notify("Full Auto ON")
+    else
+        Settings.Enabled = false
+        Notify("Full Auto OFF")
+    end
+    applySettingsToUI()
+    saveSettings()
+end)
+LootTrack.MouseButton1Click:Connect(function()
+    Settings.Enabled = not Settings.Enabled
+    applySettingsToUI()
+    saveSettings()
+end)
+FragOnlyBtn.MouseButton1Click:Connect(function()
+    Settings.OnlyFragments = true
+    applySettingsToUI()
+    saveSettings()
+end)
+FragGlassBtn.MouseButton1Click:Connect(function()
+    Settings.OnlyFragments = false
+    applySettingsToUI()
+    saveSettings()
+end)
+AFKTrack.MouseButton1Click:Connect(function()
+    Settings.AntiAFK = not Settings.AntiAFK
+    applySettingsToUI()
+    saveSettings()
+end)
+GodTrack.MouseButton1Click:Connect(function()
+    Settings.GodMode = not Settings.GodMode
+    if Settings.GodMode then enableGodMode() else disableGodMode() end
+    applySettingsToUI()
+    saveSettings()
+end)
+TornadoTrack.MouseButton1Click:Connect(function()
+    Settings.TornadoPull = not Settings.TornadoPull
+    applySettingsToUI()
+    saveSettings()
+end)
+FlyTrack.MouseButton1Click:Connect(function()
+    Settings.FragmentFly = not Settings.FragmentFly
+    applySettingsToUI()
+    saveSettings()
+end)
+AutoSaveTrack.MouseButton1Click:Connect(function()
+    Settings.AutoSave = not Settings.AutoSave
+    applySettingsToUI()
+    saveSettings(true)
+end)
+SpectateBtn.MouseButton1Click:Connect(startSpectate)
+ChadBtn.MouseButton1Click:Connect(tryChadSignal)
+RescanBtn.MouseButton1Click:Connect(function()
+    local c = scanMapLoot()
+    Notify("Rescan: Frag " .. (c.Fragment or 0) .. " Key " .. (c.Key or 0) .. " Ext " .. (c.Ext or 0))
+end)
+
+NameBox.FocusLost:Connect(function()
+    local t = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if t == "" then t = "default" end
+    Settings.SaveName = t
+    NameBox.Text = t
+    saveSettings(true)
+end)
+SaveNowBtn.MouseButton1Click:Connect(function()
+    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
+    saveSettings(true)
+    SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
+    Notify("Saved")
+end)
+LoadBtn.MouseButton1Click:Connect(function()
+    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
+    loadSettings()
+    applySettingsToUI()
+    SaveStatusLabel.Text = "Status: Loaded [" .. Settings.SaveName .. "]"
+    Notify("Loaded")
+end)
+ResetBtn.MouseButton1Click:Connect(function()
+    Settings.Enabled = false
+    Settings.OnlyFragments = true
+    Settings.FullAuto = false
+    Settings.AntiAFK = true
+    Settings.TornadoPull = false
+    Settings.GodMode = false
+    Settings.FragmentFly = false
+    Settings.AutoSave = true
+    TORNADO_RANGE = 80
+    applySettingsToUI()
+    saveSettings(true)
+    SaveStatusLabel.Text = "Status: Reset"
+end)
+ResetModeBtn.MouseButton1Click:Connect(function()
+    currentMode = "Unknown"
+    nextMode = "Unknown"
+    lastModeTime = 0
+    doomsdayDetected = false
+    Notify("Mode reset")
+end)
+RangeDown.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
+    updateRangeLabel()
+    saveSettings()
+end)
+RangeUp.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = math.min(MAX_RANGE, TORNADO_RANGE + RANGE_STEP)
+    updateRangeLabel()
+    saveSettings()
+end)
+RangeReset.MouseButton1Click:Connect(function()
+    TORNADO_RANGE = 80
+    updateRangeLabel()
+    saveSettings()
+end)
+ShelterBtn.MouseButton1Click:Connect(function() forceToShelter(false) end)
+RefreshBtn.MouseButton1Click:Connect(function()
+    refreshPlayerList()
+    Notify("Refreshed")
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+    saveSettings(true)
+    ScreenGui:Destroy()
+end)
+
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+loadSettings()
+applySettingsToUI()
+Notify("Complete Full loaded | UI parent: " .. guiParent.Name)
+print("tau only apple - Complete Full | parent=" .. guiParent:GetFullName())
