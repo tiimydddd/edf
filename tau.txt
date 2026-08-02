@@ -1,4 +1,4 @@
--- tau only apple - Tornado Pull (不会把玩家卷飞)
+-- tau only apple - with God Mode
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -15,6 +15,7 @@ local Settings = {
     FullAuto = false,
     AntiAFK = true,
     TornadoPull = false,
+    GodMode = false,
 }
 
 local FragmentNames = {
@@ -47,7 +48,7 @@ local TORNADO_UP_FORCE = 22
 local RANGE_STEP = 20
 local MIN_RANGE = 20
 local MAX_RANGE = 200
-local SAFE_DISTANCE = 9   -- 小于这个距离完全不吸，保护玩家
+local SAFE_DISTANCE = 9
 
 local Theme = {
     BgMain       = Color3.fromRGB(18, 20, 28),
@@ -71,7 +72,7 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 420)
+Main.Size = UDim2.new(0, 380, 0, 450)
 Main.Position = UDim2.new(0, 25, 0.12, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
@@ -246,12 +247,13 @@ local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
 local AntiAFKBtn = makeToggle(PageExtra, "防止挂机踢出: ON", 74, true)
-local TornadoBtn = makeToggle(PageExtra, "龙卷风吸附: OFF", 112, false)
+local GodModeBtn = makeToggle(PageExtra, "无敌模式: OFF", 112, false)  -- 新增
+local TornadoBtn = makeToggle(PageExtra, "龙卷风吸附: OFF", 146, false)
 
-local RangeLabel = makeLabel(PageExtra, "吸附范围: 80", 150)
-local RangeDownBtn = makeToggle(PageExtra, "范围 -20", 174, false)
-local RangeUpBtn = makeToggle(PageExtra, "范围 +20", 208, false)
-local RangeResetBtn = makeToggle(PageExtra, "重置范围 (80)", 242, false)
+local RangeLabel = makeLabel(PageExtra, "吸附范围: 80", 184)
+local RangeDownBtn = makeToggle(PageExtra, "范围 -20", 208, false)
+local RangeUpBtn = makeToggle(PageExtra, "范围 +20", 242, false)
+local RangeResetBtn = makeToggle(PageExtra, "重置范围 (80)", 276, false)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
@@ -285,7 +287,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 420)
+        Main.Size = UDim2.new(0, 380, 0, 450)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -537,7 +539,42 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
--- ==================== 龙卷风吸附（不会把玩家卷飞） ====================
+-- ==================== God Mode ====================
+local godConnection = nil
+
+local function enableGodMode()
+    if godConnection then
+        godConnection:Disconnect()
+        godConnection = nil
+    end
+
+    godConnection = RunService.Heartbeat:Connect(function()
+        if not Settings.GodMode then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+end
+
+local function disableGodMode()
+    if godConnection then
+        godConnection:Disconnect()
+        godConnection = nil
+    end
+end
+
+-- 角色重生后重新生效
+LocalPlayer.CharacterAdded:Connect(function()
+    if Settings.GodMode then
+        task.wait(0.5)
+        enableGodMode()
+    end
+end)
+
+-- ==================== 龙卷风吸附 ====================
 local function doTornadoPull()
     local hrp = getHRP()
     if not hrp then return end
@@ -547,14 +584,11 @@ local function doTornadoPull()
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj.Anchored and obj.Parent then
-            -- 绝对跳过自己角色的所有部件
             if myChar and obj:IsDescendantOf(myChar) then
                 continue
             end
 
             local dist = (obj.Position - myPos).Magnitude
-
-            -- 太近完全不吸，保护玩家不被顶飞
             if dist < SAFE_DISTANCE then
                 continue
             end
@@ -563,13 +597,11 @@ local function doTornadoPull()
                 local direction = (myPos - obj.Position).Unit
                 local strengthFactor = 1 - (dist / TORNADO_RANGE)
 
-                -- 靠近时吸力大幅减弱
                 if dist < 20 then
                     strengthFactor = strengthFactor * 0.3
                 end
 
                 local force = direction * (TORNADO_STRENGTH * strengthFactor)
-                -- 向上的力也降低，减少把东西顶到自己头上的概率
                 force = force + Vector3.new(0, TORNADO_UP_FORCE * strengthFactor * 0.5, 0)
 
                 if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then
@@ -734,6 +766,20 @@ ModeBtn.MouseButton1Click:Connect(function()
     ModeBtn.BackgroundColor3 = Settings.OnlyFragments and Theme.BgButtonOff or Theme.BgButtonOn
 end)
 
+GodModeBtn.MouseButton1Click:Connect(function()
+    Settings.GodMode = not Settings.GodMode
+    GodModeBtn.Text = Settings.GodMode and "无敌模式: ON" or "无敌模式: OFF"
+    GodModeBtn.BackgroundColor3 = Settings.GodMode and Theme.BgButtonOn or Theme.BgButtonOff
+
+    if Settings.GodMode then
+        enableGodMode()
+        Notify("无敌模式已开启")
+    else
+        disableGodMode()
+        Notify("无敌模式已关闭")
+    end
+end)
+
 TornadoBtn.MouseButton1Click:Connect(function()
     Settings.TornadoPull = not Settings.TornadoPull
     TornadoBtn.Text = Settings.TornadoPull and "龙卷风吸附: ON" or "龙卷风吸附: OFF"
@@ -819,5 +865,5 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 updateRangeLabel()
-Notify("tau only apple loaded (Safe Tornado)")
-print("tau only apple - Safe Tornado Pull")
+Notify("tau only apple loaded (God Mode)")
+print("tau only apple - God Mode added")
