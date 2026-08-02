@@ -1,5 +1,5 @@
 -- tau only apple - Complete Full
--- Info 实用化 | 换服加强 | 无碎片先倒数5秒再换服 | Full Auto 可关避难所
+-- 自动换服改为仅提示+声音 | 所有提示/按钮都有声音
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -9,9 +9,10 @@ local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
+local SoundService = game:GetService("SoundService")
 
 local PLACE_ID = 2313058949
-local REJOIN_COUNTDOWN = 5  -- 换服前倒数秒数
+local REJOIN_COUNTDOWN = 5
 
 local Settings = {
     Enabled = false,
@@ -87,9 +88,43 @@ local UI_REFRESH_INTERVAL = 0.05
 
 local firstRoundChecked = false
 local joinTime = tick()
-local FIRST_ROUND_WAIT = 60
+local FIRST_ROUND_WAIT = 22
 local rejoinStatus = "等待检测..."
-local isHopping = false
+local isAlerting = false
+
+-- 声音 ID（Roblox 常用 UI 音效）
+local SOUND_CLICK = "rbxassetid://6895079853"
+local SOUND_NOTIFY = "rbxassetid://4590662766"
+local SOUND_ALERT = "rbxassetid://5153789655"
+
+local function playSound(soundId, volume)
+    pcall(function()
+        local s = Instance.new("Sound")
+        s.SoundId = soundId
+        s.Volume = volume or 0.55
+        s.PlayOnRemove = false
+        s.Parent = SoundService
+        s:Play()
+        s.Ended:Connect(function()
+            s:Destroy()
+        end)
+        task.delay(3, function()
+            if s and s.Parent then s:Destroy() end
+        end)
+    end)
+end
+
+local function playClick()
+    playSound(SOUND_CLICK, 0.45)
+end
+
+local function playNotifySound()
+    playSound(SOUND_NOTIFY, 0.6)
+end
+
+local function playAlertSound()
+    playSound(SOUND_ALERT, 0.7)
+end
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -375,7 +410,7 @@ local NextModeLabel = makeLabel(infoCard, "下一模式: Unknown", 206)
 local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
 
 makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
-local RejoinStatusLabel = makeLabel(infoCard, "重进: 等待中...", 274)
+local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待中...", 274)
 local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
 local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 320, Color3.fromRGB(150, 150, 165))
 
@@ -419,16 +454,16 @@ makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 212, Color3.fr
 
 -- ========== 效率 ==========
 local PageEff = createPage("Eff")
-local effCard = makeCard(PageEff, 4, 280)
+local effCard = makeCard(PageEff, 4, 300)
 
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
-local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "第1局无碎片就换服", 32, true)
-makeLabel(effCard, "约22秒检测 → 无碎片则倒数5秒再换服", 64, Color3.fromRGB(150, 150, 165))
+local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "第1局无碎片 → 仅提示+声音", 32, true)
+makeLabel(effCard, "约22秒检测 → 无碎片只弹提示和响声，不自动换服", 64, Color3.fromRGB(150, 150, 165))
 
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
-makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片换服", 140, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 140, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "手动换服立即跳转；自动换服会先倒数5秒", 180, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
 
 -- ========== 传送 ==========
 local PageTP = createPage("Teleport")
@@ -527,6 +562,7 @@ TabInfo.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
 TabInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
 
 local function switchTab(name)
+    playClick()
     for n, page in pairs(Pages) do page.Visible = (n == name) end
     for _, tab in pairs({TabInfo, TabLoot, TabEff, TabTP, TabExtra, TabSave}) do
         tab.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
@@ -547,6 +583,7 @@ TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
 TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
 
 MinBtn.MouseButton1Click:Connect(function()
+    playClick()
     isMinimized = not isMinimized
     if isMinimized then
         Main.Size = UDim2.new(0, 200, 0, 36)
@@ -562,9 +599,17 @@ MinBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==================== Core ====================
-local function Notify(msg)
+local function Notify(msg, isAlert)
+    playNotifySound()
+    if isAlert then
+        playAlertSound()
+    end
     pcall(function()
-        StarterGui:SetCore("SendNotification", {Title = "tau only apple", Text = tostring(msg), Duration = 2.8})
+        StarterGui:SetCore("SendNotification", {
+            Title = "tau only apple",
+            Text = tostring(msg),
+            Duration = isAlert and 5 or 2.8
+        })
     end)
 end
 
@@ -754,67 +799,55 @@ local function refreshPlayerList()
             btn.TextSize = 12
             btn.Parent = PlayerListFrame
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-            btn.MouseButton1Click:Connect(function() teleportToPlayer(plr) end)
+            btn.MouseButton1Click:Connect(function()
+                playClick()
+                teleportToPlayer(plr)
+            end)
             y = y + 30
         end
     end
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
--- 实际换服（多方法）
+-- 手动换服（仍然真的换）
 local function serverHop()
-    if isHopping then return end
-    isHopping = true
+    playClick()
     rejoinStatus = "正在换服..."
-    Notify("正在换服，请稍候...")
+    Notify("正在换服，请稍候...", true)
 
     local placeId = game.PlaceId
-
-    local ok1 = pcall(function()
-        TeleportService:TeleportAsync(placeId, {LocalPlayer})
-    end)
+    local ok1 = pcall(function() TeleportService:TeleportAsync(placeId, {LocalPlayer}) end)
     if ok1 then return end
-
-    local ok2 = pcall(function()
-        TeleportService:Teleport(placeId, LocalPlayer)
-    end)
+    local ok2 = pcall(function() TeleportService:Teleport(placeId, LocalPlayer) end)
     if ok2 then return end
-
-    local ok3 = pcall(function()
-        TeleportService:Teleport(PLACE_ID, LocalPlayer)
-    end)
+    local ok3 = pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
     if ok3 then return end
-
-    local ok4 = pcall(function()
-        TeleportService:Teleport(placeId)
-    end)
+    local ok4 = pcall(function() TeleportService:Teleport(placeId) end)
     if ok4 then return end
 
-    isHopping = false
-    Notify("换服失败：执行器可能拦截，请手动退出再进")
+    Notify("换服失败：执行器可能拦截，请手动退出再进", true)
     rejoinStatus = "换服失败，请重试/手动退"
 end
 
--- ★ 自动重进：先倒数 5 秒，再换服
-local function serverHopWithCountdown()
-    if isHopping then return end
-    isHopping = true
-    rejoinStatus = "即将换服..."
+-- ★ 无碎片：只提示 + 声音，不换服
+local function alertNoFragOnly()
+    if isAlerting then return end
+    isAlerting = true
+    rejoinStatus = "无碎片！建议手动换服"
 
-    for i = REJOIN_COUNTDOWN, 1, -1 do
-        rejoinStatus = "换服倒计时: " .. i .. " 秒"
-        Notify("无碎片，" .. i .. " 秒后换服...")
-        task.wait(1)
+    for i = 1, 3 do
+        Notify("第1局没有血月碎片！建议去效率页点「立即换服」", true)
+        playAlertSound()
+        task.wait(1.2)
         if not Settings.RejoinNoFrag then
-            isHopping = false
+            isAlerting = false
             rejoinStatus = "已取消"
-            Notify("已取消自动换服")
             return
         end
     end
 
-    isHopping = false
-    serverHop()
+    isAlerting = false
+    rejoinStatus = "无碎片（已提示，请手动换服）"
 end
 
 local function checkFirstRoundNoFrag()
@@ -822,7 +855,7 @@ local function checkFirstRoundNoFrag()
         rejoinStatus = "已关闭"
         return
     end
-    if firstRoundChecked or isHopping then return end
+    if firstRoundChecked or isAlerting then return end
 
     local left = math.ceil(FIRST_ROUND_WAIT - (tick() - joinTime))
     if left > 0 then
@@ -833,9 +866,8 @@ local function checkFirstRoundNoFrag()
     firstRoundChecked = true
     local frags = countFrags()
     if frags <= 0 then
-        rejoinStatus = "无碎片 → 准备换服"
-        Notify("第1局没有血月碎片")
-        task.spawn(serverHopWithCountdown)
+        rejoinStatus = "无碎片 → 仅提示"
+        task.spawn(alertNoFragOnly)
     else
         rejoinStatus = "有碎片(" .. frags .. ") 留在此服"
         Notify("第1局检测到碎片: " .. frags .. "，留在此服")
@@ -903,11 +935,11 @@ local function checkAlerts()
     if foundNext then nextMode = foundNext end
     if sawTartarus and not tartarusUnlocked then
         tartarusUnlocked = true
-        Notify("Tartarus 已解锁！")
+        Notify("Tartarus 已解锁！", true)
     end
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
-        Notify("检测到 Doomsday！")
+        Notify("检测到 Doomsday！", true)
     end
     if bestCurrent then
         currentMode = bestCurrent
@@ -947,6 +979,7 @@ local function fireSignalObject(obj)
 end
 
 local function startSpectate()
+    playClick()
     local ok, err = pcall(function()
         local Event = game:GetService("ReplicatedStorage").Assets.Signals.Spectate
         if not Event then error("Spectate not found") end
@@ -957,6 +990,7 @@ local function startSpectate()
 end
 
 local function tryChadSignal()
+    playClick()
     local ok, err = pcall(function()
         local chad = ReplicatedStorage:WaitForChild("Assets", 3)
             :WaitForChild("Signals", 3)
@@ -1200,7 +1234,7 @@ task.spawn(function()
             DoomsdayLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
 
-        RejoinStatusLabel.Text = "重进: " .. rejoinStatus
+        RejoinStatusLabel.Text = "重进提示: " .. rejoinStatus
         MapLootLabel.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d 其他%d", c.Key or 0, c.Ext or 0, c.Bat or 0, modeLoot)
 
         if not Settings.Enabled and not Settings.FullAuto then
@@ -1212,7 +1246,7 @@ task.spawn(function()
         elseif collectedFragments >= 5 then
             TipLabel.Text = "提示: 碎片够了，等 Tartarus / 可换服找眼镜"
         else
-            TipLabel.Text = "提示: 开着捡，没东西就去效率页换服"
+            TipLabel.Text = "提示: 开着捡，没东西就去效率页手动换服"
         end
 
         if now - lastHeavyScan >= HEAVY_SCAN_INTERVAL then
@@ -1264,7 +1298,9 @@ task.spawn(function()
     end
 end)
 
+-- 按钮（全部带点击音）
 FullAutoTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
         Settings.Enabled = true
@@ -1283,6 +1319,7 @@ FullAutoTrack.MouseButton1Click:Connect(function()
 end)
 
 ShelterTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.FullAutoShelter = not Settings.FullAutoShelter
     applySettingsToUI()
     saveSettings()
@@ -1290,52 +1327,56 @@ ShelterTrack.MouseButton1Click:Connect(function()
 end)
 
 LootTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.Enabled = not Settings.Enabled
     applySettingsToUI()
     saveSettings()
 end)
 
 FragOnlyBtn.MouseButton1Click:Connect(function()
+    playClick()
     Settings.OnlyFragments = true
     applySettingsToUI()
     saveSettings()
 end)
 
 FragGlassBtn.MouseButton1Click:Connect(function()
+    playClick()
     Settings.OnlyFragments = false
     applySettingsToUI()
     saveSettings()
 end)
 
 RejoinTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.RejoinNoFrag = not Settings.RejoinNoFrag
     if Settings.RejoinNoFrag then
         firstRoundChecked = false
         joinTime = tick()
-        isHopping = false
+        isAlerting = false
         rejoinStatus = "已重新开始计时"
-        Notify("已开启：第1局无碎片 → 倒数5秒换服")
+        Notify("已开启：第1局无碎片 → 只提示+声音（不自动换服）")
     else
         rejoinStatus = "已关闭"
-        Notify("已关闭自动换服")
+        Notify("已关闭无碎片提示")
     end
     applySettingsToUI()
     saveSettings()
 end)
 
--- 手动换服：立即跳转（不倒数）
 HopBtn.MouseButton1Click:Connect(function()
-    isHopping = false
     serverHop()
 end)
 
 AFKTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.AntiAFK = not Settings.AntiAFK
     applySettingsToUI()
     saveSettings()
 end)
 
 GodTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.GodMode = not Settings.GodMode
     if Settings.GodMode then enableGodMode() else disableGodMode() end
     applySettingsToUI()
@@ -1343,18 +1384,21 @@ GodTrack.MouseButton1Click:Connect(function()
 end)
 
 TornadoTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.TornadoPull = not Settings.TornadoPull
     applySettingsToUI()
     saveSettings()
 end)
 
 FlyTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.FragmentFly = not Settings.FragmentFly
     applySettingsToUI()
     saveSettings()
 end)
 
 AutoSaveTrack.MouseButton1Click:Connect(function()
+    playClick()
     Settings.AutoSave = not Settings.AutoSave
     applySettingsToUI()
     saveSettings(true)
@@ -1364,6 +1408,7 @@ SpectateBtn.MouseButton1Click:Connect(startSpectate)
 ChadBtn.MouseButton1Click:Connect(tryChadSignal)
 
 RescanBtn.MouseButton1Click:Connect(function()
+    playClick()
     local c = scanMapLoot()
     Notify("扫描完成: 碎片" .. (c.Fragment or 0) .. " 眼镜" .. (c.Glasses or 0))
 end)
@@ -1377,6 +1422,7 @@ NameBox.FocusLost:Connect(function()
 end)
 
 SaveNowBtn.MouseButton1Click:Connect(function()
+    playClick()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
@@ -1384,6 +1430,7 @@ SaveNowBtn.MouseButton1Click:Connect(function()
 end)
 
 LoadBtn.MouseButton1Click:Connect(function()
+    playClick()
     Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
     loadSettings()
     applySettingsToUI()
@@ -1392,6 +1439,7 @@ LoadBtn.MouseButton1Click:Connect(function()
 end)
 
 ResetBtn.MouseButton1Click:Connect(function()
+    playClick()
     Settings.Enabled = false
     Settings.OnlyFragments = true
     Settings.FullAuto = false
@@ -1406,9 +1454,11 @@ ResetBtn.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings(true)
     SaveStatusLabel.Text = "Status: Reset"
+    Notify("已重置为默认")
 end)
 
 ResetModeBtn.MouseButton1Click:Connect(function()
+    playClick()
     currentMode = "Unknown"
     nextMode = "Unknown"
     lastModeTime = 0
@@ -1417,28 +1467,36 @@ ResetModeBtn.MouseButton1Click:Connect(function()
 end)
 
 RangeDown.MouseButton1Click:Connect(function()
+    playClick()
     TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
     updateRangeLabel()
     saveSettings()
 end)
 RangeUp.MouseButton1Click:Connect(function()
+    playClick()
     TORNADO_RANGE = math.min(MAX_RANGE, TORNADO_RANGE + RANGE_STEP)
     updateRangeLabel()
     saveSettings()
 end)
 RangeReset.MouseButton1Click:Connect(function()
+    playClick()
     TORNADO_RANGE = 80
     updateRangeLabel()
     saveSettings()
 end)
 
-ShelterBtn.MouseButton1Click:Connect(function() forceToShelter(false) end)
+ShelterBtn.MouseButton1Click:Connect(function()
+    playClick()
+    forceToShelter(false)
+end)
 RefreshBtn.MouseButton1Click:Connect(function()
+    playClick()
     refreshPlayerList()
     Notify("玩家列表已刷新")
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
+    playClick()
     saveSettings(true)
     ScreenGui:Destroy()
 end)
@@ -1465,5 +1523,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | 无碎片会倒数5秒再换服")
-print("tau only apple | 自动换服倒数5秒")
+Notify("已加载 | 无碎片只提示+声音，不自动换服")
+print("tau only apple | 提示音 + 按钮音 + 无碎片仅提醒")
