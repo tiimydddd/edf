@@ -1,4 +1,4 @@
--- tau only apple - Tornado Pull with adjustable range
+-- tau only apple - Tornado Pull (不会把玩家卷飞)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -41,13 +41,13 @@ local SHELTER_TP_INTERVAL = 25
 local recentlyTried = {}
 local TRIED_COOLDOWN = 2.8
 
--- 龙卷风吸附参数（可调节）
 local TORNADO_RANGE = 80
-local TORNADO_STRENGTH = 120
-local TORNADO_UP_FORCE = 35
+local TORNADO_STRENGTH = 110
+local TORNADO_UP_FORCE = 22
 local RANGE_STEP = 20
 local MIN_RANGE = 20
 local MAX_RANGE = 200
+local SAFE_DISTANCE = 9   -- 小于这个距离完全不吸，保护玩家
 
 local Theme = {
     BgMain       = Color3.fromRGB(18, 20, 28),
@@ -71,7 +71,7 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 380, 0, 400)
+Main.Size = UDim2.new(0, 380, 0, 420)
 Main.Position = UDim2.new(0, 25, 0.12, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
@@ -217,7 +217,6 @@ local PageLoot = createPage("Loot")
 local FullAutoBtn = makeToggle(PageLoot, "★ Full Auto: OFF", 8, false)
 local ToggleBtn = makeToggle(PageLoot, "Auto Loot: OFF", 42, false)
 local ModeBtn = makeToggle(PageLoot, "Mode: Fragments Only", 76, false)
-local TornadoBtn = makeToggle(PageLoot, "龙卷风吸附: OFF", 110, false)
 
 local PageTP = createPage("Teleport")
 local TPHopBtn = makeToggle(PageTP, "Server Hop", 10, false)
@@ -247,12 +246,12 @@ local PageExtra = createPage("Extra")
 local CloseTip = makeLabel(PageExtra, "点击右上角 × 关闭脚本", 20)
 local MinTip = makeLabel(PageExtra, "点击 – 可最小化", 42)
 local AntiAFKBtn = makeToggle(PageExtra, "防止挂机踢出: ON", 74, true)
+local TornadoBtn = makeToggle(PageExtra, "龙卷风吸附: OFF", 112, false)
 
--- 吸附范围调节
-local RangeLabel = makeLabel(PageExtra, "吸附范围: 80", 118)
-local RangeDownBtn = makeToggle(PageExtra, "范围 -20", 142, false)
-local RangeUpBtn = makeToggle(PageExtra, "范围 +20", 176, false)
-local RangeResetBtn = makeToggle(PageExtra, "重置范围 (80)", 210, false)
+local RangeLabel = makeLabel(PageExtra, "吸附范围: 80", 150)
+local RangeDownBtn = makeToggle(PageExtra, "范围 -20", 174, false)
+local RangeUpBtn = makeToggle(PageExtra, "范围 +20", 208, false)
+local RangeResetBtn = makeToggle(PageExtra, "重置范围 (80)", 242, false)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
@@ -286,7 +285,7 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 380, 0, 400)
+        Main.Size = UDim2.new(0, 380, 0, 420)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -538,7 +537,7 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 end
 
--- ==================== 龙卷风吸附 ====================
+-- ==================== 龙卷风吸附（不会把玩家卷飞） ====================
 local function doTornadoPull()
     local hrp = getHRP()
     if not hrp then return end
@@ -548,16 +547,33 @@ local function doTornadoPull()
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj.Anchored and obj.Parent then
-            if myChar and obj:IsDescendantOf(myChar) then continue end
+            -- 绝对跳过自己角色的所有部件
+            if myChar and obj:IsDescendantOf(myChar) then
+                continue
+            end
 
             local dist = (obj.Position - myPos).Magnitude
-            if dist < TORNADO_RANGE and dist > 1.5 then
-                local direction = (myPos - obj.Position).Unit
-                local force = direction * (TORNADO_STRENGTH * (1 - dist / TORNADO_RANGE))
-                force = force + Vector3.new(0, TORNADO_UP_FORCE * (1 - dist / TORNADO_RANGE), 0)
 
-                if isFragment(obj) or isFragment(obj.Parent) then
-                    force = force * 1.6
+            -- 太近完全不吸，保护玩家不被顶飞
+            if dist < SAFE_DISTANCE then
+                continue
+            end
+
+            if dist < TORNADO_RANGE then
+                local direction = (myPos - obj.Position).Unit
+                local strengthFactor = 1 - (dist / TORNADO_RANGE)
+
+                -- 靠近时吸力大幅减弱
+                if dist < 20 then
+                    strengthFactor = strengthFactor * 0.3
+                end
+
+                local force = direction * (TORNADO_STRENGTH * strengthFactor)
+                -- 向上的力也降低，减少把东西顶到自己头上的概率
+                force = force + Vector3.new(0, TORNADO_UP_FORCE * strengthFactor * 0.5, 0)
+
+                if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then
+                    force = force * 1.45
                 end
 
                 pcall(function()
@@ -568,7 +584,6 @@ local function doTornadoPull()
     end
 end
 
--- ==================== Anti AFK ====================
 local function doAntiAFK()
     pcall(function()
         VirtualUser:CaptureController()
@@ -733,7 +748,6 @@ AntiAFKBtn.MouseButton1Click:Connect(function()
     Notify(Settings.AntiAFK and "防挂机已开启" or "防挂机已关闭")
 end)
 
--- 范围调节按钮
 RangeDownBtn.MouseButton1Click:Connect(function()
     TORNADO_RANGE = math.max(MIN_RANGE, TORNADO_RANGE - RANGE_STEP)
     updateRangeLabel()
@@ -805,5 +819,5 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 updateRangeLabel()
-Notify("tau only apple loaded")
-print("tau only apple - Tornado range adjustable")
+Notify("tau only apple loaded (Safe Tornado)")
+print("tau only apple - Safe Tornado Pull")
