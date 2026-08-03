@@ -1,32 +1,761 @@
-local Players = game:GetService("Players")
-local lp = Players.LocalPlayer
-local pg = lp:WaitForChild("PlayerGui")
+-- tau only apple SHORT
+local Players=game:GetService("Players")
+local LocalPlayer=Players.LocalPlayer
+local StarterGui=game:GetService("StarterGui")
+local UIS=game:GetService("UserInputService")
+local VirtualUser=game:GetService("VirtualUser")
+local RunService=game:GetService("RunService")
+local RS=game:GetService("ReplicatedStorage")
+local TS=game:GetService("TeleportService")
+local SoundService=game:GetService("SoundService")
+local PLACE_ID=2313058949
 
-pcall(function()
-    local old = pg:FindFirstChild("tau_test")
-    if old then old:Destroy() end
+local S={Enabled=false,OnlyFragments=true,FullAuto=false,FullAutoShelter=true,AntiAFK=true,TornadoPull=false,GodMode=false,FragmentFly=false,RejoinNoFrag=true,ESP=true,WalkSpeedOn=false,WalkSpeed=16,LootKey=false,LootExt=false,LootBat=false}
+
+local FragN={"Blood Moon Fragment","BloodMoonFragment","血月碎片"}
+local GlassN={"Mysterious Sunglasses","Mysterious Glasses","Sunglasses","Mysterious Shades","神秘眼镜","墨镜"}
+local KeyN={"Shelter Key","ShelterKey","避难所钥匙"}
+local ExtN={"Fire Extinguisher","Extinguisher","灭火器"}
+local BatN={"Baseball Bat","BaseballBat","棒球棒"}
+local ShelN={"Shelter","Bunker","Underground","ShelterEntrance","ShelterDoor","Entrance","避难所","ControlRoom","Control Room"}
+
+local myFrags,gotGlass=0,false
+local kFrag,kGlass,kExtra={},{},{}
+local lastScan,lastShel,lastHeavy,lastTorn,lastFly,lastEsp=0,0,0,0,0,0
+local isMin,isSpec=false,false
+local SCAN=0.45; local HEAVY=3; local TINT=0.35; local FINT=1; local EINT=0.5
+local SHEL_CD=28; local TRY_CD=1.8; local UI_W=0.12
+local TRANGE,TSTR,TUP,SAFE=80,110,22,9
+local tartOK,doomOK=false,false
+local curMode,nextMode,lastNext,lastModeT="Unknown","Unknown","",0
+local mapC={Fragment=0,Glasses=0,Key=0,Ext=0,Bat=0}
+local firstChk,rejoinSt,alerting,entered,enterT=false,"等待进入地图...",false,false,0
+local SPAWN_W=8
+local sessT,sessF,sessG,sessH,sessD=tick(),0,0,0,0
+local tried={}
+
+local function snd(id,v)
+	pcall(function()
+		local s=Instance.new("Sound")
+		s.SoundId=id; s.Volume=v or 0.5; s.Parent=SoundService; s:Play()
+		s.Ended:Connect(function() s:Destroy() end)
+		task.delay(3,function() if s and s.Parent then s:Destroy() end end)
+	end)
+end
+local function click() snd("rbxassetid://6895079853",0.4) end
+local function nfy() snd("rbxassetid://4590662766",0.5) end
+local function alrt() snd("rbxassetid://5153789655",0.7) end
+local function Notify(m,a)
+	nfy(); if a then alrt() end
+	pcall(function() StarterGui:SetCore("SendNotification",{Title="tau only apple",Text=tostring(m),Duration=a and 5 or 2.8}) end)
+end
+
+-- GUI
+local pg=LocalPlayer:WaitForChild("PlayerGui")
+pcall(function() local o=pg:FindFirstChild("tau_only_apple") if o then o:Destroy() end end)
+
+local SG=Instance.new("ScreenGui")
+SG.Name="tau_only_apple"; SG.ResetOnSpawn=false; SG.DisplayOrder=999999; SG.IgnoreGuiInset=true; SG.Parent=pg
+
+local Big=Instance.new("TextLabel")
+Big.Size=UDim2.new(1,0,0,50); Big.Position=UDim2.new(0,0,0.12,0)
+Big.BackgroundTransparency=0.35; Big.BackgroundColor3=Color3.fromRGB(20,20,30)
+Big.Text=""; Big.TextColor3=Color3.fromRGB(255,220,80); Big.Font=Enum.Font.GothamBold
+Big.TextSize=24; Big.Visible=false; Big.ZIndex=50; Big.Parent=SG
+
+local Flash=Instance.new("Frame")
+Flash.Size=UDim2.new(1,0,1,0); Flash.BackgroundColor3=Color3.fromRGB(180,20,20)
+Flash.BackgroundTransparency=1; Flash.BorderSizePixel=0; Flash.ZIndex=40; Flash.Visible=false; Flash.Parent=SG
+
+local Main=Instance.new("Frame")
+Main.Size=UDim2.new(0,440,0,500); Main.Position=UDim2.new(0,30,0,40)
+Main.BackgroundColor3=Color3.fromRGB(22,22,28); Main.BorderSizePixel=0; Main.Visible=true; Main.Parent=SG
+Instance.new("UICorner",Main).CornerRadius=UDim.new(0,12)
+local st=Instance.new("UIStroke"); st.Color=Color3.fromRGB(80,80,100); st.Thickness=2; st.Parent=Main
+
+local TB=Instance.new("Frame")
+TB.Size=UDim2.new(1,0,0,36); TB.BackgroundColor3=Color3.fromRGB(28,28,36); TB.BorderSizePixel=0; TB.Parent=Main
+Instance.new("UICorner",TB).CornerRadius=UDim.new(0,12)
+local tf=Instance.new("Frame"); tf.Size=UDim2.new(1,0,0,14); tf.Position=UDim2.new(0,0,1,-14)
+tf.BackgroundColor3=Color3.fromRGB(28,28,36); tf.BorderSizePixel=0; tf.Parent=TB
+
+local Title=Instance.new("TextLabel")
+Title.Size=UDim2.new(1,-80,1,0); Title.Position=UDim2.new(0,14,0,0); Title.BackgroundTransparency=1
+Title.Text="tau only apple"; Title.TextColor3=Color3.fromRGB(240,240,245)
+Title.Font=Enum.Font.GothamBold; Title.TextSize=14; Title.TextXAlignment=Enum.TextXAlignment.Left; Title.Parent=TB
+
+local MinBtn=Instance.new("TextButton")
+MinBtn.Size=UDim2.new(0,26,0,26); MinBtn.Position=UDim2.new(1,-60,0,5)
+MinBtn.BackgroundColor3=Color3.fromRGB(45,45,55); MinBtn.Text="–"; MinBtn.TextColor3=Color3.new(1,1,1)
+MinBtn.Font=Enum.Font.GothamBold; MinBtn.TextSize=16; MinBtn.Parent=TB
+Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,6)
+
+local CloseBtn=Instance.new("TextButton")
+CloseBtn.Size=UDim2.new(0,26,0,26); CloseBtn.Position=UDim2.new(1,-30,0,5)
+CloseBtn.BackgroundColor3=Color3.fromRGB(180,50,50); CloseBtn.Text="×"; CloseBtn.TextColor3=Color3.new(1,1,1)
+CloseBtn.Font=Enum.Font.GothamBold; CloseBtn.TextSize=14; CloseBtn.Parent=TB
+Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,6)
+
+local TabBar=Instance.new("Frame")
+TabBar.Size=UDim2.new(1,-20,0,30); TabBar.Position=UDim2.new(0,10,0,42)
+TabBar.BackgroundColor3=Color3.fromRGB(32,32,40); TabBar.BorderSizePixel=0; TabBar.Parent=Main
+Instance.new("UICorner",TabBar).CornerRadius=UDim.new(0,8)
+local TL=Instance.new("UIListLayout"); TL.FillDirection=Enum.FillDirection.Horizontal; TL.Padding=UDim.new(0,3); TL.Parent=TabBar
+
+local function mkTab(tx)
+	local b=Instance.new("TextButton")
+	b.Size=UDim2.new(0,60,1,-6); b.BackgroundColor3=Color3.fromRGB(32,32,40)
+	b.Text=tx; b.TextColor3=Color3.fromRGB(160,160,175); b.Font=Enum.Font.GothamBold; b.TextSize=11; b.Parent=TabBar
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,6); return b
+end
+local TInfo,TLoot,TEff,TTP,TExtra,TESP=mkTab("Info"),mkTab("Loot"),mkTab("效率"),mkTab("传送"),mkTab("Extra"),mkTab("ESP")
+
+local Content=Instance.new("Frame")
+Content.Size=UDim2.new(1,-20,1,-84); Content.Position=UDim2.new(0,10,0,78)
+Content.BackgroundTransparency=1; Content.Parent=Main
+
+local Pages={}
+local function mkPage(n,h)
+	local p=Instance.new("ScrollingFrame")
+	p.Name=n; p.Size=UDim2.new(1,0,1,0); p.BackgroundTransparency=1; p.BorderSizePixel=0
+	p.ScrollBarThickness=3; p.CanvasSize=UDim2.new(0,0,0,h or 560); p.Visible=false; p.Parent=Content
+	Pages[n]=p; return p
+end
+local function mkCard(par,y,h)
+	local c=Instance.new("Frame")
+	c.Size=UDim2.new(1,0,0,h); c.Position=UDim2.new(0,0,0,y)
+	c.BackgroundColor3=Color3.fromRGB(30,30,38); c.BorderSizePixel=0; c.Parent=par
+	Instance.new("UICorner",c).CornerRadius=UDim.new(0,10); return c
+end
+local function mkLab(par,tx,y,col)
+	local l=Instance.new("TextLabel")
+	l.Size=UDim2.new(1,-20,0,16); l.Position=UDim2.new(0,12,0,y); l.BackgroundTransparency=1
+	l.Text=tx; l.TextColor3=col or Color3.fromRGB(180,180,195); l.Font=Enum.Font.Gotham; l.TextSize=12
+	l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=par; return l
+end
+local function mkTog(par,tx,y,on)
+	local row=Instance.new("Frame"); row.Size=UDim2.new(1,-16,0,28); row.Position=UDim2.new(0,8,0,y); row.BackgroundTransparency=1; row.Parent=par
+	local lb=Instance.new("TextLabel"); lb.Size=UDim2.new(1,-60,1,0); lb.BackgroundTransparency=1; lb.Text=tx
+	lb.TextColor3=Color3.fromRGB(220,220,230); lb.Font=Enum.Font.Gotham; lb.TextSize=12; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.Parent=row
+	local tr=Instance.new("TextButton"); tr.Size=UDim2.new(0,42,0,20); tr.Position=UDim2.new(1,-48,0.5,-10)
+	tr.BackgroundColor3=on and Color3.fromRGB(220,60,80) or Color3.fromRGB(55,55,65); tr.Text=""; tr.Parent=row
+	Instance.new("UICorner",tr).CornerRadius=UDim.new(1,0)
+	local th=Instance.new("Frame"); th.Size=UDim2.new(0,16,0,16)
+	th.Position=on and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
+	th.BackgroundColor3=Color3.new(1,1,1); th.Parent=tr
+	Instance.new("UICorner",th).CornerRadius=UDim.new(1,0)
+	return tr,th
+end
+local function setTog(tr,th,on)
+	tr.BackgroundColor3=on and Color3.fromRGB(220,60,80) or Color3.fromRGB(55,55,65)
+	th.Position=on and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
+end
+local function mkBtn(par,tx,y,col)
+	local b=Instance.new("TextButton")
+	b.Size=UDim2.new(1,-24,0,28); b.Position=UDim2.new(0,12,0,y)
+	b.BackgroundColor3=col or Color3.fromRGB(45,45,58); b.Text=tx; b.TextColor3=Color3.new(1,1,1)
+	b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=par
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); return b
+end
+
+local PInfo=mkPage("Info",620)
+local ic=mkCard(PInfo,4,440)
+local StatusL=mkLab(ic,"状态: 关闭",8)
+local GoalL=mkLab(ic,"目标: 捡碎片+眼镜",26,Color3.fromRGB(140,200,255))
+mkLab(ic,"── 进度 ──",48,Color3.fromRGB(120,120,140))
+local FragL=mkLab(ic,"血月碎片: 地图0 | 我0/5",68)
+local GlassL=mkLab(ic,"神秘眼镜: 未找到",86)
+local TartL=mkLab(ic,"Tartarus: 未解锁",104)
+local ChadL=mkLab(ic,"Chad条件: 未满足",122)
+mkLab(ic,"── 模式 ──",146,Color3.fromRGB(120,120,140))
+local ModeL=mkLab(ic,"当前模式: Unknown",166)
+local NextL=mkLab(ic,"下一模式: Unknown",184)
+local DoomL=mkLab(ic,"Doomsday: 否",202)
+mkLab(ic,"── 会话 ──",226,Color3.fromRGB(120,120,140))
+local RejL=mkLab(ic,"重进提示: 等待进入地图...",246)
+local SessL=mkLab(ic,"会话: 碎片0 眼镜0 换服0",264,Color3.fromRGB(160,200,160))
+local MapL=mkLab(ic,"地图: 钥匙0 灭火器0 球棒0",284,Color3.fromRGB(150,150,165))
+mkLab(ic,"── 碎片距离 ──",308,Color3.fromRGB(120,120,140))
+local DistF=Instance.new("ScrollingFrame")
+DistF.Size=UDim2.new(1,-24,0,80); DistF.Position=UDim2.new(0,12,0,328)
+DistF.BackgroundColor3=Color3.fromRGB(25,25,32); DistF.BorderSizePixel=0; DistF.ScrollBarThickness=3
+DistF.CanvasSize=UDim2.new(0,0,0,0); DistF.Parent=ic
+Instance.new("UICorner",DistF).CornerRadius=UDim.new(0,6)
+Instance.new("UIListLayout",DistF).Padding=UDim.new(0,3)
+local ResetModeBtn=mkBtn(ic,"重置模式",418,Color3.fromRGB(55,45,45))
+
+local PLoot=mkPage("Loot",420)
+local lc=mkCard(PLoot,4,400)
+mkLab(lc,"【自动捡取】",8,Color3.fromRGB(140,200,255))
+local FA_tr,FA_th=mkTog(lc,"Full Auto",28,false)
+local SH_tr,SH_th=mkTog(lc,"Full Auto 时传避难所",56,true)
+local LO_tr,LO_th=mkTog(lc,"Auto Loot",84,false)
+mkLab(lc,"【主目标】",116,Color3.fromRGB(140,200,255))
+local FOBtn=Instance.new("TextButton"); FOBtn.Size=UDim2.new(0.48,-8,0,28); FOBtn.Position=UDim2.new(0,10,0,138)
+FOBtn.BackgroundColor3=Color3.fromRGB(220,60,80); FOBtn.Text="只有碎片"; FOBtn.TextColor3=Color3.new(1,1,1)
+FOBtn.Font=Enum.Font.GothamBold; FOBtn.TextSize=12; FOBtn.Parent=lc; Instance.new("UICorner",FOBtn).CornerRadius=UDim.new(0,8)
+local FGBtn=Instance.new("TextButton"); FGBtn.Size=UDim2.new(0.48,-8,0,28); FGBtn.Position=UDim2.new(0.52,0,0,138)
+FGBtn.BackgroundColor3=Color3.fromRGB(45,45,58); FGBtn.Text="碎片+眼镜"; FGBtn.TextColor3=Color3.fromRGB(200,200,210)
+FGBtn.Font=Enum.Font.GothamBold; FGBtn.TextSize=12; FGBtn.Parent=lc; Instance.new("UICorner",FGBtn).CornerRadius=UDim.new(0,8)
+mkLab(lc,"【多稀有】",176,Color3.fromRGB(140,200,255))
+local Key_tr,Key_th=mkTog(lc,"自动捡 钥匙",198,false)
+local Ext_tr,Ext_th=mkTog(lc,"自动捡 灭火器",226,false)
+local Bat_tr,Bat_th=mkTog(lc,"自动捡 棒球棒",254,false)
+
+local PEff=mkPage("Eff",260)
+local ec=mkCard(PEff,4,230)
+mkLab(ec,"【效率】",8,Color3.fromRGB(140,200,255))
+local RJ_tr,RJ_th=mkTog(ec,"进图后无碎片 → 仅提示",32,true)
+local HopBtn=mkBtn(ec,"立即换服",70,Color3.fromRGB(50,90,140))
+local JobBtn=mkBtn(ec,"复制 JobId",106,Color3.fromRGB(45,70,90))
+
+local PTP=mkPage("Teleport",300)
+local tc=mkCard(PTP,4,270)
+local ShelBtn=mkBtn(tc,"传送到避难所",12,Color3.fromRGB(45,45,58))
+mkLab(tc,"传送到玩家:",48)
+local PlF=Instance.new("ScrollingFrame")
+PlF.Size=UDim2.new(1,-20,0,140); PlF.Position=UDim2.new(0,10,0,68)
+PlF.BackgroundColor3=Color3.fromRGB(25,25,32); PlF.BorderSizePixel=0; PlF.ScrollBarThickness=3
+PlF.CanvasSize=UDim2.new(0,0,0,0); PlF.Parent=tc
+Instance.new("UICorner",PlF).CornerRadius=UDim.new(0,8)
+Instance.new("UIListLayout",PlF).Padding=UDim.new(0,4)
+local RefBtn=mkBtn(tc,"刷新玩家",220,Color3.fromRGB(45,45,58))
+
+local PEx=mkPage("Extra",400)
+local xc=mkCard(PEx,4,380)
+mkLab(xc,"【功能】",8,Color3.fromRGB(140,200,255))
+local AFK_tr,AFK_th=mkTog(xc,"Anti-AFK",28,true)
+local God_tr,God_th=mkTog(xc,"God Mode",56,false)
+local Tor_tr,Tor_th=mkTog(xc,"Tornado Pull",84,false)
+local Fly_tr,Fly_th=mkTog(xc,"Fragment Fly",112,false)
+local Spd_tr,Spd_th=mkTog(xc,"WalkSpeed",140,false)
+local SpdL=mkLab(xc,"Speed: 16",170)
+local SpdDown=Instance.new("TextButton"); SpdDown.Size=UDim2.new(0,90,0,26); SpdDown.Position=UDim2.new(0,12,0,192)
+SpdDown.BackgroundColor3=Color3.fromRGB(45,45,58); SpdDown.Text="Speed -4"; SpdDown.TextColor3=Color3.new(1,1,1)
+SpdDown.Font=Enum.Font.GothamBold; SpdDown.TextSize=12; SpdDown.Parent=xc; Instance.new("UICorner",SpdDown).CornerRadius=UDim.new(0,6)
+local SpdUp=Instance.new("TextButton"); SpdUp.Size=UDim2.new(0,90,0,26); SpdUp.Position=UDim2.new(0,112,0,192)
+SpdUp.BackgroundColor3=Color3.fromRGB(45,45,58); SpdUp.Text="Speed +4"; SpdUp.TextColor3=Color3.new(1,1,1)
+SpdUp.Font=Enum.Font.GothamBold; SpdUp.TextSize=12; SpdUp.Parent=xc; Instance.new("UICorner",SpdUp).CornerRadius=UDim.new(0,6)
+local RngL=mkLab(xc,"Pull Range: 80",228)
+local RngDown=Instance.new("TextButton"); RngDown.Size=UDim2.new(0,90,0,26); RngDown.Position=UDim2.new(0,12,0,250)
+RngDown.BackgroundColor3=Color3.fromRGB(45,45,58); RngDown.Text="Range -20"; RngDown.TextColor3=Color3.new(1,1,1)
+RngDown.Font=Enum.Font.GothamBold; RngDown.TextSize=12; RngDown.Parent=xc; Instance.new("UICorner",RngDown).CornerRadius=UDim.new(0,6)
+local RngUp=Instance.new("TextButton"); RngUp.Size=UDim2.new(0,90,0,26); RngUp.Position=UDim2.new(0,112,0,250)
+RngUp.BackgroundColor3=Color3.fromRGB(45,45,58); RngUp.Text="Range +20"; RngUp.TextColor3=Color3.new(1,1,1)
+RngUp.Font=Enum.Font.GothamBold; RngUp.TextSize=12; RngUp.Parent=xc; Instance.new("UICorner",RngUp).CornerRadius=UDim.new(0,6)
+local SpecBtn=mkBtn(xc,"Open Spectate",290,Color3.fromRGB(40,90,120))
+local ChadBtn=mkBtn(xc,"Try Chad",326,Color3.fromRGB(120,80,40))
+local ScanBtn=mkBtn(xc,"重新扫描",362,Color3.fromRGB(40,55,70))
+
+local PESP=mkPage("ESP",180)
+local esc=mkCard(PESP,4,150)
+mkLab(esc,"【ESP】",8,Color3.fromRGB(140,200,255))
+local ESP_tr,ESP_th=mkTog(esc,"开启碎片/眼镜 ESP",32,true)
+mkLab(esc,"红=碎片  青=眼镜",68,Color3.fromRGB(160,160,175))
+
+Pages.Info.Visible=true
+TInfo.BackgroundColor3=Color3.fromRGB(50,50,62); TInfo.TextColor3=Color3.new(1,1,1)
+Notify("界面已加载 SHORT")
+print("[tau] UI OK")
+
+-- helpers
+local function showBig(tx,col,dur)
+	Big.Text=tx; Big.TextColor3=col or Color3.fromRGB(255,220,80); Big.Visible=true
+	task.delay(dur or 4,function() if Big.Text==tx then Big.Visible=false end end)
+end
+local function flashD()
+	sessD=sessD+1; Flash.Visible=true
+	task.spawn(function()
+		for i=1,4 do Flash.BackgroundTransparency=0.55; alrt(); task.wait(0.25); Flash.BackgroundTransparency=0.85; task.wait(0.2) end
+		Flash.Visible=false; Flash.BackgroundTransparency=1
+	end)
+end
+local function switchTab(n)
+	click()
+	for k,p in pairs(Pages) do p.Visible=(k==n) end
+	for _,t in pairs({TInfo,TLoot,TEff,TTP,TExtra,TESP}) do t.BackgroundColor3=Color3.fromRGB(32,32,40); t.TextColor3=Color3.fromRGB(160,160,175) end
+	local m={Info=TInfo,Loot=TLoot,Eff=TEff,Teleport=TTP,Extra=TExtra,ESP=TESP}
+	if m[n] then m[n].BackgroundColor3=Color3.fromRGB(50,50,62); m[n].TextColor3=Color3.new(1,1,1) end
+end
+TInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
+TLoot.MouseButton1Click:Connect(function() switchTab("Loot") end)
+TEff.MouseButton1Click:Connect(function() switchTab("Eff") end)
+TTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
+TExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
+TESP.MouseButton1Click:Connect(function() switchTab("ESP") end)
+
+MinBtn.MouseButton1Click:Connect(function()
+	click(); isMin=not isMin
+	if isMin then Main.Size=UDim2.new(0,200,0,36); TabBar.Visible=false; Content.Visible=false; MinBtn.Text="+"
+	else Main.Size=UDim2.new(0,440,0,500); TabBar.Visible=true; Content.Visible=true; MinBtn.Text="–" end
 end)
 
-local g = Instance.new("ScreenGui")
-g.Name = "tau_test"
-g.ResetOnSpawn = false
-g.DisplayOrder = 999999
-g.Parent = pg
+local function inList(name,list)
+	local n=(name or ""):lower()
+	for _,v in ipairs(list) do if n==v:lower() or n:find(v:lower(),1,true) then return true end end
+	return false
+end
+local function isFrag(o)
+	if not o or not o.Parent then return false end
+	if not inList(o.Name,FragN) then return false end
+	if o.Parent and inList(o.Parent.Name,FragN) then return false end
+	return true
+end
+local function isGlass(o)
+	if not o or not o.Parent then return false end
+	if not inList(o.Name,GlassN) then return false end
+	if o.Parent and inList(o.Parent.Name,GlassN) then return false end
+	return true
+end
+local function isShel(o) return inList(o.Name,ShelN) end
+local function HRP() local c=LocalPlayer.Character return c and c:FindFirstChild("HumanoidRootPart") end
+local function Hum() local c=LocalPlayer.Character return c and c:FindFirstChildOfClass("Humanoid") end
+local function bestPart(o)
+	if o:IsA("BasePart") then return o end
+	local p=o:FindFirstChildWhichIsA("ProximityPrompt",true)
+	if p and p.Parent and p.Parent:IsA("BasePart") then return p.Parent end
+	return o:FindFirstChildWhichIsA("BasePart",true)
+end
+local function clean(c) for o in pairs(c) do if not o or not o.Parent then c[o]=nil end end end
+local function cntF() clean(kFrag) local n=0 for _ in pairs(kFrag) do n=n+1 end return n end
 
-local f = Instance.new("Frame")
-f.Size = UDim2.new(0, 280, 0, 120)
-f.Position = UDim2.new(0.5, -140, 0.5, -60)
-f.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-f.Parent = g
-Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+local function scan()
+	local c={Fragment=0,Glasses=0,Key=0,Ext=0,Bat=0}; local seen={}
+	for _,o in ipairs(workspace:GetDescendants()) do
+		if o:IsA("Model") or o:IsA("Tool") or o:IsA("BasePart") or o:IsA("Folder") then
+			local id=tostring(o)
+			if not seen[id] then
+				if isFrag(o) then c.Fragment=c.Fragment+1; kFrag[o]=true; seen[id]=true
+				elseif isGlass(o) then c.Glasses=c.Glasses+1; kGlass[o]=true; seen[id]=true
+				elseif inList(o.Name,KeyN) and not (o.Parent and inList(o.Parent.Name,KeyN)) then c.Key=c.Key+1; kExtra[o]="Key"; seen[id]=true
+				elseif inList(o.Name,ExtN) and not (o.Parent and inList(o.Parent.Name,ExtN)) then c.Ext=c.Ext+1; kExtra[o]="Ext"; seen[id]=true
+				elseif inList(o.Name,BatN) and not (o.Parent and inList(o.Parent.Name,BatN)) then c.Bat=c.Bat+1; kExtra[o]="Bat"; seen[id]=true
+				end
+			end
+		end
+	end
+	mapC=c; return c
+end
 
-local t = Instance.new("TextLabel")
-t.Size = UDim2.new(1, 0, 1, 0)
-t.BackgroundTransparency = 1
-t.Text = "UI 测试成功\n能看到这个就说明界面正常"
-t.TextColor3 = Color3.fromRGB(255, 255, 255)
-t.Font = Enum.Font.GothamBold
-t.TextSize = 16
-t.Parent = f
+local function fireP(pr)
+	if not pr then return end
+	pcall(function() if fireproximityprompt then fireproximityprompt(pr); task.wait(0.03); fireproximityprompt(pr,1) end end)
+end
 
-print("[tau] test UI ok")
+local function pickup(o,typ)
+	if not o or not o.Parent then return end
+	local key=tostring(o)
+	if tried[key] and tick()-tried[key]<TRY_CD then return end
+	tried[key]=tick()
+	local h=HRP(); if not h then return end
+	local part=bestPart(o); if not part then return end
+	local offs={Vector3.new(0,2,0),Vector3.new(0,1.6,1.5),Vector3.new(0,1.6,-1.5),Vector3.new(1.5,1.6,0),Vector3.new(-1.5,1.6,0)}
+	for _,off in ipairs(offs) do
+		if not o.Parent then break end
+		h.CFrame=part.CFrame+off; task.wait(0.03)
+		fireP(o:FindFirstChildWhichIsA("ProximityPrompt",true))
+		local ti=part:FindFirstChildOfClass("TouchInterest")
+		if ti then pcall(function() firetouchinterest(h,part,0); task.wait(0.02); firetouchinterest(h,part,1) end) end
+		local cd=o:FindFirstChildWhichIsA("ClickDetector",true)
+		if cd then pcall(fireclickdetector,cd) end
+		task.wait(0.03)
+	end
+	task.delay(0.6,function()
+		if not o or not o.Parent then
+			if typ=="Fragment" then myFrags=math.min(5,myFrags+1); sessF=sessF+1; Notify("碎片 "..myFrags.."/5")
+			elseif typ=="Glasses" then gotGlass=true; sessG=sessG+1; Notify("眼镜已找到") end
+		end
+	end)
+end
+
+local function toShel(silent)
+	local h=HRP(); if not h then if not silent then Notify("无角色") end return end
+	local tp
+	for _,o in ipairs(workspace:GetDescendants()) do
+		if isShel(o) then local p=bestPart(o); if p then tp=p; break end end
+	end
+	if not tp then if not silent then Notify("没找到避难所") end return end
+	h.CFrame=tp.CFrame+Vector3.new(0,5,0)
+	if not silent then Notify("已传到避难所") end
+end
+
+local function toPlr(plr)
+	local h=HRP(); if not h then return end
+	local c=plr.Character; if not c then Notify(plr.Name.." 无角色") return end
+	local th=c:FindFirstChild("HumanoidRootPart")
+	if th then h.CFrame=th.CFrame+Vector3.new(0,3,0); Notify("已传到 "..plr.Name) end
+end
+
+local function refPl()
+	for _,ch in ipairs(PlF:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+	local y=0
+	for _,pl in ipairs(Players:GetPlayers()) do
+		if pl~=LocalPlayer then
+			local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-8,0,26)
+			b.BackgroundColor3=Color3.fromRGB(40,40,52); b.Text=pl.Name; b.TextColor3=Color3.new(1,1,1)
+			b.Font=Enum.Font.Gotham; b.TextSize=12; b.Parent=PlF
+			Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
+			b.MouseButton1Click:Connect(function() click(); toPlr(pl) end)
+			y=y+30
+		end
+	end
+	PlF.CanvasSize=UDim2.new(0,0,0,y+8)
+end
+
+local function updDist()
+	for _,ch in ipairs(DistF:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+	local h=HRP(); local pos=h and h.Position or Vector3.zero
+	local list={}
+	for o in pairs(kFrag) do
+		if o and o.Parent then local p=bestPart(o); if p then table.insert(list,{o=o,d=(p.Position-pos).Magnitude,p=p}) end end
+	end
+	table.sort(list,function(a,b) return a.d<b.d end)
+	local y=0
+	for i,d in ipairs(list) do
+		if i>6 then break end
+		local b=Instance.new("TextButton"); b.Size=UDim2.new(1,-6,0,22)
+		b.BackgroundColor3=Color3.fromRGB(40,40,52); b.Text=string.format("#%d  %.0f studs",i,d.d)
+		b.TextColor3=Color3.fromRGB(255,180,180); b.Font=Enum.Font.Gotham; b.TextSize=11; b.Parent=DistF
+		Instance.new("UICorner",b).CornerRadius=UDim.new(0,4)
+		b.MouseButton1Click:Connect(function()
+			click(); local hh=HRP(); if hh and d.p and d.p.Parent then hh.CFrame=d.p.CFrame+Vector3.new(0,3,0) end
+		end)
+		y=y+25
+	end
+	DistF.CanvasSize=UDim2.new(0,0,0,y+4)
+end
+
+local espF=Instance.new("Folder"); espF.Name="tau_esp"; espF.Parent=SG
+local function clrESP() for _,c in ipairs(espF:GetChildren()) do c:Destroy() end end
+local function addESP(o,col,lab)
+	local p=bestPart(o); if not p then return end
+	pcall(function()
+		local hl=Instance.new("Highlight"); hl.Adornee=o:IsA("Model") and o or p
+		hl.FillColor=col; hl.OutlineColor=col; hl.FillTransparency=0.55; hl.OutlineTransparency=0.2; hl.Parent=espF
+		local bb=Instance.new("BillboardGui"); bb.Size=UDim2.new(0,90,0,20); bb.AlwaysOnTop=true
+		bb.StudsOffset=Vector3.new(0,2.5,0); bb.Adornee=p; bb.Parent=espF
+		local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,0,1,0); tl.BackgroundTransparency=1
+		tl.Text=lab; tl.TextColor3=col; tl.Font=Enum.Font.GothamBold; tl.TextSize=11; tl.TextStrokeTransparency=0.4; tl.Parent=bb
+	end)
+end
+local function refESP()
+	clrESP(); if not S.ESP then return end
+	for o in pairs(kFrag) do if o and o.Parent then addESP(o,Color3.fromRGB(255,70,70),"Fragment") end end
+	for o in pairs(kGlass) do if o and o.Parent then addESP(o,Color3.fromRGB(80,220,220),"Glasses") end end
+end
+
+local function hop()
+	click(); sessH=sessH+1; Notify("换服中...",true)
+	local pid=game.PlaceId
+	pcall(function() TS:TeleportAsync(pid,{LocalPlayer}) end)
+	pcall(function() TS:Teleport(pid,LocalPlayer) end)
+	pcall(function() TS:Teleport(PLACE_ID,LocalPlayer) end)
+end
+
+local function alertNo()
+	if alerting then return end; alerting=true; rejoinSt="无碎片！建议换服"
+	for i=1,3 do Notify("进图后无碎片，建议换服",true); alrt(); task.wait(1.2)
+		if not S.RejoinNoFrag then alerting=false; rejoinSt="已取消"; return end
+	end
+	alerting=false; rejoinSt="无碎片（已提示）"
+end
+
+local RULES={
+	{p="tartarus has been summoned",m="Tartarus"},{p="tartarus is occurring",m="Tartarus"},
+	{p="survive the end of the world",m="Doomsday"},{p="doomsday is occurring",m="Doomsday"},
+	{p="toastnado is occurring",m="ToastNado"},{p="deadnado is occurring",m="Deadnado"},
+	{p="double trouble",m="Double Trouble"},{p="triple threat",m="Triple Threat"},
+	{p="normal survival",m="Normal Survival"},{p="there is an ef",m="Normal Survival"},
+}
+local function getObj()
+	local gui=LocalPlayer:FindFirstChild("PlayerGui"); if not gui then return nil end
+	local ok,t=pcall(function()
+		local n=gui:FindFirstChild("Notifications"); if not n then return nil end
+		local sg=n:FindFirstChild("SelectedGamemode"); if not sg then return nil end
+		local o=sg:FindFirstChild("Objective"); if not o then return nil end
+		if o:IsA("TextLabel") or o:IsA("TextButton") then return o.Text end
+		local l=o:FindFirstChildWhichIsA("TextLabel",true); return l and l.Text
+	end)
+	return ok and t or nil
+end
+local function matchM(raw)
+	if not raw or #raw<3 then return nil end
+	local t=string.lower(raw); if t:find("unlikely the world will end") then return nil end
+	local best,bl=nil,0
+	for _,r in ipairs(RULES) do if t:find(r.p,1,true) and #r.p>bl then bl=#r.p; best=r.m end end
+	return best
+end
+local function markEnter()
+	if entered then return end; entered=true; enterT=tick(); rejoinSt="已进图，等待Loot..."
+end
+
+local function checkA()
+	local ot=getObj(); local best=matchM(ot); local fn=nil; local sd,st=false,false
+	if ot and #ot>=5 then
+		local lo=string.lower(ot)
+		if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then markEnter() end
+		if lo:find("doomsday") or lo:find("survive the end") then sd=true end
+		if lo:find("tartarus") then st=true end
+	end
+	if not best then
+		local gui=LocalPlayer:FindFirstChild("PlayerGui")
+		local n=gui and gui:FindFirstChild("Notifications")
+		if n then
+			for _,g in ipairs(n:GetDescendants()) do
+				if g:IsA("TextLabel") or g:IsA("TextButton") then
+					local raw=g.Text or ""
+					if #raw>=5 and #raw<=220 then
+						local t=string.lower(raw)
+						local a,b=t:find("this round's gamemode is")
+						if a then local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""); if #after>1 and #after<40 then fn=after end end
+						if not best then local m=matchM(raw); if m then best=m end end
+						if t:find("doomsday") then sd=true end
+						if t:find("tartarus") then st=true end
+					end
+				end
+			end
+		end
+	end
+	if fn and fn~=lastNext then nextMode=fn; lastNext=fn; showBig("下一模式: "..fn,Color3.fromRGB(120,200,255),5); Notify("下一模式: "..fn)
+	elseif fn then nextMode=fn end
+	if st and not tartOK then tartOK=true; flashD(); showBig("⚠ TARTARUS",Color3.fromRGB(255,60,60),6); Notify("Tartarus!",true) end
+	if sd and not doomOK then doomOK=true; flashD(); showBig("⚠ DOOMSDAY",Color3.fromRGB(255,80,40),6); Notify("Doomsday!",true) end
+	if best then
+		if best~=curMode and (best=="Doomsday" or best=="Tartarus" or best=="Deadnado") then flashD(); showBig("⚠ "..best,Color3.fromRGB(255,70,70),5) end
+		curMode=best; lastModeT=tick()
+		if best=="Doomsday" then doomOK=true end
+		if best=="Tartarus" then tartOK=true end
+		markEnter()
+	elseif tick()-lastModeT>16 then curMode="Unknown" end
+end
+
+local function checkFirst()
+	if not S.RejoinNoFrag then rejoinSt="已关闭"; return end
+	if firstChk or alerting then return end
+	if not entered then rejoinSt="等待进入地图..."; return end
+	local left=math.ceil(SPAWN_W-(tick()-enterT))
+	if left>0 then rejoinSt="进图检测: "..left.."秒"; return end
+	firstChk=true; scan()
+	local fr=mapC.Fragment or cntF()
+	if fr<=0 then rejoinSt="无碎片 → 仅提示"; task.spawn(alertNo)
+	else rejoinSt="有碎片("..fr..")"; Notify("碎片: "..fr) end
+end
+
+local gConn,hConn,fConn
+local function forceHP()
+	local h=Hum(); if not h then return end
+	pcall(function()
+		if h.Health<h.MaxHealth then h.Health=h.MaxHealth end
+		if h:GetState()==Enum.HumanoidStateType.Dead then h:ChangeState(Enum.HumanoidStateType.Running); h.Health=h.MaxHealth end
+	end)
+end
+local function offGod()
+	if gConn then gConn:Disconnect(); gConn=nil end
+	if hConn then hConn:Disconnect(); hConn=nil end
+	if fConn then fConn:Disconnect(); fConn=nil end
+end
+local function onGod()
+	offGod()
+	gConn=RunService.Heartbeat:Connect(function() if S.GodMode then forceHP() end end)
+	local c=LocalPlayer.Character
+	if c then local h=c:FindFirstChildOfClass("Humanoid"); if h then hConn=h.HealthChanged:Connect(function() if S.GodMode then forceHP() end end) end end
+	fConn=RunService.Heartbeat:Connect(function()
+		if not S.GodMode then return end
+		local hr=HRP(); if hr and hr.AssemblyLinearVelocity.Magnitude>80 then hr.AssemblyLinearVelocity=Vector3.zero; hr.AssemblyAngularVelocity=Vector3.zero end
+	end)
+end
+local function applySpd()
+	local h=Hum(); if h then h.WalkSpeed=S.WalkSpeedOn and S.WalkSpeed or 16 end
+end
+LocalPlayer.CharacterAdded:Connect(function()
+	if S.GodMode then task.wait(0.8); onGod() end
+	isSpec=false; SpecBtn.Text="Open Spectate"; task.wait(0.5); applySpd()
+end)
+
+local function doTorn()
+	local h=HRP(); if not h then return end
+	local pos=h.Position; local ch=LocalPlayer.Character; local parts
+	local ok=pcall(function() parts=workspace:GetPartBoundsInRadius(pos,TRANGE) end)
+	if not ok or not parts then return end
+	for _,o in ipairs(parts) do
+		if o:IsA("BasePart") and not o.Anchored and o.Parent then
+			if not (ch and o:IsDescendantOf(ch)) then
+				local d=(o.Position-pos).Magnitude
+				if d>=SAFE then
+					local dir=(pos-o.Position).Unit; local sf=1-(d/TRANGE); if d<20 then sf=sf*0.3 end
+					local f=dir*(TSTR*sf)+Vector3.new(0,TUP*sf*0.5,0)
+					if isFrag(o) or (o.Parent and isFrag(o.Parent)) then f=f*1.45 end
+					pcall(function() o.AssemblyLinearVelocity=f end)
+				end
+			end
+		end
+	end
+end
+local function doFly()
+	local h=HRP(); if not h then return end; local pos=h.Position
+	for o in pairs(kFrag) do
+		if o and o.Parent then
+			local p=bestPart(o)
+			if p and not p.Anchored and (p.Position-pos).Magnitude<=60 then
+				local old=p:FindFirstChild("FragFlyForce"); if old then old:Destroy() end
+				local bv=Instance.new("BodyVelocity"); bv.Name="FragFlyForce"; bv.MaxForce=Vector3.new(1e5,1e5,1e5)
+				bv.Velocity=Vector3.new((math.random()-0.5)*36,35,(math.random()-0.5)*36); bv.Parent=p
+				task.delay(1.2,function() if bv and bv.Parent then bv:Destroy() end end)
+			end
+		end
+	end
+end
+local function afk() pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end
+LocalPlayer.Idled:Connect(function() if S.AntiAFK then afk() end end)
+task.spawn(function() while SG and SG.Parent do if S.AntiAFK then afk() end if S.WalkSpeedOn then applySpd() end task.wait(35) end end)
+
+workspace.DescendantAdded:Connect(function(o)
+	task.defer(function()
+		if isFrag(o) then kFrag[o]=true; if S.Enabled or S.FullAuto then task.wait(0.12); pickup(o,"Fragment") end
+		elseif isGlass(o) then kGlass[o]=true; if (S.Enabled or S.FullAuto) and not S.OnlyFragments then task.wait(0.12); pickup(o,"Glasses") end
+		elseif inList(o.Name,KeyN) then kExtra[o]="Key"
+		elseif inList(o.Name,ExtN) then kExtra[o]="Ext"
+		elseif inList(o.Name,BatN) then kExtra[o]="Bat" end
+	end)
+end)
+workspace.DescendantRemoving:Connect(function(o) kFrag[o]=nil; kGlass[o]=nil; kExtra[o]=nil end)
+
+local function startSpec()
+	click()
+	local ok,err=pcall(function()
+		if typeof(firesignal)~="function" then error("无 firesignal") end
+		local e=RS:FindFirstChild("Assets") and RS.Assets:FindFirstChild("Signals") and RS.Assets.Signals:FindFirstChild("Spectate")
+		if not e then error("无 Spectate") end
+		if isSpec then
+			pcall(function() firesignal(e.OnClientEvent,{A=false,reason="ExitSpectate"}) end)
+			pcall(function() firesignal(e.OnClientEvent,{A=false}) end)
+			isSpec=false; SpecBtn.Text="Open Spectate"; Notify("退出观战")
+		else
+			firesignal(e.OnClientEvent,{A=true,reason="EnterSpectate"})
+			isSpec=true; SpecBtn.Text="Exit Spectate"; Notify("进入观战")
+		end
+	end)
+	if not ok then isSpec=false; SpecBtn.Text="Open Spectate"; Notify("观战: "..tostring(err)) end
+end
+local function tryChad()
+	click()
+	local ok,err=pcall(function()
+		local c=RS:WaitForChild("Assets",3):WaitForChild("Signals",3):WaitForChild("Gamemodes",3):WaitForChild("Chad",3)
+		if c:IsA("RemoteEvent") then c:FireServer()
+		elseif c:IsA("Folder") then for _,x in ipairs(c:GetDescendants()) do if x:IsA("RemoteEvent") then pcall(function() x:FireServer() end) end end end
+	end)
+	if ok then Notify("Chad 已发送") else Notify("Chad: "..tostring(err)) end
+end
+
+local function applyUI()
+	setTog(FA_tr,FA_th,S.FullAuto); setTog(SH_tr,SH_th,S.FullAutoShelter); setTog(LO_tr,LO_th,S.Enabled)
+	setTog(RJ_tr,RJ_th,S.RejoinNoFrag); setTog(AFK_tr,AFK_th,S.AntiAFK); setTog(God_tr,God_th,S.GodMode)
+	setTog(Tor_tr,Tor_th,S.TornadoPull); setTog(Fly_tr,Fly_th,S.FragmentFly); setTog(Spd_tr,Spd_th,S.WalkSpeedOn)
+	setTog(ESP_tr,ESP_th,S.ESP); setTog(Key_tr,Key_th,S.LootKey); setTog(Ext_tr,Ext_th,S.LootExt); setTog(Bat_tr,Bat_th,S.LootBat)
+	if S.OnlyFragments then FOBtn.BackgroundColor3=Color3.fromRGB(220,60,80); FGBtn.BackgroundColor3=Color3.fromRGB(45,45,58)
+	else FOBtn.BackgroundColor3=Color3.fromRGB(45,45,58); FGBtn.BackgroundColor3=Color3.fromRGB(220,60,80) end
+	if S.GodMode then onGod() else offGod() end
+	RngL.Text="Pull Range: "..TRANGE; SpdL.Text="Speed: "..S.WalkSpeed; applySpd()
+end
+
+task.spawn(function() task.wait(1); pcall(scan); pcall(refPl); pcall(updDist); pcall(refESP) end)
+
+task.spawn(function()
+	while SG and SG.Parent do
+		pcall(function()
+			local now=tick(); local c=mapC; local fr=c.Fragment or cntF()
+			if S.FullAuto then StatusL.Text="状态: Full Auto"; StatusL.TextColor3=Color3.fromRGB(100,220,140)
+			elseif S.Enabled then StatusL.Text="状态: 仅自动捡取"; StatusL.TextColor3=Color3.fromRGB(100,200,255)
+			else StatusL.Text="状态: 关闭"; StatusL.TextColor3=Color3.fromRGB(255,100,100) end
+			FragL.Text=string.format("血月碎片: 地图%d | 我%d/5",fr,myFrags)
+			if gotGlass or (c.Glasses or 0)>0 then GlassL.Text="神秘眼镜: 已找到"; GlassL.TextColor3=Color3.fromRGB(100,255,120); ChadL.Text="Chad条件: 已满足"
+			else GlassL.Text="神秘眼镜: 未找到"; GlassL.TextColor3=Color3.fromRGB(255,160,100); ChadL.Text="Chad条件: 未满足" end
+			TartL.Text=tartOK and "Tartarus: 已出现" or "Tartarus: 未解锁"
+			ModeL.Text="当前模式: "..curMode; NextL.Text="下一模式: "..nextMode
+			DoomL.Text=(doomOK or curMode=="Doomsday") and "Doomsday: 是！" or "Doomsday: 否"
+			RejL.Text="重进提示: "..rejoinSt
+			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d",sessF,sessG,sessH,sessD)
+			MapL.Text=string.format("地图: 钥匙%d 灭火器%d 球棒%d",c.Key or 0,c.Ext or 0,c.Bat or 0)
+			if now-lastHeavy>=HEAVY then lastHeavy=now; checkA(); scan(); updDist() end
+			if now-lastEsp>=EINT then lastEsp=now; refESP() end
+			if (S.Enabled or S.FullAuto) and now-lastScan>=SCAN then
+				lastScan=now; clean(kFrag); clean(kGlass); clean(kExtra)
+				local h=HRP(); local pos=h and h.Position or Vector3.zero
+				local fl={}
+				for o in pairs(kFrag) do if o and o.Parent then local p=bestPart(o); if p then table.insert(fl,{o=o,d=(p.Position-pos).Magnitude}) end end end
+				table.sort(fl,function(a,b) return a.d<b.d end)
+				for _,d in ipairs(fl) do pickup(d.o,"Fragment"); task.wait(0.1) end
+				if not S.OnlyFragments then for o in pairs(kGlass) do if o and o.Parent then pickup(o,"Glasses"); task.wait(0.1) end end end
+				for o,k in pairs(kExtra) do
+					if o and o.Parent then
+						local w=(k=="Key" and S.LootKey) or (k=="Ext" and S.LootExt) or (k=="Bat" and S.LootBat)
+						if w then pickup(o,k); task.wait(0.1) end
+					end
+				end
+			end
+			if S.FullAuto and S.FullAutoShelter and now-lastShel>=SHEL_CD then lastShel=now; toShel(true) end
+			if S.TornadoPull and now-lastTorn>=TINT then lastTorn=now; doTorn() end
+			if S.FragmentFly and now-lastFly>=FINT then lastFly=now; doFly() end
+			checkFirst()
+		end)
+		task.wait(UI_W)
+	end
+end)
+
+-- binds
+FA_tr.MouseButton1Click:Connect(function()
+	click(); S.FullAuto=not S.FullAuto
+	if S.FullAuto then S.Enabled=true; S.OnlyFragments=false; if S.FullAutoShelter then toShel(false); lastShel=tick() end; Notify("Full Auto ON")
+	else S.Enabled=false; Notify("Full Auto OFF") end; applyUI()
+end)
+SH_tr.MouseButton1Click:Connect(function() click(); S.FullAutoShelter=not S.FullAutoShelter; applyUI() end)
+LO_tr.MouseButton1Click:Connect(function() click(); S.Enabled=not S.Enabled; applyUI() end)
+FOBtn.MouseButton1Click:Connect(function() click(); S.OnlyFragments=true; applyUI() end)
+FGBtn.MouseButton1Click:Connect(function() click(); S.OnlyFragments=false; applyUI() end)
+Key_tr.MouseButton1Click:Connect(function() click(); S.LootKey=not S.LootKey; applyUI() end)
+Ext_tr.MouseButton1Click:Connect(function() click(); S.LootExt=not S.LootExt; applyUI() end)
+Bat_tr.MouseButton1Click:Connect(function() click(); S.LootBat=not S.LootBat; applyUI() end)
+RJ_tr.MouseButton1Click:Connect(function()
+	click(); S.RejoinNoFrag=not S.RejoinNoFrag
+	if S.RejoinNoFrag then firstChk=false; entered=false; enterT=0; alerting=false; rejoinSt="等待进入地图..." else rejoinSt="已关闭" end
+	applyUI()
+end)
+HopBtn.MouseButton1Click:Connect(hop)
+JobBtn.MouseButton1Click:Connect(function()
+	click(); local id=tostring(game.JobId)
+	if setclipboard then pcall(setclipboard,id); Notify("JobId已复制") else Notify("JobId: "..id) end
+end)
+AFK_tr.MouseButton1Click:Connect(function() click(); S.AntiAFK=not S.AntiAFK; applyUI() end)
+God_tr.MouseButton1Click:Connect(function() click(); S.GodMode=not S.GodMode; if S.GodMode then onGod() else offGod() end; applyUI() end)
+Tor_tr.MouseButton1Click:Connect(function() click(); S.TornadoPull=not S.TornadoPull; applyUI() end)
+Fly_tr.MouseButton1Click:Connect(function() click(); S.FragmentFly=not S.FragmentFly; applyUI() end)
+Spd_tr.MouseButton1Click:Connect(function() click(); S.WalkSpeedOn=not S.WalkSpeedOn; applySpd(); applyUI() end)
+ESP_tr.MouseButton1Click:Connect(function() click(); S.ESP=not S.ESP; if not S.ESP then clrESP() end; applyUI() end)
+SpdDown.MouseButton1Click:Connect(function() click(); S.WalkSpeed=math.max(16,S.WalkSpeed-4); SpdL.Text="Speed: "..S.WalkSpeed; applySpd() end)
+SpdUp.MouseButton1Click:Connect(function() click(); S.WalkSpeed=math.min(80,S.WalkSpeed+4); SpdL.Text="Speed: "..S.WalkSpeed; applySpd() end)
+RngDown.MouseButton1Click:Connect(function() click(); TRANGE=math.max(20,TRANGE-20); RngL.Text="Pull Range: "..TRANGE end)
+RngUp.MouseButton1Click:Connect(function() click(); TRANGE=math.min(200,TRANGE+20); RngL.Text="Pull Range: "..TRANGE end)
+SpecBtn.MouseButton1Click:Connect(startSpec)
+ChadBtn.MouseButton1Click:Connect(tryChad)
+ScanBtn.MouseButton1Click:Connect(function() click(); local c=scan(); updDist(); refESP(); Notify("扫描 碎片"..(c.Fragment or 0).." 眼镜"..(c.Glasses or 0)) end)
+ResetModeBtn.MouseButton1Click:Connect(function() click(); curMode="Unknown"; nextMode="Unknown"; lastNext=""; lastModeT=0; doomOK=false; tartOK=false; Notify("模式已重置") end)
+ShelBtn.MouseButton1Click:Connect(function() click(); toShel(false) end)
+RefBtn.MouseButton1Click:Connect(function() click(); refPl() end)
+CloseBtn.MouseButton1Click:Connect(function() click(); clrESP(); SG:Destroy() end)
+
+local drag,d0,p0
+TB.InputBegan:Connect(function(i)
+	if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=true; d0=i.Position; p0=Main.Position end
+end)
+TB.InputEnded:Connect(function(i)
+	if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=false end
+end)
+UIS.InputChanged:Connect(function(i)
+	if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+		local d=i.Position-d0
+		Main.Position=UDim2.new(p0.X.Scale,p0.X.Offset+d.X,p0.Y.Scale,p0.Y.Offset+d.Y)
+	end
+end)
+
+applyUI()
+print("[tau] ready SHORT")
