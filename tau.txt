@@ -1,5 +1,5 @@
--- tau only apple FULL (流畅优化)
--- 无 Tornado | 黑洞一键拉碎片 | Boat/Yacht | Fragment Fly | Music | NoInjury
+-- tau only apple FULL
+-- 黑洞/Fly = 散装方块（未锚定残骸）| 不动血月碎片 | 无 Tornado
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -84,7 +84,7 @@ pcall(function()
 end)
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "Tornado_Alley_Ultimate"
+Gui.Name = "tau_only_apple"
 Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.DisplayOrder = 999999
@@ -316,7 +316,6 @@ local function mkB(par, tx, y, col)
     return b
 end
 
--- Info
 local P1 = mkPage("Info", 500)
 local ic = mkCard(P1, 4, 380)
 local StatusL = mkL(ic, "状态: 关闭", 6)
@@ -342,7 +341,6 @@ DistF.Parent = ic
 Instance.new("UICorner", DistF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", DistF).Padding = UDim.new(0, 2)
 
--- Loot
 local P2 = mkPage("Loot", 340)
 local lc = mkCard(P2, 4, 320)
 mkL(lc, "【自动捡取】", 6, Color3.fromRGB(140, 200, 255))
@@ -375,7 +373,6 @@ local Key_tr, Key_th = mkTog(lc, "钥匙", 184, false)
 local Ext_tr, Ext_th = mkTog(lc, "灭火器", 210, false)
 local Bat_tr, Bat_th = mkTog(lc, "棒球棒", 236, false)
 
--- 效率
 local P3 = mkPage("Eff", 200)
 local ec = mkCard(P3, 4, 170)
 mkL(ec, "【效率】", 6, Color3.fromRGB(140, 200, 255))
@@ -383,7 +380,6 @@ local RJ_tr, RJ_th = mkTog(ec, "进图无碎片仅提示", 26, true)
 local HopB = mkB(ec, "立即换服", 60, Color3.fromRGB(50, 90, 140))
 local JobB = mkB(ec, "复制 JobId", 94, Color3.fromRGB(45, 70, 90))
 
--- 传送
 local P4 = mkPage("Teleport", 250)
 local tc = mkCard(P4, 4, 220)
 local ShelB = mkB(tc, "传送到避难所", 10, Color3.fromRGB(45, 45, 58))
@@ -400,14 +396,13 @@ Instance.new("UICorner", PlF).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlF).Padding = UDim.new(0, 3)
 local RefB = mkB(tc, "刷新玩家", 170, Color3.fromRGB(45, 45, 58))
 
--- Extra（无 Tornado，有黑洞）
 local P5 = mkPage("Extra", 780)
 local xc = mkCard(P5, 4, 760)
 mkL(xc, "【功能】", 6, Color3.fromRGB(140, 200, 255))
 local AFK_tr, AFK_th = mkTog(xc, "Anti-AFK", 26, true)
 local God_tr, God_th = mkTog(xc, "God Mode", 52, false)
 local Inj_tr, Inj_th = mkTog(xc, "No Fall Injury", 78, false)
-local Fly_tr, Fly_th = mkTog(xc, "Fragment Fly（持续飘）", 104, false)
+local Fly_tr, Fly_th = mkTog(xc, "方块 Fly（散装残骸）", 104, false)
 local Boat_tr, Boat_th = mkTog(xc, "Boat / Yacht Fly", 130, false)
 local Spd_tr, Spd_th = mkTog(xc, "WalkSpeed", 156, false)
 local SpdL = mkL(xc, "Speed: 16", 184)
@@ -432,7 +427,7 @@ SpdUp.TextSize = 11
 SpdUp.Parent = xc
 Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
 
-local BlackHoleB = mkB(xc, "黑洞拉取碎片（点一下）", 240, Color3.fromRGB(90, 40, 130))
+local BlackHoleB = mkB(xc, "黑洞拉方块（点一下）", 240, Color3.fromRGB(90, 40, 130))
 local SpecB = mkB(xc, "Open Spectate", 274, Color3.fromRGB(40, 90, 120))
 
 mkL(xc, "【自定义音乐 (最多30首)】", 312, Color3.fromRGB(140, 200, 255))
@@ -474,18 +469,17 @@ MusicListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 MusicListFrame.Parent = xc
 Instance.new("UICorner", MusicListFrame).CornerRadius = UDim.new(0, 6)
 
--- ESP
 local P6 = mkPage("ESP", 130)
 local esc = mkCard(P6, 4, 100)
 mkL(esc, "【ESP】", 6, Color3.fromRGB(140, 200, 255))
 local ESP_tr, ESP_th = mkTog(esc, "碎片/眼镜 ESP", 26, true)
-mkL(esc, "红=碎片 青=眼镜", 58, Color3.fromRGB(160, 160, 175))
+mkL(esc, "红=血月碎片 青=眼镜", 58, Color3.fromRGB(160, 160, 175))
 
 Pages.Info.Visible = true
 T1.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
 T1.TextColor3 = Color3.new(1, 1, 1)
-N("已加载 | 黑洞一键拉碎片")
-print("[tau] smooth + blackhole")
+N("已加载 | 黑洞/Fly=散装方块")
+print("[tau] debris blackhole + fly")
 
 local function showBig(tx, col, dur)
     Big.Text = tx
@@ -577,6 +571,18 @@ local function cntF()
     local n = 0
     for _ in pairs(kF) do n = n + 1 end
     return n
+end
+
+-- 散装方块：未锚定、非角色、非血月碎片/眼镜
+local function isDebrisPart(p)
+    if not p or not p:IsA("BasePart") then return false end
+    if p.Anchored then return false end
+    if p.AssemblyMass < 0.5 then return false end
+    local char = LP.Character
+    if char and p:IsDescendantOf(char) then return false end
+    if isF(p) or (p.Parent and isF(p.Parent)) then return false end
+    if isG(p) or (p.Parent and isG(p.Parent)) then return false end
+    return true
 end
 
 local function scan()
@@ -818,49 +824,74 @@ local function refESP()
     end
 end
 
--- ★ 黑洞：点一下，碎片飞向你
+-- ★ 黑洞：附近散装方块飞向你（不是血月碎片）
 local function blackHolePull()
     local hrp = HRP()
-    if not hrp then
-        N("无角色")
-        return
-    end
+    if not hrp then N("无角色") return end
     local target = hrp.Position + Vector3.new(0, 3, 0)
     local count = 0
-    clean(kF)
-    for o in pairs(kF) do
-        if o and o.Parent then
-            local p = best(o)
-            if p then
-                pcall(function()
-                    p.Anchored = false
-                    if o:IsA("Model") then
-                        for _, part in ipairs(o:GetDescendants()) do
-                            if part:IsA("BasePart") then part.Anchored = false end
-                        end
-                    end
-                    local dir = target - p.Position
-                    local dist = math.max(dir.Magnitude, 1)
-                    dir = dir.Unit
-                    local speed = math.clamp(dist * 2.2, 40, 140)
-                    p.AssemblyLinearVelocity = dir * speed + Vector3.new(0, 18, 0)
-                    local old = p:FindFirstChild("BlackHoleForce")
-                    if old then old:Destroy() end
-                    local bv = Instance.new("BodyVelocity")
-                    bv.Name = "BlackHoleForce"
-                    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                    bv.Velocity = dir * speed + Vector3.new(0, 12, 0)
-                    bv.Parent = p
-                    task.delay(1.6, function() if bv and bv.Parent then bv:Destroy() end end)
-                end)
-                count = count + 1
-            end
+    local parts
+    local ok = pcall(function()
+        parts = workspace:GetPartBoundsInRadius(hrp.Position, 120)
+    end)
+    if not ok or not parts then N("扫描失败") return end
+    for _, p in ipairs(parts) do
+        if isDebrisPart(p) then
+            pcall(function()
+                local dir = target - p.Position
+                local dist = math.max(dir.Magnitude, 1)
+                dir = dir.Unit
+                local speed = math.clamp(dist * 2.0, 35, 130)
+                p.AssemblyLinearVelocity = dir * speed + Vector3.new(0, 15, 0)
+                local old = p:FindFirstChild("BlackHoleForce")
+                if old then old:Destroy() end
+                local bv = Instance.new("BodyVelocity")
+                bv.Name = "BlackHoleForce"
+                bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                bv.Velocity = dir * speed + Vector3.new(0, 10, 0)
+                bv.Parent = p
+                task.delay(1.5, function() if bv and bv.Parent then bv:Destroy() end end)
+            end)
+            count = count + 1
+            if count >= 80 then break end
         end
     end
     if count > 0 then
-        N("黑洞拉取 " .. count .. " 个碎片", true)
+        N("黑洞拉取 " .. count .. " 个方块", true)
     else
-        N("附近没有碎片")
+        N("附近没有可拉的散装方块")
+    end
+end
+
+-- ★ Fly：散装方块飘起来
+local function doFly()
+    local h = HRP()
+    if not h then return end
+    local pos = h.Position
+    local parts
+    local ok = pcall(function()
+        parts = workspace:GetPartBoundsInRadius(pos, 70)
+    end)
+    if not ok or not parts then return end
+    local n = 0
+    for _, p in ipairs(parts) do
+        if n >= 25 then break end
+        if isDebrisPart(p) then
+            pcall(function()
+                local side = (math.random() - 0.5) * 35
+                local up = 35 + math.random() * 25
+                p.AssemblyLinearVelocity = Vector3.new(side, up, (math.random() - 0.5) * 35)
+                local old = p:FindFirstChild("DebrisFlyForce")
+                if old then old:Destroy() end
+                local bv = Instance.new("BodyVelocity")
+                bv.Name = "DebrisFlyForce"
+                bv.MaxForce = Vector3.new(8e4, 8e4, 8e4)
+                bv.Velocity = Vector3.new(side * 0.4, up, (math.random() - 0.5) * 18)
+                bv.Parent = p
+                task.delay(1.3, function() if bv and bv.Parent then bv:Destroy() end end)
+            end)
+            n = n + 1
+        end
     end
 end
 
@@ -1056,51 +1087,13 @@ local function doBoatFly()
                     if p:IsA("BasePart") then
                         p.Anchored = false
                         p.AssemblyLinearVelocity = Vector3.new(
-                            p.AssemblyLinearVelocity.X,
-                            55,
-                            p.AssemblyLinearVelocity.Z
+                            p.AssemblyLinearVelocity.X, 55, p.AssemblyLinearVelocity.Z
                         )
                     end
                 end
             end
         else
             boatCache[model] = nil
-        end
-    end
-end
-
--- Fragment Fly（持续飘）
-local function doFly()
-    local h = HRP()
-    if not h then return end
-    local pos = h.Position
-    local n = 0
-    for o in pairs(kF) do
-        if n >= 8 then break end
-        if o and o.Parent then
-            local p = best(o)
-            if p and (p.Position - pos).Magnitude <= 80 then
-                pcall(function()
-                    p.Anchored = false
-                    if o:IsA("Model") then
-                        for _, part in ipairs(o:GetDescendants()) do
-                            if part:IsA("BasePart") then part.Anchored = false end
-                        end
-                    end
-                    local side = (math.random() - 0.5) * 40
-                    local up = 40 + math.random() * 25
-                    p.AssemblyLinearVelocity = Vector3.new(side, up, (math.random() - 0.5) * 40)
-                    local old = p:FindFirstChild("FragFlyForce")
-                    if old then old:Destroy() end
-                    local bv = Instance.new("BodyVelocity")
-                    bv.Name = "FragFlyForce"
-                    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                    bv.Velocity = Vector3.new(side * 0.5, up, (math.random() - 0.5) * 20)
-                    bv.Parent = p
-                    task.delay(1.5, function() if bv and bv.Parent then bv:Destroy() end end)
-                end)
-                n = n + 1
-            end
         end
     end
 end
@@ -1639,4 +1632,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL ready - BlackHole | no Tornado")
+print("[tau] FULL ready - debris BlackHole/Fly only")
