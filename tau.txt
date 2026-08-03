@@ -1,5 +1,5 @@
--- tau only apple - Fixed
--- 观战失败仅提示 | Tartarus需5碎片 | 减轻卡顿 | Objective模式 | 进图后无碎片提示
+-- tau only apple - Performance Fixed
+-- 减轻卡顿 | Objective模式 | 进图后无碎片提示 | Tartarus需真模式 | 观战失败仅提示
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -60,8 +60,10 @@ local knownGlasses = {}
 local lastScan = 0
 local lastShelterTP = 0
 local isMinimized = false
-local SCAN_INTERVAL = 0.35
-local SHELTER_TP_INTERVAL = 25
+
+-- ★ 性能：拉大间隔，减少卡顿
+local SCAN_INTERVAL = 0.45
+local SHELTER_TP_INTERVAL = 28
 local TRIED_COOLDOWN = 1.8
 local TORNADO_RANGE = 80
 local TORNADO_STRENGTH = 110
@@ -78,14 +80,16 @@ local doomsdayDetected = false
 local currentMode = "Unknown"
 local nextMode = "Unknown"
 local lastModeTime = 0
-local MODE_TIMEOUT = 14
+local MODE_TIMEOUT = 16
 local mapLootCounts = {}
 
 local lastHeavyScan = 0
-local HEAVY_SCAN_INTERVAL = 1.5
+local HEAVY_SCAN_INTERVAL = 3.0
 local lastTornadoTick = 0
-local TORNADO_INTERVAL = 0.2
-local UI_REFRESH_INTERVAL = 0.08
+local TORNADO_INTERVAL = 0.35
+local lastFlyTick = 0
+local FLY_INTERVAL = 1.0
+local UI_REFRESH_INTERVAL = 0.12
 
 local firstRoundChecked = false
 local rejoinStatus = "等待进入地图..."
@@ -110,9 +114,9 @@ local function playSound(soundId, volume)
     end)
 end
 
-local function playClick() playSound(SOUND_CLICK, 0.45) end
-local function playNotifySound() playSound(SOUND_NOTIFY, 0.55) end
-local function playAlertSound() playSound(SOUND_ALERT, 0.65) end
+local function playClick() playSound(SOUND_CLICK, 0.4) end
+local function playNotifySound() playSound(SOUND_NOTIFY, 0.5) end
+local function playAlertSound() playSound(SOUND_ALERT, 0.6) end
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -423,7 +427,7 @@ makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 25
 local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "进图后无碎片 → 仅提示+声音", 32, true)
 makeLabel(effCard, "休息/投票不算；进图并刷完Loot后才检测", 64, Color3.fromRGB(150, 150, 165))
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
-makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 140, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "建议: Full Auto + 碎片+眼镜（Tornado少开更不卡）", 140, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "有眼镜→等Chad | 全服集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
 
@@ -448,8 +452,8 @@ local extraCard = makeCard(PageExtra, 4, 380)
 makeLabel(extraCard, "【功能】", 8, Color3.fromRGB(140, 200, 255))
 local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 28, true)
 local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 58, false)
-local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull", 88, false)
-local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly", 118, false)
+local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull (较吃性能)", 88, false)
+local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly (较吃性能)", 118, false)
 local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 152)
 local RangeDown = Instance.new("TextButton")
 RangeDown.Size = UDim2.new(0, 90, 0, 28)
@@ -669,12 +673,12 @@ local function pickup(obj, typ)
     if not part then return end
     local offsets = {
         Vector3.new(0, 2.0, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(0, 1.6, -1.5),
-        Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0), Vector3.new(0, 2.8, 0),
+        Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0),
     }
     for _, offset in ipairs(offsets) do
         if not obj.Parent then break end
         hrp.CFrame = part.CFrame + offset
-        task.wait(0.028)
+        task.wait(0.03)
         tryFirePrompt(obj:FindFirstChildWhichIsA("ProximityPrompt", true))
         local touch = part:FindFirstChildOfClass("TouchInterest")
         if touch then
@@ -850,51 +854,55 @@ local function checkAlerts()
     local bestCurrent = matchModeFromText(objText)
     local foundNext = nil
     local sawDoomsday = false
-    local sawTartarusMode = false  -- 只有真正 Tartarus 模式才解锁
+    local sawTartarusMode = false
 
     if objText and #objText >= 5 then
         local lower = string.lower(objText)
         if not lower:find("intermission") and not lower:find("voting") and not lower:find("vote") then
             markEnteredMap()
         end
+        if lower:find("doomsday is occurring")
+            or lower:find("survive the end of the world")
+            or lower:find("may mother nature have mercy") then
+            sawDoomsday = true
+        end
+        if lower:find("tartarus is occurring") or lower:find("tartarus has been summoned") then
+            sawTartarusMode = true
+        end
     end
 
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if pg then
-        for _, g in ipairs(pg:GetDescendants()) do
-            if g:IsA("TextLabel") or g:IsA("TextButton") then
-                local raw = g.Text or ""
-                if #raw < 5 or #raw > 220 then continue end
-                local t = string.lower(raw)
-                if t:find("unlikely the world will end") or t:find("chances are slim") then continue end
-
-                local n1, n2 = t:find("this round's gamemode is")
-                if n1 then
-                    local after = raw:sub(n2 + 1):gsub("^[%s:]+", ""):gsub("%s+$", "")
-                    if #after > 1 and #after < 40 then foundNext = after end
-                end
-
-                if not bestCurrent then
-                    local m = matchModeFromText(raw)
-                    if m then bestCurrent = m end
-                end
-
-                -- Doomsday：明确句子
-                if t:find("doomsday is occurring") or t:find("survive the end of the world")
-                    or t:find("may mother nature have mercy") then
-                    sawDoomsday = true
-                end
-
-                -- Tartarus：只有真正发生/召唤，不要因为提到 fragment 就解锁
-                if t:find("tartarus is occurring") or t:find("tartarus has been summoned") then
-                    sawTartarusMode = true
+    -- 只在还没识别到模式时扫 Notifications（轻量）
+    if not bestCurrent then
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        local notifications = pg and pg:FindFirstChild("Notifications")
+        if notifications then
+            for _, g in ipairs(notifications:GetDescendants()) do
+                if g:IsA("TextLabel") or g:IsA("TextButton") then
+                    local raw = g.Text or ""
+                    if #raw < 5 or #raw > 220 then continue end
+                    local t = string.lower(raw)
+                    if t:find("unlikely the world will end") or t:find("chances are slim") then continue end
+                    local n1, n2 = t:find("this round's gamemode is")
+                    if n1 then
+                        local after = raw:sub(n2 + 1):gsub("^[%s:]+", ""):gsub("%s+$", "")
+                        if #after > 1 and #after < 40 then foundNext = after end
+                    end
+                    if not bestCurrent then
+                        local m = matchModeFromText(raw)
+                        if m then bestCurrent = m end
+                    end
+                    if t:find("doomsday is occurring") or t:find("survive the end of the world") then
+                        sawDoomsday = true
+                    end
+                    if t:find("tartarus is occurring") or t:find("tartarus has been summoned") then
+                        sawTartarusMode = true
+                    end
                 end
             end
         end
     end
 
     if foundNext then nextMode = foundNext end
-
     if sawTartarusMode and not tartarusUnlocked then
         tartarusUnlocked = true
         Notify("Tartarus 模式已出现！", true)
@@ -908,11 +916,9 @@ local function checkAlerts()
         currentMode = bestCurrent
         lastModeTime = tick()
         if bestCurrent == "Doomsday" then doomsdayDetected = true end
-        if bestCurrent == "Tartarus" then
-            if not tartarusUnlocked then
-                tartarusUnlocked = true
-                Notify("Tartarus 模式已出现！", true)
-            end
+        if bestCurrent == "Tartarus" and not tartarusUnlocked then
+            tartarusUnlocked = true
+            Notify("Tartarus 模式已出现！", true)
         end
         markEnteredMap()
     elseif tick() - lastModeTime > MODE_TIMEOUT then
@@ -967,7 +973,6 @@ local function fireSignalObject(obj)
     end
 end
 
--- 观战：失败只 tip，不抛错
 local function startSpectate()
     playClick()
     local ok, err = pcall(function()
@@ -985,7 +990,6 @@ local function startSpectate()
     if ok then
         Notify("已进入观战")
     else
-        -- 仅提示，不当成脚本崩溃
         Notify("观战提示: " .. tostring(err) .. "（可手动点游戏观战）")
     end
 end
@@ -1055,21 +1059,30 @@ LocalPlayer.CharacterAdded:Connect(function()
     if Settings.GodMode then task.wait(0.8) enableGodMode() end
 end)
 
+-- ★ 用范围查询，不再全图 GetDescendants
 local function doTornadoPull()
     local hrp = getHRP()
     if not hrp then return end
     local myPos = hrp.Position
     local myChar = LocalPlayer.Character
-    for _, obj in ipairs(workspace:GetDescendants()) do
+    local parts
+    local ok = pcall(function()
+        parts = workspace:GetPartBoundsInRadius(myPos, TORNADO_RANGE)
+    end)
+    if not ok or not parts then return end
+    for _, obj in ipairs(parts) do
         if obj:IsA("BasePart") and not obj.Anchored and obj.Parent then
             if myChar and obj:IsDescendantOf(myChar) then continue end
             local dist = (obj.Position - myPos).Magnitude
-            if dist < SAFE_DISTANCE or dist >= TORNADO_RANGE then continue end
+            if dist < SAFE_DISTANCE then continue end
             local direction = (myPos - obj.Position).Unit
             local sf = 1 - (dist / TORNADO_RANGE)
             if dist < 20 then sf = sf * 0.3 end
-            local force = direction * (TORNADO_STRENGTH * sf) + Vector3.new(0, TORNADO_UP_FORCE * sf * 0.5, 0)
-            if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then force = force * 1.45 end
+            local force = direction * (TORNADO_STRENGTH * sf)
+                + Vector3.new(0, TORNADO_UP_FORCE * sf * 0.5, 0)
+            if isFragment(obj) or (obj.Parent and isFragment(obj.Parent)) then
+                force = force * 1.45
+            end
             pcall(function() obj.AssemblyLinearVelocity = force end)
         end
     end
@@ -1116,7 +1129,7 @@ LocalPlayer.Idled:Connect(function() if Settings.AntiAFK then doAntiAFK() end en
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         if Settings.AntiAFK then doAntiAFK() end
-        task.wait(30)
+        task.wait(35)
     end
 end)
 
@@ -1124,11 +1137,11 @@ workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
         if isFragment(obj) then
             knownFragments[obj] = true
-            if Settings.Enabled or Settings.FullAuto then task.wait(0.1) pickup(obj, "Fragment") end
+            if Settings.Enabled or Settings.FullAuto then task.wait(0.12) pickup(obj, "Fragment") end
         elseif isGlasses(obj) then
             knownGlasses[obj] = true
             if (Settings.Enabled or Settings.FullAuto) and not Settings.OnlyFragments then
-                task.wait(0.1) pickup(obj, "Glasses")
+                task.wait(0.12) pickup(obj, "Glasses")
             end
         end
     end)
@@ -1140,7 +1153,7 @@ workspace.DescendantRemoving:Connect(function(obj)
 end)
 
 task.spawn(function()
-    task.wait(1.2)
+    task.wait(1.5)
     scanMapLoot()
     refreshPlayerList()
 end)
@@ -1191,7 +1204,6 @@ task.spawn(function()
             StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
 
-        -- Tartarus：只有真正解锁/模式出现，或个人已捡满5（仅提示参考）
         if tartarusUnlocked then
             GoalLabel.Text = "目标: Tartarus 模式已出现"
         elseif collectedFragments >= 5 then
@@ -1250,7 +1262,7 @@ task.spawn(function()
         elseif tartarusUnlocked then
             TipLabel.Text = "提示: Tartarus 已可出，注意存活"
         else
-            TipLabel.Text = "提示: 开着捡，没东西就去效率页手动换服"
+            TipLabel.Text = "提示: Tornado/Fly 少开更不卡"
         end
 
         if now - lastHeavyScan >= HEAVY_SCAN_INTERVAL then
@@ -1274,13 +1286,13 @@ task.spawn(function()
             table.sort(fragList, function(a, b) return a.dist < b.dist end)
             for _, data in ipairs(fragList) do
                 pickup(data.obj, "Fragment")
-                task.wait(0.08)
+                task.wait(0.1)
             end
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
                     if obj and obj.Parent then
                         pickup(obj, "Glasses")
-                        task.wait(0.08)
+                        task.wait(0.1)
                     end
                 end
             end
@@ -1295,7 +1307,10 @@ task.spawn(function()
             lastTornadoTick = now
             doTornadoPull()
         end
-        if Settings.FragmentFly then doFragmentFly() end
+        if Settings.FragmentFly and (now - lastFlyTick) >= FLY_INTERVAL then
+            lastFlyTick = now
+            doFragmentFly()
+        end
         checkFirstRoundNoFrag()
         task.wait(UI_REFRESH_INTERVAL)
     end
@@ -1389,6 +1404,7 @@ TornadoTrack.MouseButton1Click:Connect(function()
     Settings.TornadoPull = not Settings.TornadoPull
     applySettingsToUI()
     saveSettings()
+    if Settings.TornadoPull then Notify("Tornado 已开（可能轻微卡）") end
 end)
 
 FlyTrack.MouseButton1Click:Connect(function()
@@ -1525,5 +1541,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | Tartarus需全服5碎片 | 观战失败仅提示")
-print("tau only apple fixed")
+Notify("已加载 | 性能优化版 | Tornado少开更流畅")
+print("tau only apple | performance fixed")
