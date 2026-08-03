@@ -1,4 +1,6 @@
--- tau only apple FULL (Music History 30 + No Fall Injury)
+-- tau only apple FULL (Music History 30 + No Fall Injury + Boat Fly)
+-- 已移除 Try Chad
+
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 local SG = game:GetService("StarterGui")
@@ -13,7 +15,8 @@ local PLACE = 2313058949
 local C = {
     En = false, OnlyF = true, FA = false, FAShel = true, AFK = true,
     Torn = false, God = false, Fly = false, Rej = true, ESP = true,
-    SpdOn = false, Spd = 16, Key = false, Ext = false, Bat = false, NoInjury = false
+    SpdOn = false, Spd = 16, Key = false, Ext = false, Bat = false,
+    NoInjury = false, BoatFly = false
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -25,7 +28,7 @@ local ShelN = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDo
 
 local myF, gotG = 0, false
 local kF, kG, kE = {}, {}, {}
-local tScan, tShel, tHeavy, tTorn, tFly, tEsp = 0, 0, 0, 0, 0, 0
+local tScan, tShel, tHeavy, tTorn, tFly, tEsp, tBoat = 0, 0, 0, 0, 0, 0, 0
 local isMin, isSpec = false, false
 local TRANGE = 80
 local tart = false
@@ -50,9 +53,11 @@ local function snd(id, v)
         task.delay(3, function() if s and s.Parent then s:Destroy() end end)
     end)
 end
+
 local function click() snd("rbxassetid://6895079853", 0.4) end
 local function nfy() snd("rbxassetid://4590662766", 0.5) end
 local function alrt() snd("rbxassetid://5153789655", 0.7) end
+
 local function N(m, a)
     nfy()
     if a then alrt() end
@@ -227,7 +232,6 @@ local function mkTog(par, tx, y, on)
     row.Position = UDim2.new(0, 6, 0, y)
     row.BackgroundTransparency = 1
     row.Parent = par
-
     local lb = Instance.new("TextLabel")
     lb.Size = UDim2.new(1, -55, 1, 0)
     lb.BackgroundTransparency = 1
@@ -237,7 +241,6 @@ local function mkTog(par, tx, y, on)
     lb.TextSize = 12
     lb.TextXAlignment = Enum.TextXAlignment.Left
     lb.Parent = row
-
     local tr = Instance.new("TextButton")
     tr.Size = UDim2.new(0, 40, 0, 18)
     tr.Position = UDim2.new(1, -46, 0.5, -9)
@@ -245,14 +248,12 @@ local function mkTog(par, tx, y, on)
     tr.Text = ""
     tr.Parent = row
     Instance.new("UICorner", tr).CornerRadius = UDim.new(1, 0)
-
     local th = Instance.new("Frame")
     th.Size = UDim2.new(0, 14, 0, 14)
     th.Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     th.BackgroundColor3 = Color3.new(1, 1, 1)
     th.Parent = tr
     Instance.new("UICorner", th).CornerRadius = UDim.new(1, 0)
-
     return tr, th
 end
 
@@ -284,15 +285,14 @@ local FragL = mkL(ic, "血月碎片: 地图0 | 我0/5", 44)
 local FragFullL = mkL(ic, "个人碎片: 未满", 62)
 local GlassL = mkL(ic, "神秘眼镜: 未找到", 80)
 local TartL = mkL(ic, "Tartarus: 未解锁", 98)
-local ChadL = mkL(ic, "Chad条件: 未满足", 116)
-mkL(ic, "── 会话 ──", 140, Color3.fromRGB(120, 120, 140))
-local RejL = mkL(ic, "重进提示: 等待进入地图...", 158)
-local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 176, Color3.fromRGB(160, 200, 160))
-local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 194, Color3.fromRGB(150, 150, 165))
-mkL(ic, "── 碎片距离 ──", 218, Color3.fromRGB(120, 120, 140))
+mkL(ic, "── 会话 ──", 126, Color3.fromRGB(120, 120, 140))
+local RejL = mkL(ic, "重进提示: 等待进入地图...", 144)
+local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 162, Color3.fromRGB(160, 200, 160))
+local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 180, Color3.fromRGB(150, 150, 165))
+mkL(ic, "── 碎片距离 ──", 204, Color3.fromRGB(120, 120, 140))
 local DistF = Instance.new("ScrollingFrame")
 DistF.Size = UDim2.new(1, -20, 0, 90)
-DistF.Position = UDim2.new(0, 10, 0, 236)
+DistF.Position = UDim2.new(0, 10, 0, 222)
 DistF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 DistF.BorderSizePixel = 0
 DistF.ScrollBarThickness = 3
@@ -318,7 +318,6 @@ FOBtn.Font = Enum.Font.GothamBold
 FOBtn.TextSize = 12
 FOBtn.Parent = lc
 Instance.new("UICorner", FOBtn).CornerRadius = UDim.new(0, 8)
-
 local FGBtn = Instance.new("TextButton")
 FGBtn.Size = UDim2.new(0.48, -8, 0, 26)
 FGBtn.Position = UDim2.new(0.52, 0, 0, 128)
@@ -329,7 +328,6 @@ FGBtn.Font = Enum.Font.GothamBold
 FGBtn.TextSize = 12
 FGBtn.Parent = lc
 Instance.new("UICorner", FGBtn).CornerRadius = UDim.new(0, 8)
-
 mkL(lc, "【多稀有】", 164, Color3.fromRGB(140, 200, 255))
 local Key_tr, Key_th = mkTog(lc, "钥匙", 184, false)
 local Ext_tr, Ext_th = mkTog(lc, "灭火器", 210, false)
@@ -358,19 +356,20 @@ Instance.new("UICorner", PlF).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlF).Padding = UDim.new(0, 3)
 local RefB = mkB(tc, "刷新玩家", 170, Color3.fromRGB(45, 45, 58))
 
-local P5 = mkPage("Extra", 780)
-local xc = mkCard(P5, 4, 760)
+local P5 = mkPage("Extra", 820)
+local xc = mkCard(P5, 4, 800)
 mkL(xc, "【功能】", 6, Color3.fromRGB(140, 200, 255))
 local AFK_tr, AFK_th = mkTog(xc, "Anti-AFK", 26, true)
 local God_tr, God_th = mkTog(xc, "God Mode", 52, false)
 local Inj_tr, Inj_th = mkTog(xc, "No Fall Injury", 78, false)
 local Tor_tr, Tor_th = mkTog(xc, "Tornado Pull", 104, false)
 local Fly_tr, Fly_th = mkTog(xc, "Fragment Fly", 130, false)
-local Spd_tr, Spd_th = mkTog(xc, "WalkSpeed", 156, false)
-local SpdL = mkL(xc, "Speed: 16", 184)
+local Boat_tr, Boat_th = mkTog(xc, "Boat Fly", 156, false)
+local Spd_tr, Spd_th = mkTog(xc, "WalkSpeed", 182, false)
+local SpdL = mkL(xc, "Speed: 16", 210)
 local SpdDn = Instance.new("TextButton")
 SpdDn.Size = UDim2.new(0, 80, 0, 24)
-SpdDn.Position = UDim2.new(0, 10, 0, 204)
+SpdDn.Position = UDim2.new(0, 10, 0, 230)
 SpdDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 SpdDn.Text = "Speed-4"
 SpdDn.TextColor3 = Color3.new(1, 1, 1)
@@ -378,10 +377,9 @@ SpdDn.Font = Enum.Font.GothamBold
 SpdDn.TextSize = 11
 SpdDn.Parent = xc
 Instance.new("UICorner", SpdDn).CornerRadius = UDim.new(0, 6)
-
 local SpdUp = Instance.new("TextButton")
 SpdUp.Size = UDim2.new(0, 80, 0, 24)
-SpdUp.Position = UDim2.new(0, 100, 0, 204)
+SpdUp.Position = UDim2.new(0, 100, 0, 230)
 SpdUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 SpdUp.Text = "Speed+4"
 SpdUp.TextColor3 = Color3.new(1, 1, 1)
@@ -389,11 +387,10 @@ SpdUp.Font = Enum.Font.GothamBold
 SpdUp.TextSize = 11
 SpdUp.Parent = xc
 Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
-
-local RngL = mkL(xc, "Pull Range: 80", 236)
+local RngL = mkL(xc, "Pull Range: 80", 262)
 local RngDn = Instance.new("TextButton")
 RngDn.Size = UDim2.new(0, 80, 0, 24)
-RngDn.Position = UDim2.new(0, 10, 0, 256)
+RngDn.Position = UDim2.new(0, 10, 0, 282)
 RngDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RngDn.Text = "Range-20"
 RngDn.TextColor3 = Color3.new(1, 1, 1)
@@ -401,10 +398,9 @@ RngDn.Font = Enum.Font.GothamBold
 RngDn.TextSize = 11
 RngDn.Parent = xc
 Instance.new("UICorner", RngDn).CornerRadius = UDim.new(0, 6)
-
 local RngUp = Instance.new("TextButton")
 RngUp.Size = UDim2.new(0, 80, 0, 24)
-RngUp.Position = UDim2.new(0, 100, 0, 256)
+RngUp.Position = UDim2.new(0, 100, 0, 282)
 RngUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RngUp.Text = "Range+20"
 RngUp.TextColor3 = Color3.new(1, 1, 1)
@@ -412,16 +408,13 @@ RngUp.Font = Enum.Font.GothamBold
 RngUp.TextSize = 11
 RngUp.Parent = xc
 Instance.new("UICorner", RngUp).CornerRadius = UDim.new(0, 6)
-
-local SpecB = mkB(xc, "Open Spectate", 294, Color3.fromRGB(40, 90, 120))
-local ChadB = mkB(xc, "Try Chad", 328, Color3.fromRGB(120, 80, 40))
+local SpecB = mkB(xc, "Open Spectate", 320, Color3.fromRGB(40, 90, 120))
 
 -- 音乐区域
-mkL(xc, "【自定义音乐 (最多30首)】", 364, Color3.fromRGB(140, 200, 255))
-
+mkL(xc, "【自定义音乐 (最多30首)】", 360, Color3.fromRGB(140, 200, 255))
 local MusicIdBox = Instance.new("TextBox")
 MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
-MusicIdBox.Position = UDim2.new(0, 10, 0, 384)
+MusicIdBox.Position = UDim2.new(0, 10, 0, 380)
 MusicIdBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
 MusicIdBox.PlaceholderText = "音乐 ID (数字或 rbxassetid://)"
 MusicIdBox.Text = ""
@@ -432,10 +425,9 @@ MusicIdBox.TextSize = 12
 MusicIdBox.ClearTextOnFocus = false
 MusicIdBox.Parent = xc
 Instance.new("UICorner", MusicIdBox).CornerRadius = UDim.new(0, 6)
-
 local MusicNameBox = Instance.new("TextBox")
 MusicNameBox.Size = UDim2.new(1, -20, 0, 24)
-MusicNameBox.Position = UDim2.new(0, 10, 0, 412)
+MusicNameBox.Position = UDim2.new(0, 10, 0, 408)
 MusicNameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
 MusicNameBox.PlaceholderText = "给这首歌起名字（例如：血月）"
 MusicNameBox.Text = ""
@@ -446,13 +438,11 @@ MusicNameBox.TextSize = 12
 MusicNameBox.ClearTextOnFocus = false
 MusicNameBox.Parent = xc
 Instance.new("UICorner", MusicNameBox).CornerRadius = UDim.new(0, 6)
-
-local AddMusicB = mkB(xc, "添加并更换", 442, Color3.fromRGB(50, 120, 80))
-local RestoreMusicB = mkB(xc, "恢复原来音乐", 472, Color3.fromRGB(90, 70, 50))
-
+local AddMusicB = mkB(xc, "添加并更换", 438, Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkB(xc, "恢复原来音乐", 468, Color3.fromRGB(90, 70, 50))
 MusicListFrame = Instance.new("ScrollingFrame")
 MusicListFrame.Size = UDim2.new(1, -20, 0, 220)
-MusicListFrame.Position = UDim2.new(0, 10, 0, 508)
+MusicListFrame.Position = UDim2.new(0, 10, 0, 504)
 MusicListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 MusicListFrame.BorderSizePixel = 0
 MusicListFrame.ScrollBarThickness = 4
@@ -781,14 +771,12 @@ local function addESP(o, col, lab)
         hl.FillTransparency = 0.55
         hl.OutlineTransparency = 0.2
         hl.Parent = espF
-
         local bb = Instance.new("BillboardGui")
         bb.Size = UDim2.new(0, 80, 0, 18)
         bb.AlwaysOnTop = true
         bb.StudsOffset = Vector3.new(0, 2.4, 0)
         bb.Adornee = p
         bb.Parent = espF
-
         local tl = Instance.new("TextLabel")
         tl.Size = UDim2.new(1, 0, 1, 0)
         tl.BackgroundTransparency = 1
@@ -824,7 +812,6 @@ local function changeGameMusic(id)
         if not string.find(id, "rbxassetid://") then
             id = "rbxassetid://" .. id
         end
-
         local targets = {}
         local musicFolder = SS:FindFirstChild("Music")
         if musicFolder then
@@ -833,12 +820,10 @@ local function changeGameMusic(id)
             if gamemode and gamemode:IsA("Sound") then table.insert(targets, gamemode) end
             if bonus and bonus:IsA("Sound") then table.insert(targets, bonus) end
         end
-
         if #targets == 0 then
             N("没找到 Gamemode 或 BonusDisaster")
             return
         end
-
         for _, s in ipairs(targets) do
             if not originalIds[s] then
                 originalIds[s] = s.SoundId
@@ -867,7 +852,6 @@ local function refreshMusicList()
     for _, child in ipairs(MusicListFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
-
     local y = 0
     for i, item in ipairs(musicHistory) do
         local row = Instance.new("Frame")
@@ -877,11 +861,10 @@ local function refreshMusicList()
         row.BorderSizePixel = 0
         row.Parent = MusicListFrame
         Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-
         local nameBtn = Instance.new("TextButton")
         nameBtn.Size = UDim2.new(1, -34, 1, 0)
         nameBtn.BackgroundTransparency = 1
-        nameBtn.Text = "  " .. item.name
+        nameBtn.Text = " " .. item.name
         nameBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
         nameBtn.Font = Enum.Font.Gotham
         nameBtn.TextSize = 12
@@ -892,7 +875,6 @@ local function refreshMusicList()
             changeGameMusic(item.id)
             N("已切换到: " .. item.name)
         end)
-
         local delBtn = Instance.new("TextButton")
         delBtn.Size = UDim2.new(0, 26, 0, 22)
         delBtn.Position = UDim2.new(1, -30, 0.5, -11)
@@ -909,7 +891,6 @@ local function refreshMusicList()
             refreshMusicList()
             N("已删除: " .. item.name)
         end)
-
         y = y + 30
     end
     MusicListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 4)
@@ -920,14 +901,12 @@ local function addToHistory(name, id)
     id = tostring(id or "")
     if name == "" then name = "未命名" end
     if id == "" then return end
-
     for i, item in ipairs(musicHistory) do
         if item.id == id or item.id == "rbxassetid://" .. id then
             table.remove(musicHistory, i)
             break
         end
     end
-
     table.insert(musicHistory, 1, {name = name, id = id})
     while #musicHistory > MAX_HISTORY do
         table.remove(musicHistory)
@@ -964,6 +943,38 @@ local function disableNoInjury()
     if injuryConn then
         injuryConn:Disconnect()
         injuryConn = nil
+    end
+end
+
+-- ★ Boat Fly
+local function doBoatFly()
+    local hrp = HRP()
+    if not hrp then return end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("VehicleSeat") or obj:IsA("Seat") then
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if model then
+                local name = model.Name:lower()
+                if name:find("boat") or name:find("ship") or name:find("raft") or name:find("canoe") or name:find("vessel") then
+                    local primary = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+                    if primary and (primary.Position - hrp.Position).Magnitude < 90 then
+                        local old = primary:FindFirstChild("BoatFlyForce")
+                        if old then old:Destroy() end
+
+                        local bv = Instance.new("BodyVelocity")
+                        bv.Name = "BoatFlyForce"
+                        bv.MaxForce = Vector3.new(0, 1e6, 0)
+                        bv.Velocity = Vector3.new(0, 48, 0)
+                        bv.Parent = primary
+
+                        task.delay(1.4, function()
+                            if bv and bv.Parent then bv:Destroy() end
+                        end)
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -1246,23 +1257,6 @@ local function startSpec()
     end
 end
 
-local function tryChad()
-    click()
-    local ok, err = pcall(function()
-        local c = RPS:WaitForChild("Assets", 3):WaitForChild("Signals", 3):WaitForChild("Gamemodes", 3):WaitForChild("Chad", 3)
-        if c:IsA("RemoteEvent") then
-            c:FireServer()
-        elseif c:IsA("Folder") then
-            for _, x in ipairs(c:GetDescendants()) do
-                if x:IsA("RemoteEvent") then
-                    pcall(function() x:FireServer() end)
-                end
-            end
-        end
-    end)
-    if ok then N("Chad 已发送") else N("Chad: " .. tostring(err)) end
-end
-
 local function applyUI()
     setTog(FA_tr, FA_th, C.FA)
     setTog(SH_tr, SH_th, C.FAShel)
@@ -1273,12 +1267,12 @@ local function applyUI()
     setTog(Inj_tr, Inj_th, C.NoInjury)
     setTog(Tor_tr, Tor_th, C.Torn)
     setTog(Fly_tr, Fly_th, C.Fly)
+    setTog(Boat_tr, Boat_th, C.BoatFly)
     setTog(Spd_tr, Spd_th, C.SpdOn)
     setTog(ESP_tr, ESP_th, C.ESP)
     setTog(Key_tr, Key_th, C.Key)
     setTog(Ext_tr, Ext_th, C.Ext)
     setTog(Bat_tr, Bat_th, C.Bat)
-
     if C.OnlyF then
         FOBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
         FGBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
@@ -1286,7 +1280,6 @@ local function applyUI()
         FOBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
         FGBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
     end
-
     if C.God then onGod() else offGod() end
     if C.NoInjury then enableNoInjury() else disableNoInjury() end
     RngL.Text = "Pull Range: " .. TRANGE
@@ -1315,7 +1308,6 @@ task.spawn(function()
             local now = tick()
             local c = mapC
             local fr = c.Fragment or cntF()
-
             if C.FA then
                 StatusL.Text = "状态: Full Auto"
                 StatusL.TextColor3 = Color3.fromRGB(100, 220, 140)
@@ -1326,7 +1318,6 @@ task.spawn(function()
                 StatusL.Text = "状态: 关闭"
                 StatusL.TextColor3 = Color3.fromRGB(255, 100, 100)
             end
-
             FragL.Text = string.format("血月碎片: 地图%d | 我%d/5", fr, myF)
             if myF >= 5 then
                 FragFullL.Text = "个人碎片: 已满 5/5 ✓"
@@ -1335,17 +1326,13 @@ task.spawn(function()
                 FragFullL.Text = "个人碎片: " .. myF .. "/5"
                 FragFullL.TextColor3 = Color3.fromRGB(180, 180, 195)
             end
-
             if gotG or (c.Glasses or 0) > 0 then
                 GlassL.Text = "神秘眼镜: 已找到"
                 GlassL.TextColor3 = Color3.fromRGB(100, 255, 120)
-                ChadL.Text = "Chad条件: 已满足"
             else
                 GlassL.Text = "神秘眼镜: 未找到"
                 GlassL.TextColor3 = Color3.fromRGB(255, 160, 100)
-                ChadL.Text = "Chad条件: 未满足"
             end
-
             TartL.Text = tart and "Tartarus: 已出现" or "Tartarus: 未解锁"
             RejL.Text = "重进提示: " .. rejSt
             SessL.Text = string.format("会话: 碎片%d 眼镜%d 换服%d", sF, sG, sH)
@@ -1360,7 +1347,6 @@ task.spawn(function()
                 tEsp = now
                 refESP()
             end
-
             if (C.En or C.FA) and now - tScan >= 0.45 then
                 tScan = now
                 clean(kF)
@@ -1398,7 +1384,6 @@ task.spawn(function()
                     end
                 end
             end
-
             if C.FA and C.FAShel and now - tShel >= 28 then
                 tShel = now
                 toShel(true)
@@ -1410,6 +1395,10 @@ task.spawn(function()
             if C.Fly and now - tFly >= 1 then
                 tFly = now
                 doFly()
+            end
+            if C.BoatFly and now - tBoat >= 0.8 then
+                tBoat = now
+                doBoatFly()
             end
             checkFirst()
         end)
@@ -1480,6 +1469,7 @@ RJ_tr.MouseButton1Click:Connect(function()
 end)
 
 HopB.MouseButton1Click:Connect(hop)
+
 JobB.MouseButton1Click:Connect(function()
     click()
     local id = tostring(game.JobId)
@@ -1492,6 +1482,7 @@ JobB.MouseButton1Click:Connect(function()
 end)
 
 AFK_tr.MouseButton1Click:Connect(function() click() C.AFK = not C.AFK applyUI() end)
+
 God_tr.MouseButton1Click:Connect(function()
     click()
     C.God = not C.God
@@ -1514,7 +1505,16 @@ end)
 
 Tor_tr.MouseButton1Click:Connect(function() click() C.Torn = not C.Torn applyUI() end)
 Fly_tr.MouseButton1Click:Connect(function() click() C.Fly = not C.Fly applyUI() end)
+
+Boat_tr.MouseButton1Click:Connect(function()
+    click()
+    C.BoatFly = not C.BoatFly
+    setTog(Boat_tr, Boat_th, C.BoatFly)
+    N(C.BoatFly and "Boat Fly ON" or "Boat Fly OFF")
+end)
+
 Spd_tr.MouseButton1Click:Connect(function() click() C.SpdOn = not C.SpdOn applySpd() applyUI() end)
+
 ESP_tr.MouseButton1Click:Connect(function()
     click()
     C.ESP = not C.ESP
@@ -1528,17 +1528,20 @@ SpdDn.MouseButton1Click:Connect(function()
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end)
+
 SpdUp.MouseButton1Click:Connect(function()
     click()
     C.Spd = math.min(80, C.Spd + 4)
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end)
+
 RngDn.MouseButton1Click:Connect(function()
     click()
     TRANGE = math.max(20, TRANGE - 20)
     RngL.Text = "Pull Range: " .. TRANGE
 end)
+
 RngUp.MouseButton1Click:Connect(function()
     click()
     TRANGE = math.min(200, TRANGE + 20)
@@ -1546,7 +1549,6 @@ RngUp.MouseButton1Click:Connect(function()
 end)
 
 SpecB.MouseButton1Click:Connect(startSpec)
-ChadB.MouseButton1Click:Connect(tryChad)
 ShelB.MouseButton1Click:Connect(function() click() toShel(false) end)
 RefB.MouseButton1Click:Connect(function() click() refPl() end)
 
@@ -1592,4 +1594,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL ready - Music History 30 + No Fall Injury")
+print("[tau] FULL ready - Music History 30 + No Fall Injury + Boat Fly (No Chad)")
