@@ -1,5 +1,5 @@
--- tau only apple - Complete Full
--- 模式读 Objective | 进图后再检测无碎片 | 仅提示+声音 | 全 UI 有声音
+-- tau only apple - Fixed
+-- 观战失败仅提示 | Tartarus需5碎片 | 减轻卡顿 | Objective模式 | 进图后无碎片提示
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -60,9 +60,9 @@ local knownGlasses = {}
 local lastScan = 0
 local lastShelterTP = 0
 local isMinimized = false
-local SCAN_INTERVAL = 0.25
+local SCAN_INTERVAL = 0.35
 local SHELTER_TP_INTERVAL = 25
-local TRIED_COOLDOWN = 1.6
+local TRIED_COOLDOWN = 1.8
 local TORNADO_RANGE = 80
 local TORNADO_STRENGTH = 110
 local TORNADO_UP_FORCE = 22
@@ -82,8 +82,10 @@ local MODE_TIMEOUT = 14
 local mapLootCounts = {}
 
 local lastHeavyScan = 0
-local HEAVY_SCAN_INTERVAL = 0.8
-local UI_REFRESH_INTERVAL = 0.05
+local HEAVY_SCAN_INTERVAL = 1.5
+local lastTornadoTick = 0
+local TORNADO_INTERVAL = 0.2
+local UI_REFRESH_INTERVAL = 0.08
 
 local firstRoundChecked = false
 local rejoinStatus = "等待进入地图..."
@@ -101,7 +103,6 @@ local function playSound(soundId, volume)
         local s = Instance.new("Sound")
         s.SoundId = soundId
         s.Volume = volume or 0.55
-        s.PlayOnRemove = false
         s.Parent = SoundService
         s:Play()
         s.Ended:Connect(function() s:Destroy() end)
@@ -110,8 +111,8 @@ local function playSound(soundId, volume)
 end
 
 local function playClick() playSound(SOUND_CLICK, 0.45) end
-local function playNotifySound() playSound(SOUND_NOTIFY, 0.6) end
-local function playAlertSound() playSound(SOUND_ALERT, 0.7) end
+local function playNotifySound() playSound(SOUND_NOTIFY, 0.55) end
+local function playAlertSound() playSound(SOUND_ALERT, 0.65) end
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -366,7 +367,6 @@ local function makeActionBtn(parent, text, y, color)
     return btn
 end
 
--- Info
 local PageInfo = createPage("Info")
 local infoCard = makeCard(PageInfo, 4, 420)
 local StatusLabel = makeLabel(infoCard, "状态: 关闭", 10)
@@ -374,7 +374,7 @@ local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 30, Color3.fro
 makeLabel(infoCard, "── 稀有进度 ──", 56, Color3.fromRGB(120, 120, 140))
 local FragProgressLabel = makeLabel(infoCard, "血月碎片: 地图0 | 我0/5 → Tartarus", 78)
 local GlassesProgressLabel = makeLabel(infoCard, "神秘眼镜: 未找到 → Chad", 98)
-local TartarusLabel = makeLabel(infoCard, "Tartarus: 未解锁", 118)
+local TartarusLabel = makeLabel(infoCard, "Tartarus: 未解锁 (需全服5碎片)", 118)
 local ChadReadyLabel = makeLabel(infoCard, "Chad条件: 未满足", 138)
 makeLabel(infoCard, "── 模式 ──", 164, Color3.fromRGB(120, 120, 140))
 local ModeLabel = makeLabel(infoCard, "当前模式: Unknown", 186)
@@ -387,7 +387,6 @@ local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其
 local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 348, Color3.fromRGB(55, 45, 45))
 local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 382, Color3.fromRGB(40, 55, 70))
 
--- Loot
 local PageLoot = createPage("Loot")
 local lootCard = makeCard(PageLoot, 4, 280)
 makeLabel(lootCard, "【自动捡取】", 8, Color3.fromRGB(140, 200, 255))
@@ -418,7 +417,6 @@ Instance.new("UICorner", FragGlassBtn).CornerRadius = UDim.new(0, 8)
 makeLabel(lootCard, "碎片→Tartarus | 眼镜→Chad", 192, Color3.fromRGB(160, 160, 175))
 makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 212, Color3.fromRGB(160, 160, 175))
 
--- 效率
 local PageEff = createPage("Eff")
 local effCard = makeCard(PageEff, 4, 300)
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
@@ -426,10 +424,9 @@ local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "进图后无碎片 → 
 makeLabel(effCard, "休息/投票不算；进图并刷完Loot后才检测", 64, Color3.fromRGB(150, 150, 165))
 local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
 makeLabel(effCard, "建议: Full Auto + 碎片+眼镜 + 无碎片提示", 140, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "有眼镜→等Chad | 集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "有眼镜→等Chad | 全服集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
 makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
 
--- 传送
 local PageTP = createPage("Teleport")
 local tpCard = makeCard(PageTP, 4, 300)
 local ShelterBtn = makeActionBtn(tpCard, "传送到避难所", 12, Color3.fromRGB(45, 45, 58))
@@ -446,7 +443,6 @@ Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
 local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 250, Color3.fromRGB(45, 45, 58))
 
--- Extra
 local PageExtra = createPage("Extra")
 local extraCard = makeCard(PageExtra, 4, 380)
 makeLabel(extraCard, "【功能】", 8, Color3.fromRGB(140, 200, 255))
@@ -488,7 +484,6 @@ Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
 local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 220, Color3.fromRGB(40, 90, 120))
 local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 258, Color3.fromRGB(120, 80, 40))
 
--- 储存
 local PageSave = createPage("Save")
 local saveCard = makeCard(PageSave, 4, 300)
 makeLabel(saveCard, "Save Name:", 12)
@@ -552,7 +547,6 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================== Core ====================
 local function Notify(msg, isAlert)
     playNotifySound()
     if isAlert then playAlertSound() end
@@ -697,8 +691,8 @@ local function pickup(obj, typ)
     task.delay(0.6, function()
         if not obj or not obj.Parent then
             if typ == "Fragment" then
-                collectedFragments = collectedFragments + 1
-                Notify("碎片 " .. collectedFragments .. "/5")
+                collectedFragments = math.min(5, collectedFragments + 1)
+                Notify("碎片 " .. collectedFragments .. "/5（个人计数，全服需共5个）")
             elseif typ == "Glasses" then
                 glassesFound = true
                 Notify("眼镜已找到！Chad条件满足")
@@ -765,16 +759,9 @@ local function serverHop()
     rejoinStatus = "正在换服..."
     Notify("正在换服，请稍候...", true)
     local placeId = game.PlaceId
-    local ok1 = pcall(function() TeleportService:TeleportAsync(placeId, {LocalPlayer}) end)
-    if ok1 then return end
-    local ok2 = pcall(function() TeleportService:Teleport(placeId, LocalPlayer) end)
-    if ok2 then return end
-    local ok3 = pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
-    if ok3 then return end
-    local ok4 = pcall(function() TeleportService:Teleport(placeId) end)
-    if ok4 then return end
-    Notify("换服失败：执行器可能拦截，请手动退出再进", true)
-    rejoinStatus = "换服失败，请重试/手动退"
+    pcall(function() TeleportService:TeleportAsync(placeId, {LocalPlayer}) end)
+    pcall(function() TeleportService:Teleport(placeId, LocalPlayer) end)
+    pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
 end
 
 local function alertNoFragOnly()
@@ -795,7 +782,6 @@ local function alertNoFragOnly()
     rejoinStatus = "无碎片（已提示，请手动换服）"
 end
 
--- ========== 模式：优先读 Objective ==========
 local CURRENT_RULES = {
     {pat = "tartarus has been summoned", mode = "Tartarus"},
     {pat = "tartarus is occurring", mode = "Tartarus"},
@@ -863,7 +849,8 @@ local function checkAlerts()
     local objText = getObjectiveText()
     local bestCurrent = matchModeFromText(objText)
     local foundNext = nil
-    local sawDoomsday, sawTartarus = false, false
+    local sawDoomsday = false
+    local sawTartarusMode = false  -- 只有真正 Tartarus 模式才解锁
 
     if objText and #objText >= 5 then
         local lower = string.lower(objText)
@@ -891,20 +878,26 @@ local function checkAlerts()
                     local m = matchModeFromText(raw)
                     if m then bestCurrent = m end
                 end
-                if t:find("doomsday") then sawDoomsday = true end
-                if t:find("tartarus") then sawTartarus = true end
-                if (t:find("5th", 1, true) or t:find("fifth", 1, true) or t:find("all five", 1, true))
-                    and t:find("fragment", 1, true) then
-                    sawTartarus = true
+
+                -- Doomsday：明确句子
+                if t:find("doomsday is occurring") or t:find("survive the end of the world")
+                    or t:find("may mother nature have mercy") then
+                    sawDoomsday = true
+                end
+
+                -- Tartarus：只有真正发生/召唤，不要因为提到 fragment 就解锁
+                if t:find("tartarus is occurring") or t:find("tartarus has been summoned") then
+                    sawTartarusMode = true
                 end
             end
         end
     end
 
     if foundNext then nextMode = foundNext end
-    if sawTartarus and not tartarusUnlocked then
+
+    if sawTartarusMode and not tartarusUnlocked then
         tartarusUnlocked = true
-        Notify("Tartarus 已解锁！", true)
+        Notify("Tartarus 模式已出现！", true)
     end
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
@@ -915,37 +908,37 @@ local function checkAlerts()
         currentMode = bestCurrent
         lastModeTime = tick()
         if bestCurrent == "Doomsday" then doomsdayDetected = true end
-        if bestCurrent == "Tartarus" then tartarusUnlocked = true end
+        if bestCurrent == "Tartarus" then
+            if not tartarusUnlocked then
+                tartarusUnlocked = true
+                Notify("Tartarus 模式已出现！", true)
+            end
+        end
         markEnteredMap()
     elseif tick() - lastModeTime > MODE_TIMEOUT then
         currentMode = "Unknown"
     end
 end
 
--- 只有真正进图 + Loot 刷完后才检测
 local function checkFirstRoundNoFrag()
     if not Settings.RejoinNoFrag then
         rejoinStatus = "已关闭"
         return
     end
     if firstRoundChecked or isAlerting then return end
-
     if not enteredMap then
         rejoinStatus = "等待进入地图..."
         return
     end
-
     local left = math.ceil(LOOT_SPAWN_WAIT - (tick() - mapEnterTime))
     if left > 0 then
         rejoinStatus = "进图后检测中: " .. left .. "秒"
         return
     end
-
     firstRoundChecked = true
     scanMapLoot()
     local frags = mapLootCounts.Fragment or 0
     if frags <= 0 then frags = countFrags() end
-
     if frags <= 0 then
         rejoinStatus = "无碎片 → 仅提示"
         task.spawn(alertNoFragOnly)
@@ -956,6 +949,7 @@ local function checkFirstRoundNoFrag()
 end
 
 local function fireSignalObject(obj)
+    if not obj then return end
     if obj:IsA("RemoteEvent") then
         pcall(function() obj:FireServer() end)
         pcall(function() obj:FireServer(true) end)
@@ -970,26 +964,30 @@ local function fireSignalObject(obj)
                 fireSignalObject(c)
             end
         end
-    elseif obj:IsA("ModuleScript") then
-        local m = require(obj)
-        if typeof(m) == "function" then pcall(m)
-        elseif typeof(m) == "table" then
-            if m.Start then pcall(m.Start)
-            elseif m.Init then pcall(m.Init)
-            elseif m.Enable then pcall(m.Enable)
-            end
-        end
     end
 end
 
+-- 观战：失败只 tip，不抛错
 local function startSpectate()
     playClick()
     local ok, err = pcall(function()
-        local Event = game:GetService("ReplicatedStorage").Assets.Signals.Spectate
-        if not Event then error("Spectate not found") end
-        firesignal(Event.OnClientEvent, { A = true, reason = "EnterSpectate" })
+        if typeof(firesignal) ~= "function" then
+            error("当前执行器不支持 firesignal")
+        end
+        local assets = ReplicatedStorage:FindFirstChild("Assets")
+        if not assets then error("找不到 Assets") end
+        local signals = assets:FindFirstChild("Signals")
+        if not signals then error("找不到 Signals") end
+        local event = signals:FindFirstChild("Spectate")
+        if not event then error("找不到 Spectate") end
+        firesignal(event.OnClientEvent, { A = true, reason = "EnterSpectate" })
     end)
-    if ok then Notify("已进入观战") else Notify("观战失败: " .. tostring(err)) end
+    if ok then
+        Notify("已进入观战")
+    else
+        -- 仅提示，不当成脚本崩溃
+        Notify("观战提示: " .. tostring(err) .. "（可手动点游戏观战）")
+    end
 end
 
 local function tryChadSignal()
@@ -1001,7 +999,8 @@ local function tryChadSignal()
             :WaitForChild("Chad", 3)
         fireSignalObject(chad)
     end)
-    if ok then Notify("Chad signal 已发送") else Notify("Chad 失败: " .. tostring(err)) end
+    if ok then Notify("Chad signal 已发送")
+    else Notify("Chad 提示: " .. tostring(err)) end
 end
 
 local godConnection, healthConnection, antiFlingConnection
@@ -1192,12 +1191,15 @@ task.spawn(function()
             StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
 
-        if collectedFragments >= 5 or tartarusUnlocked then
-            GoalLabel.Text = "目标: Tartarus 已可出 / 等模式"
+        -- Tartarus：只有真正解锁/模式出现，或个人已捡满5（仅提示参考）
+        if tartarusUnlocked then
+            GoalLabel.Text = "目标: Tartarus 模式已出现"
+        elseif collectedFragments >= 5 then
+            GoalLabel.Text = "目标: 个人已捡5个，等全服解锁/出模式"
         elseif glassesFound then
             GoalLabel.Text = "目标: 眼镜已有 → 等 Chad | 继续捡碎片"
         else
-            GoalLabel.Text = "目标: 优先捡碎片+眼镜"
+            GoalLabel.Text = "目标: 优先捡碎片+眼镜（需全服共5碎片）"
         end
 
         FragProgressLabel.Text = string.format("血月碎片: 地图%d | 我%d/5 → Tartarus", frags, collectedFragments)
@@ -1215,11 +1217,11 @@ task.spawn(function()
             ChadReadyLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
 
-        if tartarusUnlocked or collectedFragments >= 5 then
-            TartarusLabel.Text = "Tartarus: 已解锁"
+        if tartarusUnlocked then
+            TartarusLabel.Text = "Tartarus: 已出现/已解锁"
             TartarusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
         else
-            TartarusLabel.Text = "Tartarus: 未解锁 (需5碎片)"
+            TartarusLabel.Text = "Tartarus: 未解锁 (需全服5碎片)"
             TartarusLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
         end
 
@@ -1244,9 +1246,9 @@ task.spawn(function()
         elseif Settings.RejoinNoFrag and not firstRoundChecked then
             TipLabel.Text = "提示: 等进图后再检测碎片..."
         elseif glassesFound and collectedFragments < 5 then
-            TipLabel.Text = "提示: 眼镜有了，继续捡碎片凑5个"
-        elseif collectedFragments >= 5 then
-            TipLabel.Text = "提示: 碎片够了，等 Tartarus / 可换服找眼镜"
+            TipLabel.Text = "提示: 眼镜有了，继续捡碎片（全服共需5个）"
+        elseif tartarusUnlocked then
+            TipLabel.Text = "提示: Tartarus 已可出，注意存活"
         else
             TipLabel.Text = "提示: 开着捡，没东西就去效率页手动换服"
         end
@@ -1272,13 +1274,13 @@ task.spawn(function()
             table.sort(fragList, function(a, b) return a.dist < b.dist end)
             for _, data in ipairs(fragList) do
                 pickup(data.obj, "Fragment")
-                task.wait(0.07)
+                task.wait(0.08)
             end
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
                     if obj and obj.Parent then
                         pickup(obj, "Glasses")
-                        task.wait(0.07)
+                        task.wait(0.08)
                     end
                 end
             end
@@ -1289,7 +1291,10 @@ task.spawn(function()
             forceToShelter(true)
         end
 
-        if Settings.TornadoPull then doTornadoPull() end
+        if Settings.TornadoPull and (now - lastTornadoTick) >= TORNADO_INTERVAL then
+            lastTornadoTick = now
+            doTornadoPull()
+        end
         if Settings.FragmentFly then doFragmentFly() end
         checkFirstRoundNoFrag()
         task.wait(UI_REFRESH_INTERVAL)
@@ -1459,6 +1464,7 @@ ResetModeBtn.MouseButton1Click:Connect(function()
     nextMode = "Unknown"
     lastModeTime = 0
     doomsdayDetected = false
+    tartarusUnlocked = false
     Notify("模式显示已重置")
 end)
 
@@ -1519,5 +1525,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | 进图后再检测无碎片（仅提示）")
-print("tau only apple | Objective模式 + 进图检测")
+Notify("已加载 | Tartarus需全服5碎片 | 观战失败仅提示")
+print("tau only apple fixed")
