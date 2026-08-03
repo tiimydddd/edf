@@ -1,5 +1,4 @@
--- tau only apple FULL
--- Music History 30 + No Fall Injury(防骨折) + Boat Fly + 加强模式检测
+-- tau only apple FULL (Music History 30 + No Fall Injury + Boat Fly)
 -- 已移除 Try Chad
 
 local Players = game:GetService("Players")
@@ -42,12 +41,6 @@ local injuryConn = nil
 local musicHistory = {}
 local MAX_HISTORY = 30
 local MusicListFrame = nil
-
--- 加强模式检测
-local currentMode = "Unknown"
-local currentObjective = ""
-local isIntermission = false
-local tartarusActive = false
 
 local function snd(id, v)
     pcall(function()
@@ -284,23 +277,22 @@ local function mkB(par, tx, y, col)
 end
 
 -- ==================== Pages ====================
-local P1 = mkPage("Info", 500)
-local ic = mkCard(P1, 4, 380)
+local P1 = mkPage("Info", 480)
+local ic = mkCard(P1, 4, 360)
 local StatusL = mkL(ic, "状态: 关闭", 6)
 mkL(ic, "── 进度 ──", 26, Color3.fromRGB(120, 120, 140))
 local FragL = mkL(ic, "血月碎片: 地图0 | 我0/5", 44)
 local FragFullL = mkL(ic, "个人碎片: 未满", 62)
 local GlassL = mkL(ic, "神秘眼镜: 未找到", 80)
-local ModeL = mkL(ic, "当前模式: Unknown", 98)
-local TartL = mkL(ic, "Tartarus: 未解锁", 116)
-mkL(ic, "── 会话 ──", 140, Color3.fromRGB(120, 120, 140))
-local RejL = mkL(ic, "重进提示: 等待进入地图...", 158)
-local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 176, Color3.fromRGB(160, 200, 160))
-local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 194, Color3.fromRGB(150, 150, 165))
-mkL(ic, "── 碎片距离 ──", 218, Color3.fromRGB(120, 120, 140))
+local TartL = mkL(ic, "Tartarus: 未解锁", 98)
+mkL(ic, "── 会话 ──", 126, Color3.fromRGB(120, 120, 140))
+local RejL = mkL(ic, "重进提示: 等待进入地图...", 144)
+local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 162, Color3.fromRGB(160, 200, 160))
+local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 180, Color3.fromRGB(150, 150, 165))
+mkL(ic, "── 碎片距离 ──", 204, Color3.fromRGB(120, 120, 140))
 local DistF = Instance.new("ScrollingFrame")
 DistF.Size = UDim2.new(1, -20, 0, 90)
-DistF.Position = UDim2.new(0, 10, 0, 236)
+DistF.Position = UDim2.new(0, 10, 0, 222)
 DistF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 DistF.BorderSizePixel = 0
 DistF.ScrollBarThickness = 3
@@ -418,6 +410,7 @@ RngUp.Parent = xc
 Instance.new("UICorner", RngUp).CornerRadius = UDim.new(0, 6)
 local SpecB = mkB(xc, "Open Spectate", 320, Color3.fromRGB(40, 90, 120))
 
+-- 音乐区域
 mkL(xc, "【自定义音乐 (最多30首)】", 360, Color3.fromRGB(140, 200, 255))
 local MusicIdBox = Instance.new("TextBox")
 MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
@@ -807,7 +800,7 @@ local function refESP()
     end
 end
 
--- 音乐
+-- 音乐相关
 local function changeGameMusic(id)
     local success = false
     pcall(function()
@@ -921,61 +914,22 @@ local function addToHistory(name, id)
     refreshMusicList()
 end
 
--- ★ 加强 No Fall Injury（防骨折）
+-- No Fall Injury
 local function enableNoInjury()
     if injuryConn then injuryConn:Disconnect() end
     injuryConn = RS.Heartbeat:Connect(function()
         if not C.NoInjury then return end
-        local char = LP.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = Hum()
+        local hrp = HRP()
         if not hum or not hrp then return end
-
         pcall(function()
             local state = hum:GetState()
             if state == Enum.HumanoidStateType.FallingDown
             or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.Physics
-            or state == Enum.HumanoidStateType.Freefall then
-                if hrp.AssemblyLinearVelocity.Y < -100 then
-                    hrp.AssemblyLinearVelocity = Vector3.new(
-                        hrp.AssemblyLinearVelocity.X * 0.3,
-                        math.max(hrp.AssemblyLinearVelocity.Y, -80),
-                        hrp.AssemblyLinearVelocity.Z * 0.3
-                    )
-                end
+            or state == Enum.HumanoidStateType.Physics then
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                 hum:ChangeState(Enum.HumanoidStateType.Running)
             end
-
-            -- 强制修复 Bones
-            local bones = char:FindFirstChild("Bones")
-            if bones then
-                for _, bone in ipairs(bones:GetChildren()) do
-                    if bone:IsA("BoolValue") and bone.Value == true then
-                        bone.Value = false
-                    end
-                end
-            end
-
-            -- 同步 GUI
-            local gui = LP:FindFirstChild("PlayerGui")
-            if gui then
-                local menus = gui:FindFirstChild("Menus")
-                if menus then
-                    local broken = menus:FindFirstChild("BrokenBones")
-                    if broken and broken:FindFirstChild("Body") then
-                        for _, part in ipairs(broken.Body:GetChildren()) do
-                            if part:FindFirstChild("Broken") then
-                                part.Broken.Value = false
-                                part.BackgroundColor3 = Color3.fromRGB(85, 255, 127)
-                            end
-                        end
-                    end
-                end
-            end
-
             if hum.WalkSpeed < 16 and not C.SpdOn then
                 hum.WalkSpeed = 16
             end
@@ -992,10 +946,11 @@ local function disableNoInjury()
     end
 end
 
--- Boat Fly
+-- ★ Boat Fly
 local function doBoatFly()
     local hrp = HRP()
     if not hrp then return end
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("VehicleSeat") or obj:IsA("Seat") then
             local model = obj:FindFirstAncestorOfClass("Model")
@@ -1006,11 +961,13 @@ local function doBoatFly()
                     if primary and (primary.Position - hrp.Position).Magnitude < 90 then
                         local old = primary:FindFirstChild("BoatFlyForce")
                         if old then old:Destroy() end
+
                         local bv = Instance.new("BodyVelocity")
                         bv.Name = "BoatFlyForce"
                         bv.MaxForce = Vector3.new(0, 1e6, 0)
                         bv.Velocity = Vector3.new(0, 48, 0)
                         bv.Parent = primary
+
                         task.delay(1.4, function()
                             if bv and bv.Parent then bv:Destroy() end
                         end)
@@ -1049,58 +1006,6 @@ local function alertNo()
     rejSt = "无碎片（已提示）"
 end
 
--- ★ 加强模式检测
-local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
-local EventSignal = Signals and Signals:FindFirstChild("Event")
-
-if EventSignal then
-    EventSignal.OnClientEvent:Connect(function(data)
-        if typeof(data) ~= "table" or not data.reason then return end
-        local reason = data.reason
-
-        if reason == "Cutscene" and data.F and data.F.Name then
-            currentMode = data.F.Name
-            if data.F.Name == "Tartarus" then
-                tartarusActive = true
-                tart = true
-                alrt()
-                showBig("Tartarus 已出现！", Color3.fromRGB(255, 100, 80), 6)
-                N("Tartarus 模式开启", true)
-            end
-        end
-
-        if reason == "TartarusClock" or reason == "TartarusSummon" then
-            tartarusActive = true
-            tart = true
-            if data.B then
-                N("Tartarus: " .. tostring(data.B), true)
-            end
-        end
-
-        if reason == "Intermission" then
-            isIntermission = data.A == true
-            if isIntermission then currentMode = "Intermission" end
-        end
-
-        if reason == "DoomsDayForecast" then
-            currentMode = "Doomsday"
-            N("Doomsday Forecast 出现！", true)
-        end
-
-        if reason == "ChadSummon" then
-            N("Chad 已召唤！", true)
-        end
-
-        if reason == "TwistyTalk" and data.A then
-            N("Twisty: " .. tostring(data.A))
-        end
-
-        if reason == "Notify" and data.B == "Loot" then
-            N((data.A and data.A.Name or "?") .. " 找到了 " .. tostring(data.C))
-        end
-    end)
-end
-
 local function getObj()
     local g = LP:FindFirstChild("PlayerGui")
     if not g then return nil end
@@ -1127,31 +1032,16 @@ end
 
 local function checkEnter()
     local ot = getObj()
-    if ot and #ot >= 3 then
+    if ot and #ot >= 5 then
         local lo = string.lower(ot)
-        currentObjective = ot
-
         if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then
             markEnter()
         end
-
-        if lo:find("tartarus") then
-            if not tart then
-                tart = true
-                tartarusActive = true
-                alrt()
-                showBig("Tartarus 已出现", Color3.fromRGB(255, 120, 80), 5)
-                N("Tartarus!", true)
-            end
-            currentMode = "Tartarus"
-        elseif lo:find("doomsday") or lo:find("doom") then
-            currentMode = "Doomsday"
-        elseif lo:find("chad") then
-            currentMode = "Chad"
-        elseif lo:find("twisty") then
-            currentMode = "Twisty"
-        elseif lo:find("weeping") then
-            currentMode = "Weeping Angel"
+        if lo:find("tartarus") and not tart then
+            tart = true
+            alrt()
+            showBig("Tartarus 已出现", Color3.fromRGB(255, 120, 80), 5)
+            N("Tartarus!", true)
         end
     end
 end
@@ -1443,8 +1333,7 @@ task.spawn(function()
                 GlassL.Text = "神秘眼镜: 未找到"
                 GlassL.TextColor3 = Color3.fromRGB(255, 160, 100)
             end
-            ModeL.Text = "当前模式: " .. currentMode
-            TartL.Text = (tart or tartarusActive) and "Tartarus: 已出现" or "Tartarus: 未解锁"
+            TartL.Text = tart and "Tartarus: 已出现" or "Tartarus: 未解锁"
             RejL.Text = "重进提示: " .. rejSt
             SessL.Text = string.format("会话: 碎片%d 眼镜%d 换服%d", sF, sG, sH)
             MapL.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d", c.Key or 0, c.Ext or 0, c.Bat or 0)
@@ -1606,7 +1495,7 @@ Inj_tr.MouseButton1Click:Connect(function()
     C.NoInjury = not C.NoInjury
     if C.NoInjury then
         enableNoInjury()
-        N("No Fall Injury ON（防骨折）")
+        N("No Fall Injury ON")
     else
         disableNoInjury()
         N("No Fall Injury OFF")
@@ -1705,4 +1594,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL ready - 加强模式检测 + 防骨折 No Fall Injury + Boat Fly")
+print("[tau] FULL ready - Music History 30 + No Fall Injury + Boat Fly (No Chad)")
