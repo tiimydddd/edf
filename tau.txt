@@ -84,7 +84,7 @@ pcall(function()
 end)
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "tau_only_apple"
+Gui.Name = "TORNADO ALLEY ULTIMATE"
 Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.DisplayOrder = 999999
