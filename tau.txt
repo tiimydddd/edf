@@ -1,4 +1,4 @@
--- tau only apple SHORT
+-- tau only apple FULL (UI稳定版 + 下一模式秒提醒)
 local Players=game:GetService("Players")
 local LocalPlayer=Players.LocalPlayer
 local StarterGui=game:GetService("StarterGui")
@@ -23,7 +23,7 @@ local myFrags,gotGlass=0,false
 local kFrag,kGlass,kExtra={},{},{}
 local lastScan,lastShel,lastHeavy,lastTorn,lastFly,lastEsp=0,0,0,0,0,0
 local isMin,isSpec=false,false
-local SCAN=0.45; local HEAVY=3; local TINT=0.35; local FINT=1; local EINT=0.5
+local SCAN=0.45; local HEAVY=2.0; local TINT=0.35; local FINT=1; local EINT=0.5
 local SHEL_CD=28; local TRY_CD=1.8; local UI_W=0.12
 local TRANGE,TSTR,TUP,SAFE=80,110,22,9
 local tartOK,doomOK=false,false
@@ -50,7 +50,6 @@ local function Notify(m,a)
 	pcall(function() StarterGui:SetCore("SendNotification",{Title="tau only apple",Text=tostring(m),Duration=a and 5 or 2.8}) end)
 end
 
--- GUI
 local pg=LocalPlayer:WaitForChild("PlayerGui")
 pcall(function() local o=pg:FindFirstChild("tau_only_apple") if o then o:Destroy() end end)
 
@@ -58,10 +57,11 @@ local SG=Instance.new("ScreenGui")
 SG.Name="tau_only_apple"; SG.ResetOnSpawn=false; SG.DisplayOrder=999999; SG.IgnoreGuiInset=true; SG.Parent=pg
 
 local Big=Instance.new("TextLabel")
-Big.Size=UDim2.new(1,0,0,50); Big.Position=UDim2.new(0,0,0.12,0)
-Big.BackgroundTransparency=0.35; Big.BackgroundColor3=Color3.fromRGB(20,20,30)
+Big.Size=UDim2.new(1,0,0,56); Big.Position=UDim2.new(0,0,0.12,0)
+Big.BackgroundTransparency=0.3; Big.BackgroundColor3=Color3.fromRGB(15,15,25)
 Big.Text=""; Big.TextColor3=Color3.fromRGB(255,220,80); Big.Font=Enum.Font.GothamBold
-Big.TextSize=24; Big.Visible=false; Big.ZIndex=50; Big.Parent=SG
+Big.TextSize=26; Big.Visible=false; Big.ZIndex=50; Big.Parent=SG
+Instance.new("UIStroke",Big).Color=Color3.fromRGB(0,0,0)
 
 local Flash=Instance.new("Frame")
 Flash.Size=UDim2.new(1,0,1,0); Flash.BackgroundColor3=Color3.fromRGB(180,20,20)
@@ -208,6 +208,7 @@ mkLab(ec,"【效率】",8,Color3.fromRGB(140,200,255))
 local RJ_tr,RJ_th=mkTog(ec,"进图后无碎片 → 仅提示",32,true)
 local HopBtn=mkBtn(ec,"立即换服",70,Color3.fromRGB(50,90,140))
 local JobBtn=mkBtn(ec,"复制 JobId",106,Color3.fromRGB(45,70,90))
+mkLab(ec,"模式一公布会大字+声音提醒",145,Color3.fromRGB(160,200,160))
 
 local PTP=mkPage("Teleport",300)
 local tc=mkCard(PTP,4,270)
@@ -255,13 +256,12 @@ mkLab(esc,"红=碎片  青=眼镜",68,Color3.fromRGB(160,160,175))
 
 Pages.Info.Visible=true
 TInfo.BackgroundColor3=Color3.fromRGB(50,50,62); TInfo.TextColor3=Color3.new(1,1,1)
-Notify("界面已加载 SHORT")
-print("[tau] UI OK")
+Notify("界面已加载 FULL")
+print("[tau] UI OK FULL")
 
--- helpers
 local function showBig(tx,col,dur)
 	Big.Text=tx; Big.TextColor3=col or Color3.fromRGB(255,220,80); Big.Visible=true
-	task.delay(dur or 4,function() if Big.Text==tx then Big.Visible=false end end)
+	task.delay(dur or 5,function() if Big.Text==tx then Big.Visible=false end end)
 end
 local function flashD()
 	sessD=sessD+1; Flash.Visible=true
@@ -466,6 +466,8 @@ local RULES={
 	{p="toastnado is occurring",m="ToastNado"},{p="deadnado is occurring",m="Deadnado"},
 	{p="double trouble",m="Double Trouble"},{p="triple threat",m="Triple Threat"},
 	{p="normal survival",m="Normal Survival"},{p="there is an ef",m="Normal Survival"},
+	{p="infernado is occurring",m="Infernado"},{p="there is a dust devil",m="Dust Devil"},
+	{p="four tornadoes have touched down",m="4-Nado"},{p="this tornado targets specific players",m="Lurker"},
 }
 local function getObj()
 	local gui=LocalPlayer:FindFirstChild("PlayerGui"); if not gui then return nil end
@@ -489,6 +491,22 @@ local function markEnter()
 	if entered then return end; entered=true; enterT=tick(); rejoinSt="已进图，等待Loot..."
 end
 
+-- ★ 下一模式：更勤扫 + 多种文案 + 大字秒提醒
+local function onNextMode(name)
+	if not name or name=="" or name==lastNext then return end
+	lastNext=name
+	nextMode=name
+	alrt()
+	showBig("下一模式: "..name, Color3.fromRGB(100,200,255), 6)
+	Notify("下一模式: "..name, true)
+	-- 危险模式额外红闪
+	local low=string.lower(name)
+	if low:find("doomsday") or low:find("tartarus") or low:find("deadnado") then
+		flashD()
+		showBig("⚠ 危险模式: "..name, Color3.fromRGB(255,70,70), 7)
+	end
+end
+
 local function checkA()
 	local ot=getObj(); local best=matchM(ot); local fn=nil; local sd,st=false,false
 	if ot and #ot>=5 then
@@ -497,27 +515,40 @@ local function checkA()
 		if lo:find("doomsday") or lo:find("survive the end") then sd=true end
 		if lo:find("tartarus") then st=true end
 	end
-	if not best then
-		local gui=LocalPlayer:FindFirstChild("PlayerGui")
-		local n=gui and gui:FindFirstChild("Notifications")
-		if n then
-			for _,g in ipairs(n:GetDescendants()) do
-				if g:IsA("TextLabel") or g:IsA("TextButton") then
-					local raw=g.Text or ""
-					if #raw>=5 and #raw<=220 then
-						local t=string.lower(raw)
-						local a,b=t:find("this round's gamemode is")
-						if a then local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""); if #after>1 and #after<40 then fn=after end end
-						if not best then local m=matchM(raw); if m then best=m end end
-						if t:find("doomsday") then sd=true end
-						if t:find("tartarus") then st=true end
+	-- 扫 Notifications（含 SelectedGamemode 全树）抓「下一模式」
+	local gui=LocalPlayer:FindFirstChild("PlayerGui")
+	local n=gui and gui:FindFirstChild("Notifications")
+	if n then
+		for _,g in ipairs(n:GetDescendants()) do
+			if g:IsA("TextLabel") or g:IsA("TextButton") then
+				local raw=g.Text or ""
+				if #raw>=5 and #raw<=220 then
+					local t=string.lower(raw)
+					-- 多种公布文案
+					local patterns={
+						"this round's gamemode is",
+						"the gamemode is",
+						"gamemode:",
+						"next gamemode",
+						"selected gamemode",
+					}
+					for _,pat in ipairs(patterns) do
+						local a,b=t:find(pat,1,true)
+						if a then
+							local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$","")
+							-- 去掉多余句号
+							after=after:gsub("%.$",""):gsub("%s+$","")
+							if #after>1 and #after<40 then fn=after break end
+						end
 					end
+					if not best then local m=matchM(raw); if m then best=m end end
+					if t:find("doomsday") then sd=true end
+					if t:find("tartarus") then st=true end
 				end
 			end
 		end
 	end
-	if fn and fn~=lastNext then nextMode=fn; lastNext=fn; showBig("下一模式: "..fn,Color3.fromRGB(120,200,255),5); Notify("下一模式: "..fn)
-	elseif fn then nextMode=fn end
+	if fn then onNextMode(fn) end
 	if st and not tartOK then tartOK=true; flashD(); showBig("⚠ TARTARUS",Color3.fromRGB(255,60,60),6); Notify("Tartarus!",true) end
 	if sd and not doomOK then doomOK=true; flashD(); showBig("⚠ DOOMSDAY",Color3.fromRGB(255,80,40),6); Notify("Doomsday!",true) end
 	if best then
@@ -660,6 +691,14 @@ end
 
 task.spawn(function() task.wait(1); pcall(scan); pcall(refPl); pcall(updDist); pcall(refESP) end)
 
+-- 模式检测更勤：单独 0.8s 循环，更快抓住「下一模式」公布
+task.spawn(function()
+	while SG and SG.Parent do
+		pcall(checkA)
+		task.wait(0.8)
+	end
+end)
+
 task.spawn(function()
 	while SG and SG.Parent do
 		pcall(function()
@@ -676,7 +715,7 @@ task.spawn(function()
 			RejL.Text="重进提示: "..rejoinSt
 			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d",sessF,sessG,sessH,sessD)
 			MapL.Text=string.format("地图: 钥匙%d 灭火器%d 球棒%d",c.Key or 0,c.Ext or 0,c.Bat or 0)
-			if now-lastHeavy>=HEAVY then lastHeavy=now; checkA(); scan(); updDist() end
+			if now-lastHeavy>=HEAVY then lastHeavy=now; scan(); updDist() end
 			if now-lastEsp>=EINT then lastEsp=now; refESP() end
 			if (S.Enabled or S.FullAuto) and now-lastScan>=SCAN then
 				lastScan=now; clean(kFrag); clean(kGlass); clean(kExtra)
@@ -702,7 +741,6 @@ task.spawn(function()
 	end
 end)
 
--- binds
 FA_tr.MouseButton1Click:Connect(function()
 	click(); S.FullAuto=not S.FullAuto
 	if S.FullAuto then S.Enabled=true; S.OnlyFragments=false; if S.FullAutoShelter then toShel(false); lastShel=tick() end; Notify("Full Auto ON")
@@ -758,4 +796,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] ready SHORT")
+print("[tau] ready FULL")
