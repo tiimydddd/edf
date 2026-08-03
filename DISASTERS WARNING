@@ -71,7 +71,7 @@ local ShelterDoorNames = {
     "Shelter", "Bunker", "Underground", "UndergroundShelter", "Underground Bunker", "避难所"
 }
 
-local ChestNames = {"Chest","Treasure","TreasureChest","Treasure Chest","Box","Crate","Loot","宝箱"}
+local ChestNames = {"Treasure"}
 local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
 local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
 local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor Shower","Comet Shower","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Wildcard","Wild Cards","Berserk","Solar Flare","Dance of the Dead","Super-Volcano"}
