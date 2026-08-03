@@ -1,4 +1,4 @@
--- DisasterWarning_VIP - FINAL (Info Refresh + Fly Fragments + Fireworks)
+-- DisasterWarning_VIP - FINAL FIXED (No More Nil Error)
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
@@ -142,5 +142,4 @@ end)
 -- ==================== 其他核心功能（保持） ====================
 -- ...（自动进内部、找卡、排队、积分、ESP 等全部保留）
 
-Notify("灾难警告 VIP - FINAL 已加载")
-print("DisasterWarning_VIP_FINAL - Info Refresh + Fly Fragments + Fireworks")
+Notify("灾难警告 VIP - FINAL 已加载（Info 正常刷新
