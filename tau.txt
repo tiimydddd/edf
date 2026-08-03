@@ -1,5 +1,4 @@
--- tau only apple FULL
--- 碎片5/5大字提醒 | 最近模式列表 | 下一模式秒提醒 | UI稳定
+-- tau only apple (SHORT + 5/5提示 + 模式历史)
 local Players=game:GetService("Players")
 local LocalPlayer=Players.LocalPlayer
 local StarterGui=game:GetService("StarterGui")
@@ -12,7 +11,6 @@ local SoundService=game:GetService("SoundService")
 local PLACE_ID=2313058949
 
 local S={Enabled=false,OnlyFragments=true,FullAuto=false,FullAutoShelter=true,AntiAFK=true,TornadoPull=false,GodMode=false,FragmentFly=false,RejoinNoFrag=true,ESP=true,WalkSpeedOn=false,WalkSpeed=16,LootKey=false,LootExt=false,LootBat=false}
-
 local FragN={"Blood Moon Fragment","BloodMoonFragment","血月碎片"}
 local GlassN={"Mysterious Sunglasses","Mysterious Glasses","Sunglasses","Mysterious Shades","神秘眼镜","墨镜"}
 local KeyN={"Shelter Key","ShelterKey","避难所钥匙"}
@@ -24,23 +22,21 @@ local myFrags,gotGlass=0,false
 local kFrag,kGlass,kExtra={},{},{}
 local lastScan,lastShel,lastHeavy,lastTorn,lastFly,lastEsp=0,0,0,0,0,0
 local isMin,isSpec=false,false
-local SCAN=0.45; local HEAVY=2.0; local TINT=0.35; local FINT=1; local EINT=0.5
-local SHEL_CD=28; local TRY_CD=1.8; local UI_W=0.12
+local SCAN,HEAVY,TINT,FINT,EINT=0.45,2.5,0.35,1,0.5
+local SHEL_CD,TRY_CD,UI_W=28,1.8,0.12
 local TRANGE,TSTR,TUP,SAFE=80,110,22,9
 local tartOK,doomOK=false,false
 local curMode,nextMode,lastNext,lastModeT="Unknown","Unknown","",0
 local mapC={Fragment=0,Glasses=0,Key=0,Ext=0,Bat=0}
 local firstChk,rejoinSt,alerting,entered,enterT=false,"等待进入地图...",false,false,0
 local SPAWN_W=8
-local sessT,sessF,sessG,sessH,sessD=tick(),0,0,0,0
+local sessF,sessG,sessH,sessD=0,0,0,0
 local tried={}
 local modeHistory={}
-local MAX_HISTORY=12
 
 local function snd(id,v)
 	pcall(function()
-		local s=Instance.new("Sound")
-		s.SoundId=id; s.Volume=v or 0.5; s.Parent=SoundService; s:Play()
+		local s=Instance.new("Sound"); s.SoundId=id; s.Volume=v or 0.5; s.Parent=SoundService; s:Play()
 		s.Ended:Connect(function() s:Destroy() end)
 		task.delay(3,function() if s and s.Parent then s:Destroy() end end)
 	end)
@@ -55,26 +51,24 @@ end
 
 local pg=LocalPlayer:WaitForChild("PlayerGui")
 pcall(function() local o=pg:FindFirstChild("tau_only_apple") if o then o:Destroy() end end)
-
 local SG=Instance.new("ScreenGui")
 SG.Name="tau_only_apple"; SG.ResetOnSpawn=false; SG.DisplayOrder=999999; SG.IgnoreGuiInset=true; SG.Parent=pg
 
 local Big=Instance.new("TextLabel")
-Big.Size=UDim2.new(1,0,0,56); Big.Position=UDim2.new(0,0,0.12,0)
+Big.Size=UDim2.new(1,0,0,52); Big.Position=UDim2.new(0,0,0.12,0)
 Big.BackgroundTransparency=0.3; Big.BackgroundColor3=Color3.fromRGB(15,15,25)
 Big.Text=""; Big.TextColor3=Color3.fromRGB(255,220,80); Big.Font=Enum.Font.GothamBold
-Big.TextSize=26; Big.Visible=false; Big.ZIndex=50; Big.Parent=SG
-Instance.new("UIStroke",Big).Color=Color3.fromRGB(0,0,0)
+Big.TextSize=24; Big.Visible=false; Big.ZIndex=50; Big.Parent=SG
 
 local Flash=Instance.new("Frame")
 Flash.Size=UDim2.new(1,0,1,0); Flash.BackgroundColor3=Color3.fromRGB(180,20,20)
 Flash.BackgroundTransparency=1; Flash.BorderSizePixel=0; Flash.ZIndex=40; Flash.Visible=false; Flash.Parent=SG
 
 local Main=Instance.new("Frame")
-Main.Size=UDim2.new(0,440,0,520); Main.Position=UDim2.new(0,30,0,40)
+Main.Size=UDim2.new(0,440,0,500); Main.Position=UDim2.new(0,30,0,40)
 Main.BackgroundColor3=Color3.fromRGB(22,22,28); Main.BorderSizePixel=0; Main.Visible=true; Main.Parent=SG
 Instance.new("UICorner",Main).CornerRadius=UDim.new(0,12)
-local st=Instance.new("UIStroke"); st.Color=Color3.fromRGB(80,80,100); st.Thickness=2; st.Parent=Main
+local stroke=Instance.new("UIStroke"); stroke.Color=Color3.fromRGB(80,80,100); stroke.Thickness=2; stroke.Parent=Main
 
 local TB=Instance.new("Frame")
 TB.Size=UDim2.new(1,0,0,36); TB.BackgroundColor3=Color3.fromRGB(28,28,36); TB.BorderSizePixel=0; TB.Parent=Main
@@ -90,14 +84,12 @@ Title.Font=Enum.Font.GothamBold; Title.TextSize=14; Title.TextXAlignment=Enum.Te
 local MinBtn=Instance.new("TextButton")
 MinBtn.Size=UDim2.new(0,26,0,26); MinBtn.Position=UDim2.new(1,-60,0,5)
 MinBtn.BackgroundColor3=Color3.fromRGB(45,45,55); MinBtn.Text="–"; MinBtn.TextColor3=Color3.new(1,1,1)
-MinBtn.Font=Enum.Font.GothamBold; MinBtn.TextSize=16; MinBtn.Parent=TB
-Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,6)
+MinBtn.Font=Enum.Font.GothamBold; MinBtn.TextSize=16; MinBtn.Parent=TB; Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,6)
 
 local CloseBtn=Instance.new("TextButton")
 CloseBtn.Size=UDim2.new(0,26,0,26); CloseBtn.Position=UDim2.new(1,-30,0,5)
 CloseBtn.BackgroundColor3=Color3.fromRGB(180,50,50); CloseBtn.Text="×"; CloseBtn.TextColor3=Color3.new(1,1,1)
-CloseBtn.Font=Enum.Font.GothamBold; CloseBtn.TextSize=14; CloseBtn.Parent=TB
-Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,6)
+CloseBtn.Font=Enum.Font.GothamBold; CloseBtn.TextSize=14; CloseBtn.Parent=TB; Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,6)
 
 local TabBar=Instance.new("Frame")
 TabBar.Size=UDim2.new(1,-20,0,30); TabBar.Position=UDim2.new(0,10,0,42)
@@ -121,7 +113,7 @@ local Pages={}
 local function mkPage(n,h)
 	local p=Instance.new("ScrollingFrame")
 	p.Name=n; p.Size=UDim2.new(1,0,1,0); p.BackgroundTransparency=1; p.BorderSizePixel=0
-	p.ScrollBarThickness=3; p.CanvasSize=UDim2.new(0,0,0,h or 600); p.Visible=false; p.Parent=Content
+	p.ScrollBarThickness=3; p.CanvasSize=UDim2.new(0,0,0,h or 560); p.Visible=false; p.Parent=Content
 	Pages[n]=p; return p
 end
 local function mkCard(par,y,h)
@@ -145,8 +137,7 @@ local function mkTog(par,tx,y,on)
 	Instance.new("UICorner",tr).CornerRadius=UDim.new(1,0)
 	local th=Instance.new("Frame"); th.Size=UDim2.new(0,16,0,16)
 	th.Position=on and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
-	th.BackgroundColor3=Color3.new(1,1,1); th.Parent=tr
-	Instance.new("UICorner",th).CornerRadius=UDim.new(1,0)
+	th.BackgroundColor3=Color3.new(1,1,1); th.Parent=tr; Instance.new("UICorner",th).CornerRadius=UDim.new(1,0)
 	return tr,th
 end
 local function setTog(tr,th,on)
@@ -157,42 +148,39 @@ local function mkBtn(par,tx,y,col)
 	local b=Instance.new("TextButton")
 	b.Size=UDim2.new(1,-24,0,28); b.Position=UDim2.new(0,12,0,y)
 	b.BackgroundColor3=col or Color3.fromRGB(45,45,58); b.Text=tx; b.TextColor3=Color3.new(1,1,1)
-	b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=par
-	Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); return b
+	b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=par; Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); return b
 end
 
-local PInfo=mkPage("Info",680)
-local ic=mkCard(PInfo,4,500)
+local PInfo=mkPage("Info",620)
+local ic=mkCard(PInfo,4,460)
 local StatusL=mkLab(ic,"状态: 关闭",8)
-local GoalL=mkLab(ic,"目标: 捡碎片+眼镜",26,Color3.fromRGB(140,200,255))
-mkLab(ic,"── 进度 ──",48,Color3.fromRGB(120,120,140))
-local FragL=mkLab(ic,"血月碎片: 地图0 | 我0/5",68)
-local FragFullL=mkLab(ic,"个人碎片: 未满",86)
-local GlassL=mkLab(ic,"神秘眼镜: 未找到",104)
-local TartL=mkLab(ic,"Tartarus: 未解锁",122)
-local ChadL=mkLab(ic,"Chad条件: 未满足",140)
-mkLab(ic,"── 模式 ──",164,Color3.fromRGB(120,120,140))
-local ModeL=mkLab(ic,"当前模式: Unknown",184)
-local NextL=mkLab(ic,"下一模式: Unknown",202)
-local DoomL=mkLab(ic,"Doomsday: 否",220)
-mkLab(ic,"── 会话 ──",244,Color3.fromRGB(120,120,140))
-local RejL=mkLab(ic,"重进提示: 等待进入地图...",264)
-local SessL=mkLab(ic,"会话: 碎片0 眼镜0 换服0",282,Color3.fromRGB(160,200,160))
-local MapL=mkLab(ic,"地图: 钥匙0 灭火器0 球棒0",300,Color3.fromRGB(150,150,165))
-mkLab(ic,"── 最近模式 ──",324,Color3.fromRGB(120,120,140))
-local HistL=mkLab(ic,"暂无记录（出模式后自动记录）",342,Color3.fromRGB(160,160,175))
-HistL.Size=UDim2.new(1,-24,0,40); HistL.TextWrapped=true; HistL.TextYAlignment=Enum.TextYAlignment.Top
-mkLab(ic,"── 碎片距离 ──",388,Color3.fromRGB(120,120,140))
+mkLab(ic,"── 进度 ──",30,Color3.fromRGB(120,120,140))
+local FragL=mkLab(ic,"血月碎片: 地图0 | 我0/5",50)
+local FragFullL=mkLab(ic,"个人碎片: 未满",68)
+local GlassL=mkLab(ic,"神秘眼镜: 未找到",86)
+local TartL=mkLab(ic,"Tartarus: 未解锁",104)
+local ChadL=mkLab(ic,"Chad条件: 未满足",122)
+mkLab(ic,"── 模式 ──",146,Color3.fromRGB(120,120,140))
+local ModeL=mkLab(ic,"当前模式: Unknown",166)
+local NextL=mkLab(ic,"下一模式: Unknown",184)
+local DoomL=mkLab(ic,"Doomsday: 否",202)
+mkLab(ic,"── 会话 / 历史 ──",226,Color3.fromRGB(120,120,140))
+local RejL=mkLab(ic,"重进提示: 等待进入地图...",246)
+local SessL=mkLab(ic,"会话: 碎片0 眼镜0 换服0",264,Color3.fromRGB(160,200,160))
+local HistL=mkLab(ic,"最近模式: 暂无",282,Color3.fromRGB(160,160,175))
+HistL.Size=UDim2.new(1,-24,0,36); HistL.TextWrapped=true; HistL.TextYAlignment=Enum.TextYAlignment.Top
+local MapL=mkLab(ic,"地图: 钥匙0 灭火器0 球棒0",324,Color3.fromRGB(150,150,165))
+mkLab(ic,"── 碎片距离 ──",348,Color3.fromRGB(120,120,140))
 local DistF=Instance.new("ScrollingFrame")
-DistF.Size=UDim2.new(1,-24,0,70); DistF.Position=UDim2.new(0,12,0,408)
+DistF.Size=UDim2.new(1,-24,0,70); DistF.Position=UDim2.new(0,12,0,368)
 DistF.BackgroundColor3=Color3.fromRGB(25,25,32); DistF.BorderSizePixel=0; DistF.ScrollBarThickness=3
 DistF.CanvasSize=UDim2.new(0,0,0,0); DistF.Parent=ic
 Instance.new("UICorner",DistF).CornerRadius=UDim.new(0,6)
 Instance.new("UIListLayout",DistF).Padding=UDim.new(0,3)
-local ResetModeBtn=mkBtn(ic,"重置模式显示",486,Color3.fromRGB(55,45,45))
+local ResetModeBtn=mkBtn(ic,"重置模式显示",448,Color3.fromRGB(55,45,45))
 
-local PLoot=mkPage("Loot",420)
-local lc=mkCard(PLoot,4,400)
+local PLoot=mkPage("Loot",400)
+local lc=mkCard(PLoot,4,380)
 mkLab(lc,"【自动捡取】",8,Color3.fromRGB(140,200,255))
 local FA_tr,FA_th=mkTog(lc,"Full Auto",28,false)
 local SH_tr,SH_th=mkTog(lc,"Full Auto 时传避难所",56,true)
@@ -209,28 +197,27 @@ local Key_tr,Key_th=mkTog(lc,"自动捡 钥匙",198,false)
 local Ext_tr,Ext_th=mkTog(lc,"自动捡 灭火器",226,false)
 local Bat_tr,Bat_th=mkTog(lc,"自动捡 棒球棒",254,false)
 
-local PEff=mkPage("Eff",260)
-local ec=mkCard(PEff,4,230)
+local PEff=mkPage("Eff",240)
+local ec=mkCard(PEff,4,210)
 mkLab(ec,"【效率】",8,Color3.fromRGB(140,200,255))
 local RJ_tr,RJ_th=mkTog(ec,"进图后无碎片 → 仅提示",32,true)
 local HopBtn=mkBtn(ec,"立即换服",70,Color3.fromRGB(50,90,140))
 local JobBtn=mkBtn(ec,"复制 JobId",106,Color3.fromRGB(45,70,90))
-mkLab(ec,"模式公布/碎片满5会大字+声音",145,Color3.fromRGB(160,200,160))
 
-local PTP=mkPage("Teleport",300)
-local tc=mkCard(PTP,4,270)
+local PTP=mkPage("Teleport",280)
+local tc=mkCard(PTP,4,250)
 local ShelBtn=mkBtn(tc,"传送到避难所",12,Color3.fromRGB(45,45,58))
 mkLab(tc,"传送到玩家:",48)
 local PlF=Instance.new("ScrollingFrame")
-PlF.Size=UDim2.new(1,-20,0,140); PlF.Position=UDim2.new(0,10,0,68)
+PlF.Size=UDim2.new(1,-20,0,120); PlF.Position=UDim2.new(0,10,0,68)
 PlF.BackgroundColor3=Color3.fromRGB(25,25,32); PlF.BorderSizePixel=0; PlF.ScrollBarThickness=3
 PlF.CanvasSize=UDim2.new(0,0,0,0); PlF.Parent=tc
 Instance.new("UICorner",PlF).CornerRadius=UDim.new(0,8)
 Instance.new("UIListLayout",PlF).Padding=UDim.new(0,4)
-local RefBtn=mkBtn(tc,"刷新玩家",220,Color3.fromRGB(45,45,58))
+local RefBtn=mkBtn(tc,"刷新玩家",200,Color3.fromRGB(45,45,58))
 
-local PEx=mkPage("Extra",400)
-local xc=mkCard(PEx,4,380)
+local PEx=mkPage("Extra",380)
+local xc=mkCard(PEx,4,360)
 mkLab(xc,"【功能】",8,Color3.fromRGB(140,200,255))
 local AFK_tr,AFK_th=mkTog(xc,"Anti-AFK",28,true)
 local God_tr,God_th=mkTog(xc,"God Mode",56,false)
@@ -253,17 +240,16 @@ RngUp.BackgroundColor3=Color3.fromRGB(45,45,58); RngUp.Text="Range +20"; RngUp.T
 RngUp.Font=Enum.Font.GothamBold; RngUp.TextSize=12; RngUp.Parent=xc; Instance.new("UICorner",RngUp).CornerRadius=UDim.new(0,6)
 local SpecBtn=mkBtn(xc,"Open Spectate",290,Color3.fromRGB(40,90,120))
 local ChadBtn=mkBtn(xc,"Try Chad",326,Color3.fromRGB(120,80,40))
-local ScanBtn=mkBtn(xc,"重新扫描",362,Color3.fromRGB(40,55,70))
 
-local PESP=mkPage("ESP",180)
-local esc=mkCard(PESP,4,150)
+local PESP=mkPage("ESP",160)
+local esc=mkCard(PESP,4,130)
 mkLab(esc,"【ESP】",8,Color3.fromRGB(140,200,255))
 local ESP_tr,ESP_th=mkTog(esc,"开启碎片/眼镜 ESP",32,true)
 mkLab(esc,"红=碎片  青=眼镜",68,Color3.fromRGB(160,160,175))
 
 Pages.Info.Visible=true
 TInfo.BackgroundColor3=Color3.fromRGB(50,50,62); TInfo.TextColor3=Color3.new(1,1,1)
-Notify("界面已加载 FULL")
+Notify("界面已加载")
 print("[tau] UI OK")
 
 local function showBig(tx,col,dur)
@@ -277,11 +263,11 @@ local function flashD()
 		Flash.Visible=false; Flash.BackgroundTransparency=1
 	end)
 end
-local function pushModeHistory(name)
+local function pushHist(name)
 	if not name or name=="" or name=="Unknown" then return end
 	if modeHistory[1]==name then return end
 	table.insert(modeHistory,1,name)
-	while #modeHistory>MAX_HISTORY do table.remove(modeHistory) end
+	while #modeHistory>12 do table.remove(modeHistory) end
 end
 local function switchTab(n)
 	click()
@@ -296,11 +282,10 @@ TEff.MouseButton1Click:Connect(function() switchTab("Eff") end)
 TTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
 TExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
 TESP.MouseButton1Click:Connect(function() switchTab("ESP") end)
-
 MinBtn.MouseButton1Click:Connect(function()
 	click(); isMin=not isMin
 	if isMin then Main.Size=UDim2.new(0,200,0,36); TabBar.Visible=false; Content.Visible=false; MinBtn.Text="+"
-	else Main.Size=UDim2.new(0,440,0,520); TabBar.Visible=true; Content.Visible=true; MinBtn.Text="–" end
+	else Main.Size=UDim2.new(0,440,0,500); TabBar.Visible=true; Content.Visible=true; MinBtn.Text="–" end
 end)
 
 local function inList(name,list)
@@ -404,7 +389,7 @@ end
 
 local function toPlr(plr)
 	local h=HRP(); if not h then return end
-	local c=plr.Character; if not c then Notify(plr.Name.." 无角色") return end
+	local c=plr.Character; if not c then return end
 	local th=c:FindFirstChild("HumanoidRootPart")
 	if th then h.CFrame=th.CFrame+Vector3.new(0,3,0); Notify("已传到 "..plr.Name) end
 end
@@ -430,7 +415,7 @@ local function updDist()
 	local h=HRP(); local pos=h and h.Position or Vector3.zero
 	local list={}
 	for o in pairs(kFrag) do
-		if o and o.Parent then local p=bestPart(o); if p then table.insert(list,{o=o,d=(p.Position-pos).Magnitude,p=p}) end end
+		if o and o.Parent then local p=bestPart(o); if p then table.insert(list,{d=(p.Position-pos).Magnitude,p=p}) end end
 	end
 	table.sort(list,function(a,b) return a.d<b.d end)
 	local y=0
@@ -489,8 +474,6 @@ local RULES={
 	{p="toastnado is occurring",m="ToastNado"},{p="deadnado is occurring",m="Deadnado"},
 	{p="double trouble",m="Double Trouble"},{p="triple threat",m="Triple Threat"},
 	{p="normal survival",m="Normal Survival"},{p="there is an ef",m="Normal Survival"},
-	{p="infernado is occurring",m="Infernado"},{p="there is a dust devil",m="Dust Devil"},
-	{p="four tornadoes have touched down",m="4-Nado"},{p="this tornado targets specific players",m="Lurker"},
 }
 local function getObj()
 	local gui=LocalPlayer:FindFirstChild("PlayerGui"); if not gui then return nil end
@@ -516,14 +499,11 @@ end
 
 local function onNextMode(name)
 	if not name or name=="" or name==lastNext then return end
-	lastNext=name; nextMode=name
-	pushModeHistory("→"..name)
-	alrt()
-	showBig("下一模式: "..name,Color3.fromRGB(100,200,255),6)
-	Notify("下一模式: "..name,true)
+	lastNext=name; nextMode=name; pushHist("→"..name)
+	alrt(); showBig("下一模式: "..name,Color3.fromRGB(100,200,255),6); Notify("下一模式: "..name,true)
 	local low=string.lower(name)
 	if low:find("doomsday") or low:find("tartarus") or low:find("deadnado") then
-		flashD(); showBig("⚠ 危险模式: "..name,Color3.fromRGB(255,70,70),7)
+		flashD(); showBig("⚠ 危险: "..name,Color3.fromRGB(255,70,70),7)
 	end
 end
 
@@ -543,13 +523,10 @@ local function checkA()
 				local raw=g.Text or ""
 				if #raw>=5 and #raw<=220 then
 					local t=string.lower(raw)
-					local patterns={"this round's gamemode is","the gamemode is","gamemode:","next gamemode","selected gamemode"}
-					for _,pat in ipairs(patterns) do
-						local a,b=t:find(pat,1,true)
-						if a then
-							local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""):gsub("%.$","")
-							if #after>1 and #after<40 then fn=after break end
-						end
+					local a,b=t:find("this round's gamemode is",1,true)
+					if a then
+						local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""):gsub("%.$","")
+						if #after>1 and #after<40 then fn=after end
 					end
 					if not best then local m=matchM(raw); if m then best=m end end
 					if t:find("doomsday") then sd=true end
@@ -563,10 +540,8 @@ local function checkA()
 	if sd and not doomOK then doomOK=true; flashD(); showBig("⚠ DOOMSDAY",Color3.fromRGB(255,80,40),6); Notify("Doomsday!",true) end
 	if best then
 		if best~=curMode then
-			pushModeHistory(best)
-			if best=="Doomsday" or best=="Tartarus" or best=="Deadnado" then
-				flashD(); showBig("⚠ "..best,Color3.fromRGB(255,70,70),5)
-			end
+			pushHist(best)
+			if best=="Doomsday" or best=="Tartarus" or best=="Deadnado" then flashD(); showBig("⚠ "..best,Color3.fromRGB(255,70,70),5) end
 		end
 		curMode=best; lastModeT=tick()
 		if best=="Doomsday" then doomOK=true end
@@ -705,10 +680,7 @@ local function applyUI()
 end
 
 task.spawn(function() task.wait(1); pcall(scan); pcall(refPl); pcall(updDist); pcall(refESP) end)
-
-task.spawn(function()
-	while SG and SG.Parent do pcall(checkA); task.wait(0.8) end
-end)
+task.spawn(function() while SG and SG.Parent do pcall(checkA); task.wait(0.8) end end)
 
 task.spawn(function()
 	while SG and SG.Parent do
@@ -718,13 +690,8 @@ task.spawn(function()
 			elseif S.Enabled then StatusL.Text="状态: 仅自动捡取"; StatusL.TextColor3=Color3.fromRGB(100,200,255)
 			else StatusL.Text="状态: 关闭"; StatusL.TextColor3=Color3.fromRGB(255,100,100) end
 			FragL.Text=string.format("血月碎片: 地图%d | 我%d/5",fr,myFrags)
-			if myFrags>=5 then
-				FragFullL.Text="个人碎片: 已满 5/5 ✓"
-				FragFullL.TextColor3=Color3.fromRGB(100,255,120)
-			else
-				FragFullL.Text="个人碎片: "..myFrags.."/5"
-				FragFullL.TextColor3=Color3.fromRGB(180,180,195)
-			end
+			if myFrags>=5 then FragFullL.Text="个人碎片: 已满 5/5 ✓"; FragFullL.TextColor3=Color3.fromRGB(100,255,120)
+			else FragFullL.Text="个人碎片: "..myFrags.."/5"; FragFullL.TextColor3=Color3.fromRGB(180,180,195) end
 			if gotGlass or (c.Glasses or 0)>0 then GlassL.Text="神秘眼镜: 已找到"; GlassL.TextColor3=Color3.fromRGB(100,255,120); ChadL.Text="Chad条件: 已满足"
 			else GlassL.Text="神秘眼镜: 未找到"; GlassL.TextColor3=Color3.fromRGB(255,160,100); ChadL.Text="Chad条件: 未满足" end
 			TartL.Text=tartOK and "Tartarus: 已出现" or "Tartarus: 未解锁"
@@ -732,14 +699,9 @@ task.spawn(function()
 			DoomL.Text=(doomOK or curMode=="Doomsday") and "Doomsday: 是！" or "Doomsday: 否"
 			RejL.Text="重进提示: "..rejoinSt
 			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d",sessF,sessG,sessH,sessD)
+			if #modeHistory==0 then HistL.Text="最近模式: 暂无"
+			else local parts={} for i=1,math.min(5,#modeHistory) do table.insert(parts,modeHistory[i]) end HistL.Text="最近: "..table.concat(parts," → ") end
 			MapL.Text=string.format("地图: 钥匙%d 灭火器%d 球棒%d",c.Key or 0,c.Ext or 0,c.Bat or 0)
-			if #modeHistory==0 then
-				HistL.Text="暂无记录（出模式后自动记录）"
-			else
-				local parts={}
-				for i=1,math.min(6,#modeHistory) do table.insert(parts,modeHistory[i]) end
-				HistL.Text=table.concat(parts,"  →  ")
-			end
 			if now-lastHeavy>=HEAVY then lastHeavy=now; scan(); updDist() end
 			if now-lastEsp>=EINT then lastEsp=now; refESP() end
 			if (S.Enabled or S.FullAuto) and now-lastScan>=SCAN then
@@ -800,13 +762,8 @@ RngDown.MouseButton1Click:Connect(function() click(); TRANGE=math.max(20,TRANGE-
 RngUp.MouseButton1Click:Connect(function() click(); TRANGE=math.min(200,TRANGE+20); RngL.Text="Pull Range: "..TRANGE end)
 SpecBtn.MouseButton1Click:Connect(startSpec)
 ChadBtn.MouseButton1Click:Connect(tryChad)
-ScanBtn.MouseButton1Click:Connect(function() click(); local c=scan(); updDist(); refESP(); Notify("扫描 碎片"..(c.Fragment or 0).." 眼镜"..(c.Glasses or 0)) end)
 ResetModeBtn.MouseButton1Click:Connect(function()
-	click()
-	curMode="Unknown"; nextMode="Unknown"; lastNext=""; lastModeT=0; doomOK=false; tartOK=false
-	-- 模式历史保留；若要清空取消下一行注释
-	-- modeHistory={}
-	Notify("模式显示已重置")
+	click(); curMode="Unknown"; nextMode="Unknown"; lastNext=""; lastModeT=0; doomOK=false; tartOK=false; Notify("模式已重置")
 end)
 ShelBtn.MouseButton1Click:Connect(function() click(); toShel(false) end)
 RefBtn.MouseButton1Click:Connect(function() click(); refPl() end)
@@ -827,4 +784,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] ready FULL")
+print("[tau] ready")
