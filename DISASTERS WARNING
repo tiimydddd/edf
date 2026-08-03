@@ -1,6 +1,5 @@
 -- 灾难警告之VIP版本 FULL
--- 秒开箱 | 仅开箱 | 宝箱ESP | 危险自动进所 | 最近宝箱
--- WalkSpeed/Jump/God | 卡牌ESP/自动捡/最近卡 | 传卡牌店 | Wild Card 状态
+-- 黑洞特效 & 碎片飞特效 分开独立
 -- PlaceId: 7479931846
 
 local Players = game:GetService("Players")
@@ -10,20 +9,25 @@ local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local PLACE_ID = 7479931846
 
 local Settings = {
     AutoShelter = false,
+    AutoFarm = false,
     AntiAFK = false,
     ChestESP = false,
     DangerAuto = false,
     CardESP = false,
     AutoCard = false,
+    AutoFarmCard = false,
     SpdOn = false,
     Spd = 24,
     JumpOn = false,
     Jump = 70,
     God = false,
+    BlackHole = false,      -- 单独黑洞
+    DebrisFly = false,      -- 单独碎片飞
 }
 
 local currentDisaster = "Unknown"
@@ -40,10 +44,18 @@ local knownStores = {}
 local lastShelterCheck = 0
 local lastDangerAuto = 0
 local lastCardCheck = 0
+local lastFarmCard = 0
+local lastAutoFarm = 0
 local gotCard = false
 local SHELTER_INTERVAL = 5
 local DANGER_AUTO_CD = 12
 local CARD_INTERVAL = 2.5
+local FARM_CARD_INTERVAL = 4
+local AUTO_FARM_INTERVAL = 8
+
+local effectFolder = Instance.new("Folder")
+effectFolder.Name = "VIP_Effects"
+effectFolder.Parent = workspace
 
 local ShelterNames = {
     "Shelter", "Bunker", "Underground", "UndergroundShelter", "Underground Bunker",
@@ -118,7 +130,7 @@ do
 end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 400, 0, 460)
+Main.Size = UDim2.new(0, 400, 0, 540)
 Main.Position = UDim2.new(0, 25, 0.08, 0)
 Main.BackgroundColor3 = Theme.BgMain
 Main.BorderSizePixel = 0
@@ -222,7 +234,7 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 420)
+    page.CanvasSize = UDim2.new(0, 0, 0, 480)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -270,23 +282,25 @@ local CardCountLabel = makeLabel(PageInfo, "卡牌: 0", 168)
 
 -- Shelter
 local PageShelter = createPage("Shelter")
-PageShelter.CanvasSize = UDim2.new(0, 0, 0, 280)
-local AutoShelterBtn = makeToggle(PageShelter, "Auto: 秒开箱→避难所 OFF", 12, false)
-local OpenChestOnlyBtn = makeToggle(PageShelter, "仅开箱（不进所）", 48, false)
-local NearestChestBtn = makeToggle(PageShelter, "最近宝箱 TP", 84, false)
-local ForceShelterBtn = makeToggle(PageShelter, "强制 TP 进避难所", 120, false)
-local DangerAutoBtn = makeToggle(PageShelter, "危险灾难自动进所 OFF", 156, false)
-makeLabel(PageShelter, "危险含: 龙卷/海啸/The End/Wild Card等", 195)
+PageShelter.CanvasSize = UDim2.new(0, 0, 0, 400)
+local AutoFarmBtn = makeToggle(PageShelter, "★ Auto Farm OFF", 12, false)
+local AutoShelterBtn = makeToggle(PageShelter, "Auto: 秒开箱→避难所 OFF", 48, false)
+local OpenChestOnlyBtn = makeToggle(PageShelter, "仅开箱（不进所）", 84, false)
+local NearestChestBtn = makeToggle(PageShelter, "最近宝箱 TP", 120, false)
+local TPShelterBtn = makeToggle(PageShelter, "TP Shelter（一键进所）", 156, false)
+local ForceShelterBtn = makeToggle(PageShelter, "强制 TP 进避难所", 192, false)
+local DangerAutoBtn = makeToggle(PageShelter, "危险灾难自动进所 OFF", 228, false)
+makeLabel(PageShelter, "Auto Farm = 开箱 + 点卡 + 进所", 270)
 
 -- Card
 local PageCard = createPage("Card")
-PageCard.CanvasSize = UDim2.new(0, 0, 0, 280)
-local AutoCardBtn = makeToggle(PageCard, "自动捡卡 OFF", 12, false)
-local CardESPBtn = makeToggle(PageCard, "卡牌 ESP OFF", 48, false)
-local NearestCardBtn = makeToggle(PageCard, "最近卡牌 TP", 84, false)
-local StoreTPBtn = makeToggle(PageCard, "传 Cursed Card Store", 120, false)
-makeLabel(PageCard, "在店内找到 Card 才可触发 Wild Cards", 160)
-makeLabel(PageCard, "名字含 Card / Wild Card / Cursed Card", 180)
+PageCard.CanvasSize = UDim2.new(0, 0, 0, 340)
+local AutoFarmCardBtn = makeToggle(PageCard, "Auto Farm Card OFF", 12, false)
+local AutoCardBtn = makeToggle(PageCard, "自动捡卡 OFF", 48, false)
+local CardESPBtn = makeToggle(PageCard, "卡牌 ESP OFF", 84, false)
+local NearestCardBtn = makeToggle(PageCard, "点卡（商店内）", 120, false)
+local StoreTPBtn = makeToggle(PageCard, "传 Cursed Card Store", 156, false)
+makeLabel(PageCard, "卡牌固定在商店", 200)
 
 -- Teleport
 local PageTP = createPage("Teleport")
@@ -305,9 +319,9 @@ Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
 local RefreshPlayersBtn = makeToggle(PageTP, "刷新玩家列表", 240, false)
 
--- Extra
+-- Extra（特效放这里）
 local PageExtra = createPage("Extra")
-PageExtra.CanvasSize = UDim2.new(0, 0, 0, 380)
+PageExtra.CanvasSize = UDim2.new(0, 0, 0, 460)
 local AFKBtn = makeToggle(PageExtra, "Anti-AFK: OFF", 12, false)
 local ChestESPBtn = makeToggle(PageExtra, "宝箱 ESP: OFF", 48, false)
 local GodBtn = makeToggle(PageExtra, "God / 锁血: OFF", 84, false)
@@ -325,7 +339,11 @@ JumpDn.Size = UDim2.new(0.45, -12, 0, 28)
 local JumpUp = makeToggle(PageExtra, "Jump +10", 260, false)
 JumpUp.Size = UDim2.new(0.45, -12, 0, 28)
 JumpUp.Position = UDim2.new(0.5, 2, 0, 260)
-makeLabel(PageExtra, "× 关闭  – 最小化", 300)
+
+-- 独立特效按钮
+local BlackHoleBtn = makeToggle(PageExtra, "黑洞特效 OFF", 300, false)
+local DebrisFlyBtn = makeToggle(PageExtra, "碎片飞特效 OFF", 336, false)
+makeLabel(PageExtra, "两个特效完全独立，可单独开关", 375)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Theme.BgButtonOn
@@ -361,7 +379,7 @@ MinBtn.MouseButton1Click:Connect(function()
         MinBtn.Text = "+"
         Title.Text = "灾难警告 VIP"
     else
-        Main.Size = UDim2.new(0, 400, 0, 460)
+        Main.Size = UDim2.new(0, 400, 0, 540)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -401,7 +419,6 @@ local function isShelter(obj) return nameIn(obj, ShelterNames) end
 local function isChest(obj) return nameIn(obj, ChestNames) end
 local function isCard(obj)
     if not nameIn(obj, CardNames) then return false end
-    -- 避免把整个 Store 当卡
     if nameIn(obj, StoreNames) then return false end
     return true
 end
@@ -426,6 +443,116 @@ local function bestPart(obj)
     if obj:IsA("BasePart") then return obj end
     return obj:FindFirstChildWhichIsA("BasePart", true)
 end
+
+-- ========== 独立特效 ==========
+local blackHoleCore = nil
+local blackHoleConn = nil
+
+local function stopBlackHole()
+    if blackHoleConn then
+        blackHoleConn:Disconnect()
+        blackHoleConn = nil
+    end
+    if blackHoleCore and blackHoleCore.Parent then
+        blackHoleCore:Destroy()
+    end
+    blackHoleCore = nil
+    Settings.BlackHole = false
+end
+
+local function startBlackHole()
+    stopBlackHole()
+    local hrp = getHRP()
+    if not hrp then return end
+
+    blackHoleCore = Instance.new("Part")
+    blackHoleCore.Name = "BlackHole"
+    blackHoleCore.Anchored = true
+    blackHoleCore.CanCollide = false
+    blackHoleCore.Material = Enum.Material.Neon
+    blackHoleCore.Shape = Enum.PartType.Ball
+    blackHoleCore.Size = Vector3.new(2.2, 2.2, 2.2)
+    blackHoleCore.Color = Color3.fromRGB(15, 0, 30)
+    blackHoleCore.Transparency = 0.25
+    blackHoleCore.CFrame = hrp.CFrame * CFrame.new(0, 0.5, 0)
+    blackHoleCore.Parent = effectFolder
+
+    -- 呼吸动画
+    local tween = TweenService:Create(blackHoleCore, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        Size = Vector3.new(3.4, 3.4, 3.4),
+        Transparency = 0.55
+    })
+    tween:Play()
+
+    -- 跟随玩家
+    blackHoleConn = RunService.Heartbeat:Connect(function()
+        local h = getHRP()
+        if h and blackHoleCore and blackHoleCore.Parent then
+            blackHoleCore.CFrame = h.CFrame * CFrame.new(0, 0.5, 0)
+        end
+    end)
+end
+
+local function clearDebris()
+    for _, v in ipairs(effectFolder:GetChildren()) do
+        if v.Name == "Debris" then
+            v:Destroy()
+        end
+    end
+end
+
+local function spawnDebrisFly()
+    local hrp = getHRP()
+    if not hrp then return end
+    clearDebris()
+
+    local colors = {
+        Color3.fromRGB(180, 80, 255),
+        Color3.fromRGB(100, 40, 200),
+        Color3.fromRGB(220, 140, 255),
+        Color3.fromRGB(60, 20, 120),
+        Color3.fromRGB(140, 60, 220),
+    }
+
+    for i = 1, 32 do
+        local p = Instance.new("Part")
+        p.Name = "Debris"
+        p.Anchored = true
+        p.CanCollide = false
+        p.Material = Enum.Material.Neon
+        p.Size = Vector3.new(0.4, 0.4, 0.4)
+        p.Color = colors[math.random(1, #colors)]
+        p.Transparency = 0.1
+        p.CFrame = hrp.CFrame * CFrame.new(
+            math.random(-6, 6),
+            math.random(0, 2),
+            math.random(-6, 6)
+        )
+        p.Parent = effectFolder
+
+        -- 向上飞 + 旋转散开
+        local targetPos = p.Position + Vector3.new(
+            math.random(-12, 12),
+            math.random(8, 18),
+            math.random(-12, 12)
+        )
+        local tween = TweenService:Create(p, TweenInfo.new(
+            math.random(12, 22) / 10,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        ), {
+            Position = targetPos,
+            Size = Vector3.new(0.08, 0.08, 0.08),
+            Transparency = 1,
+            Orientation = Vector3.new(math.random(0, 720), math.random(0, 720), math.random(0, 720))
+        })
+        tween:Play()
+        tween.Completed:Connect(function()
+            p:Destroy()
+        end)
+    end
+end
+-- ==============================
 
 local function checkDangerAlert()
     local found = false
@@ -495,29 +622,57 @@ end
 local function tryInteract(obj, hrp)
     local part = bestPart(obj)
     if not part then return false end
-    hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+
+    local offsets = {
+        Vector3.new(0, 3, 0),
+        Vector3.new(0, 2.5, 1.5),
+        Vector3.new(0, 2.5, -1.5),
+        Vector3.new(1.5, 2.5, 0),
+        Vector3.new(-1.5, 2.5, 0),
+        Vector3.new(0, 4, 0),
+    }
+
     local opened = false
-    local prompt = obj:FindFirstChildOfClass("ProximityPrompt")
-        or part:FindFirstChildOfClass("ProximityPrompt")
-        or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        for i = 1, 10 do pcall(fireproximityprompt, prompt) end
-        opened = true
+
+    for _, offset in ipairs(offsets) do
+        hrp.CFrame = part.CFrame + offset
+        task.wait(0.08)
+
+        local prompt = obj:FindFirstChildOfClass("ProximityPrompt")
+            or part:FindFirstChildOfClass("ProximityPrompt")
+            or obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        if prompt then
+            for i = 1, 12 do
+                pcall(fireproximityprompt, prompt)
+                if i % 3 == 0 then task.wait(0.03) end
+            end
+            opened = true
+        end
+
+        local click = obj:FindFirstChildOfClass("ClickDetector")
+            or part:FindFirstChildOfClass("ClickDetector")
+            or obj:FindFirstChildWhichIsA("ClickDetector", true)
+        if click then
+            for i = 1, 8 do
+                pcall(fireclickdetector, click)
+            end
+            opened = true
+        end
+
+        local ti = part:FindFirstChildOfClass("TouchInterest")
+        if ti then
+            pcall(function()
+                firetouchinterest(hrp, part, 0)
+                task.wait(0.05)
+                firetouchinterest(hrp, part, 1)
+            end)
+            opened = true
+        end
+
+        if opened then break end
     end
-    local click = obj:FindFirstChildOfClass("ClickDetector") or part:FindFirstChildOfClass("ClickDetector")
-    if click then
-        for i = 1, 8 do pcall(fireclickdetector, click) end
-        opened = true
-    end
-    local ti = part:FindFirstChildOfClass("TouchInterest")
-    if ti then
-        pcall(function()
-            firetouchinterest(hrp, part, 0)
-            task.wait(0.02)
-            firetouchinterest(hrp, part, 1)
-        end)
-        opened = true
-    end
+
     return opened
 end
 
@@ -540,7 +695,7 @@ end
 
 local function goToShelter()
     local hrp = getHRP()
-    if not hrp then return end
+    if not hrp then return false end
     cleanCache(knownShelters)
     for obj in pairs(knownShelters) do
         if obj and obj.Parent then
@@ -548,8 +703,7 @@ local function goToShelter()
             if part then
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
                 tryInteract(obj, hrp)
-                Notify("已到达避难所附近")
-                return
+                return true
             end
         end
     end
@@ -560,10 +714,20 @@ local function goToShelter()
             if part then
                 hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
                 tryInteract(obj, hrp)
-                Notify("找到避难所")
-                return
+                return true
             end
         end
+    end
+    return false
+end
+
+local function tpShelter()
+    local hrp = getHRP()
+    if not hrp then Notify("没有角色") return end
+    if goToShelter() then
+        Notify("已传送到避难所")
+    else
+        Notify("未找到避难所")
     end
 end
 
@@ -573,6 +737,46 @@ local function autoShelterFlow()
     task.wait(0.35)
     Notify("前往避难所...")
     goToShelter()
+end
+
+local function autoFarmFlow()
+    Notify("★ Auto Farm 启动...")
+    openChests()
+    task.wait(0.4)
+
+    local store, part = nil, nil
+    for obj in pairs(knownStores) do
+        if obj and obj.Parent then
+            part = bestPart(obj)
+            if part then store = obj break end
+        end
+    end
+    if not part then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if isStore(obj) then
+                knownStores[obj] = true
+                part = bestPart(obj)
+                if part then store = obj break end
+            end
+        end
+    end
+    if part then
+        local hrp = getHRP()
+        if hrp then
+            hrp.CFrame = part.CFrame + Vector3.new(0, 4, 0)
+            task.wait(0.2)
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if isCard(obj) then
+                    tryInteract(obj, hrp)
+                    gotCard = true
+                end
+            end
+        end
+    end
+
+    task.wait(0.35)
+    goToShelter()
+    Notify("Auto Farm 一轮完成")
 end
 
 local function openChestsOnly()
@@ -627,27 +831,78 @@ local function forceTPShelter()
     for _, part in ipairs(candidates) do
         for _, offset in ipairs(offsets) do
             hrp.CFrame = part.CFrame + offset
-            task.wait(0.06)
+            task.wait(0.07)
             local prompt = part:FindFirstChildOfClass("ProximityPrompt")
                 or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
-            if prompt then pcall(fireproximityprompt, prompt) end
+            if prompt then
+                for i = 1, 8 do pcall(fireproximityprompt, prompt) end
+            end
         end
     end
     Notify("强制 TP 完成")
 end
 
--- Card
-local function pickupCards()
+local function findCardStore()
+    cleanCache(knownStores)
+    for obj in pairs(knownStores) do
+        if obj and obj.Parent then
+            local part = bestPart(obj)
+            if part then return obj, part end
+        end
+    end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isStore(obj) then
+            knownStores[obj] = true
+            local part = bestPart(obj)
+            if part then return obj, part end
+        end
+    end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local n = (obj.Name or ""):lower()
+        if (n:find("cursed") and n:find("card")) or (n:find("card") and n:find("store")) then
+            local part = bestPart(obj)
+            if part then
+                knownStores[obj] = true
+                return obj, part
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function tpCardStore()
+    local hrp = getHRP()
+    if not hrp then Notify("没有角色") return false end
+    local store, part = findCardStore()
+    if part then
+        hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+        Notify("已到 Card Store")
+        return true
+    end
+    Notify("未找到 Card Store")
+    return false
+end
+
+local function clickCardInStore()
     local hrp = getHRP()
     if not hrp then return false end
+
+    local store, storePart = findCardStore()
+    if storePart then
+        hrp.CFrame = storePart.CFrame + Vector3.new(0, 4, 0)
+        task.wait(0.15)
+    end
+
     cleanCache(knownCards)
     local got = false
+
     for obj in pairs(knownCards) do
         if obj and obj.Parent and tryInteract(obj, hrp) then
             got = true
             gotCard = true
         end
     end
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isCard(obj) then
             knownCards[obj] = true
@@ -657,76 +912,32 @@ local function pickupCards()
             end
         end
     end
+
     return got
 end
 
-local function tpNearestCard()
-    local hrp = getHRP()
-    if not hrp then Notify("没有角色") return end
-    cleanCache(knownCards)
-    local best, bestDist = nil, math.huge
-    local function consider(obj)
-        local part = bestPart(obj)
-        if not part then return end
-        local d = (part.Position - hrp.Position).Magnitude
-        if d < bestDist then bestDist = d best = obj end
-    end
-    for obj in pairs(knownCards) do
-        if obj and obj.Parent then consider(obj) end
-    end
-    if not best then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if isCard(obj) then knownCards[obj] = true consider(obj) end
-        end
-    end
-    if best then
-        tryInteract(best, hrp)
-        gotCard = true
-        Notify(string.format("最近卡牌 (%.0f)", bestDist))
+local function autoFarmCard()
+    if not tpCardStore() then return end
+    task.wait(0.3)
+    local success = clickCardInStore()
+    if success then
+        Notify("Farm Card 成功点击")
     else
-        Notify("没有找到卡牌")
+        Notify("商店内未检测到卡牌")
     end
 end
 
-local function tpCardStore()
-    local hrp = getHRP()
-    if not hrp then Notify("没有角色") return end
-    cleanCache(knownStores)
-    for obj in pairs(knownStores) do
-        if obj and obj.Parent then
-            local part = bestPart(obj)
-            if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                Notify("已到 Cursed Card Store")
-                return
-            end
-        end
+local function pickupCards()
+    return clickCardInStore()
+end
+
+local function tpNearestCard()
+    local success = clickCardInStore()
+    if success then
+        Notify("已点击卡牌")
+    else
+        Notify("未找到卡牌（请先到商店）")
     end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isStore(obj) then
-            knownStores[obj] = true
-            local part = bestPart(obj)
-            if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                Notify("找到 Card Store")
-                return
-            end
-        end
-    end
-    -- 模糊：名字带 cursed + card / store
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        local n = (obj.Name or ""):lower()
-        if (n:find("cursed") and n:find("card")) or (n:find("card") and n:find("store")) then
-            local part = bestPart(obj)
-            if part then
-                knownStores[obj] = true
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                Notify("找到疑似卡牌店")
-                return
-            end
-        end
-    end
-    Notify("未找到 Card Store")
 end
 
 -- ESP
@@ -888,6 +1099,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.6)
     applySpdJump()
     if Settings.God then onGod() end
+    if Settings.BlackHole then startBlackHole() end
 end)
 
 workspace.DescendantAdded:Connect(function(obj)
@@ -924,8 +1136,17 @@ task.spawn(function()
         checkDangerAlert()
         checkDisasterText()
 
-        StatusLabel.Text = "Status: " .. (Settings.AutoShelter and "秒开箱→避难所 ON" or "Ready")
-        StatusLabel.TextColor3 = Settings.AutoShelter and Color3.fromRGB(100, 200, 255) or Theme.TextGray
+        local statusText = "Ready"
+        if Settings.AutoFarm then
+            statusText = "★ Auto Farm ON"
+        elseif Settings.AutoShelter then
+            statusText = "秒开箱→避难所 ON"
+        elseif Settings.AutoFarmCard then
+            statusText = "Farm Card ON"
+        end
+        StatusLabel.Text = "Status: " .. statusText
+        StatusLabel.TextColor3 = (Settings.AutoFarm or Settings.AutoShelter or Settings.AutoFarmCard) and Color3.fromRGB(160, 100, 255) or Theme.TextGray
+
         DisasterLabel.Text = "当前灾难: " .. currentDisaster
         NextLabel.Text = "下一场: " .. nextDisaster
         DangerLabel.Text = "Danger Alerts: " .. (dangerAlerts and "ON" or "Off")
@@ -944,6 +1165,11 @@ task.spawn(function()
         else
             CardStatusLabel.Text = "Wild Card: 未找到"
             CardStatusLabel.TextColor3 = Theme.TextGray
+        end
+
+        if Settings.AutoFarm and (now - lastAutoFarm) >= AUTO_FARM_INTERVAL then
+            lastAutoFarm = now
+            autoFarmFlow()
         end
 
         if Settings.AutoShelter and (now - lastShelterCheck) >= SHELTER_INTERVAL then
@@ -966,6 +1192,11 @@ task.spawn(function()
             if pickupCards() then
                 Notify("已尝试捡卡")
             end
+        end
+
+        if Settings.AutoFarmCard and (now - lastFarmCard) >= FARM_CARD_INTERVAL then
+            lastFarmCard = now
+            autoFarmCard()
         end
 
         if Settings.SpdOn or Settings.JumpOn then applySpdJump() end
@@ -992,7 +1223,29 @@ task.spawn(function()
     end
 end)
 
+-- 碎片飞循环（独立）
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
+        if Settings.DebrisFly then
+            spawnDebrisFly()
+        end
+        task.wait(2.8)
+    end
+end)
+
 -- Buttons
+AutoFarmBtn.MouseButton1Click:Connect(function()
+    Settings.AutoFarm = not Settings.AutoFarm
+    AutoFarmBtn.Text = Settings.AutoFarm and "★ Auto Farm ON" or "★ Auto Farm OFF"
+    AutoFarmBtn.BackgroundColor3 = Settings.AutoFarm and Color3.fromRGB(90, 40, 160) or Theme.BgButtonOff
+    if Settings.AutoFarm then
+        autoFarmFlow()
+        Notify("★ Auto Farm 已开启")
+    else
+        Notify("Auto Farm 已关闭")
+    end
+end)
+
 AutoShelterBtn.MouseButton1Click:Connect(function()
     Settings.AutoShelter = not Settings.AutoShelter
     AutoShelterBtn.Text = Settings.AutoShelter and "Auto: 秒开箱→避难所 ON" or "Auto: 秒开箱→避难所 OFF"
@@ -1013,6 +1266,12 @@ NearestChestBtn.MouseButton1Click:Connect(function()
     task.delay(1, function() if NearestChestBtn then NearestChestBtn.BackgroundColor3 = Theme.BgButtonOff end end)
 end)
 
+TPShelterBtn.MouseButton1Click:Connect(function()
+    TPShelterBtn.BackgroundColor3 = Theme.BgButtonOn
+    tpShelter()
+    task.delay(1, function() if TPShelterBtn then TPShelterBtn.BackgroundColor3 = Theme.BgButtonOff end end)
+end)
+
 ForceShelterBtn.MouseButton1Click:Connect(function()
     ForceShelterBtn.BackgroundColor3 = Theme.BgButtonOn
     forceTPShelter()
@@ -1024,6 +1283,18 @@ DangerAutoBtn.MouseButton1Click:Connect(function()
     DangerAutoBtn.Text = Settings.DangerAuto and "危险灾难自动进所 ON" or "危险灾难自动进所 OFF"
     DangerAutoBtn.BackgroundColor3 = Settings.DangerAuto and Theme.BgButtonOn or Theme.BgButtonOff
     Notify(Settings.DangerAuto and "危险自动进所 ON" or "危险自动进所 OFF")
+end)
+
+AutoFarmCardBtn.MouseButton1Click:Connect(function()
+    Settings.AutoFarmCard = not Settings.AutoFarmCard
+    AutoFarmCardBtn.Text = Settings.AutoFarmCard and "Auto Farm Card ON" or "Auto Farm Card OFF"
+    AutoFarmCardBtn.BackgroundColor3 = Settings.AutoFarmCard and Theme.BgButtonOn or Theme.BgButtonOff
+    if Settings.AutoFarmCard then
+        autoFarmCard()
+        Notify("Auto Farm Card 已开启")
+    else
+        Notify("Auto Farm Card 已关闭")
+    end
 end)
 
 AutoCardBtn.MouseButton1Click:Connect(function()
@@ -1106,6 +1377,33 @@ JumpUp.MouseButton1Click:Connect(function()
     applySpdJump()
 end)
 
+-- 独立特效按钮
+BlackHoleBtn.MouseButton1Click:Connect(function()
+    Settings.BlackHole = not Settings.BlackHole
+    BlackHoleBtn.Text = Settings.BlackHole and "黑洞特效 ON" or "黑洞特效 OFF"
+    BlackHoleBtn.BackgroundColor3 = Settings.BlackHole and Color3.fromRGB(80, 20, 120) or Theme.BgButtonOff
+    if Settings.BlackHole then
+        startBlackHole()
+        Notify("黑洞特效已开启")
+    else
+        stopBlackHole()
+        Notify("黑洞特效已关闭")
+    end
+end)
+
+DebrisFlyBtn.MouseButton1Click:Connect(function()
+    Settings.DebrisFly = not Settings.DebrisFly
+    DebrisFlyBtn.Text = Settings.DebrisFly and "碎片飞特效 ON" or "碎片飞特效 OFF"
+    DebrisFlyBtn.BackgroundColor3 = Settings.DebrisFly and Color3.fromRGB(140, 60, 200) or Theme.BgButtonOff
+    if Settings.DebrisFly then
+        spawnDebrisFly()
+        Notify("碎片飞特效已开启（循环）")
+    else
+        clearDebris()
+        Notify("碎片飞特效已关闭")
+    end
+end)
+
 TPHopBtn.MouseButton1Click:Connect(function()
     Notify("Server Hopping...")
     pcall(function() TeleportService:TeleportAsync(PLACE_ID, {LocalPlayer}) end)
@@ -1126,7 +1424,10 @@ end)
 CloseBtn.MouseButton1Click:Connect(function()
     clearFolder(chestEspFolder)
     clearFolder(cardEspFolder)
+    stopBlackHole()
+    clearDebris()
     offGod()
+    effectFolder:Destroy()
     ScreenGui:Destroy()
 end)
 
@@ -1150,5 +1451,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP FULL 已加载")
-print("灾难警告 VIP FULL loaded")
+Notify("灾难警告 VIP FULL 已加载（特效独立版）")
+print("灾难警告 VIP FULL loaded - BlackHole & Debris separate")
