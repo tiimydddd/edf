@@ -1,4 +1,5 @@
--- tau only apple FULL (UI稳定版 + 下一模式秒提醒)
+-- tau only apple FULL
+-- 碎片5/5大字提醒 | 最近模式列表 | 下一模式秒提醒 | UI稳定
 local Players=game:GetService("Players")
 local LocalPlayer=Players.LocalPlayer
 local StarterGui=game:GetService("StarterGui")
@@ -33,6 +34,8 @@ local firstChk,rejoinSt,alerting,entered,enterT=false,"等待进入地图...",fa
 local SPAWN_W=8
 local sessT,sessF,sessG,sessH,sessD=tick(),0,0,0,0
 local tried={}
+local modeHistory={}
+local MAX_HISTORY=12
 
 local function snd(id,v)
 	pcall(function()
@@ -68,7 +71,7 @@ Flash.Size=UDim2.new(1,0,1,0); Flash.BackgroundColor3=Color3.fromRGB(180,20,20)
 Flash.BackgroundTransparency=1; Flash.BorderSizePixel=0; Flash.ZIndex=40; Flash.Visible=false; Flash.Parent=SG
 
 local Main=Instance.new("Frame")
-Main.Size=UDim2.new(0,440,0,500); Main.Position=UDim2.new(0,30,0,40)
+Main.Size=UDim2.new(0,440,0,520); Main.Position=UDim2.new(0,30,0,40)
 Main.BackgroundColor3=Color3.fromRGB(22,22,28); Main.BorderSizePixel=0; Main.Visible=true; Main.Parent=SG
 Instance.new("UICorner",Main).CornerRadius=UDim.new(0,12)
 local st=Instance.new("UIStroke"); st.Color=Color3.fromRGB(80,80,100); st.Thickness=2; st.Parent=Main
@@ -118,7 +121,7 @@ local Pages={}
 local function mkPage(n,h)
 	local p=Instance.new("ScrollingFrame")
 	p.Name=n; p.Size=UDim2.new(1,0,1,0); p.BackgroundTransparency=1; p.BorderSizePixel=0
-	p.ScrollBarThickness=3; p.CanvasSize=UDim2.new(0,0,0,h or 560); p.Visible=false; p.Parent=Content
+	p.ScrollBarThickness=3; p.CanvasSize=UDim2.new(0,0,0,h or 600); p.Visible=false; p.Parent=Content
 	Pages[n]=p; return p
 end
 local function mkCard(par,y,h)
@@ -158,31 +161,35 @@ local function mkBtn(par,tx,y,col)
 	Instance.new("UICorner",b).CornerRadius=UDim.new(0,8); return b
 end
 
-local PInfo=mkPage("Info",620)
-local ic=mkCard(PInfo,4,440)
+local PInfo=mkPage("Info",680)
+local ic=mkCard(PInfo,4,500)
 local StatusL=mkLab(ic,"状态: 关闭",8)
 local GoalL=mkLab(ic,"目标: 捡碎片+眼镜",26,Color3.fromRGB(140,200,255))
 mkLab(ic,"── 进度 ──",48,Color3.fromRGB(120,120,140))
 local FragL=mkLab(ic,"血月碎片: 地图0 | 我0/5",68)
-local GlassL=mkLab(ic,"神秘眼镜: 未找到",86)
-local TartL=mkLab(ic,"Tartarus: 未解锁",104)
-local ChadL=mkLab(ic,"Chad条件: 未满足",122)
-mkLab(ic,"── 模式 ──",146,Color3.fromRGB(120,120,140))
-local ModeL=mkLab(ic,"当前模式: Unknown",166)
-local NextL=mkLab(ic,"下一模式: Unknown",184)
-local DoomL=mkLab(ic,"Doomsday: 否",202)
-mkLab(ic,"── 会话 ──",226,Color3.fromRGB(120,120,140))
-local RejL=mkLab(ic,"重进提示: 等待进入地图...",246)
-local SessL=mkLab(ic,"会话: 碎片0 眼镜0 换服0",264,Color3.fromRGB(160,200,160))
-local MapL=mkLab(ic,"地图: 钥匙0 灭火器0 球棒0",284,Color3.fromRGB(150,150,165))
-mkLab(ic,"── 碎片距离 ──",308,Color3.fromRGB(120,120,140))
+local FragFullL=mkLab(ic,"个人碎片: 未满",86)
+local GlassL=mkLab(ic,"神秘眼镜: 未找到",104)
+local TartL=mkLab(ic,"Tartarus: 未解锁",122)
+local ChadL=mkLab(ic,"Chad条件: 未满足",140)
+mkLab(ic,"── 模式 ──",164,Color3.fromRGB(120,120,140))
+local ModeL=mkLab(ic,"当前模式: Unknown",184)
+local NextL=mkLab(ic,"下一模式: Unknown",202)
+local DoomL=mkLab(ic,"Doomsday: 否",220)
+mkLab(ic,"── 会话 ──",244,Color3.fromRGB(120,120,140))
+local RejL=mkLab(ic,"重进提示: 等待进入地图...",264)
+local SessL=mkLab(ic,"会话: 碎片0 眼镜0 换服0",282,Color3.fromRGB(160,200,160))
+local MapL=mkLab(ic,"地图: 钥匙0 灭火器0 球棒0",300,Color3.fromRGB(150,150,165))
+mkLab(ic,"── 最近模式 ──",324,Color3.fromRGB(120,120,140))
+local HistL=mkLab(ic,"暂无记录（出模式后自动记录）",342,Color3.fromRGB(160,160,175))
+HistL.Size=UDim2.new(1,-24,0,40); HistL.TextWrapped=true; HistL.TextYAlignment=Enum.TextYAlignment.Top
+mkLab(ic,"── 碎片距离 ──",388,Color3.fromRGB(120,120,140))
 local DistF=Instance.new("ScrollingFrame")
-DistF.Size=UDim2.new(1,-24,0,80); DistF.Position=UDim2.new(0,12,0,328)
+DistF.Size=UDim2.new(1,-24,0,70); DistF.Position=UDim2.new(0,12,0,408)
 DistF.BackgroundColor3=Color3.fromRGB(25,25,32); DistF.BorderSizePixel=0; DistF.ScrollBarThickness=3
 DistF.CanvasSize=UDim2.new(0,0,0,0); DistF.Parent=ic
 Instance.new("UICorner",DistF).CornerRadius=UDim.new(0,6)
 Instance.new("UIListLayout",DistF).Padding=UDim.new(0,3)
-local ResetModeBtn=mkBtn(ic,"重置模式",418,Color3.fromRGB(55,45,45))
+local ResetModeBtn=mkBtn(ic,"重置模式显示",486,Color3.fromRGB(55,45,45))
 
 local PLoot=mkPage("Loot",420)
 local lc=mkCard(PLoot,4,400)
@@ -208,7 +215,7 @@ mkLab(ec,"【效率】",8,Color3.fromRGB(140,200,255))
 local RJ_tr,RJ_th=mkTog(ec,"进图后无碎片 → 仅提示",32,true)
 local HopBtn=mkBtn(ec,"立即换服",70,Color3.fromRGB(50,90,140))
 local JobBtn=mkBtn(ec,"复制 JobId",106,Color3.fromRGB(45,70,90))
-mkLab(ec,"模式一公布会大字+声音提醒",145,Color3.fromRGB(160,200,160))
+mkLab(ec,"模式公布/碎片满5会大字+声音",145,Color3.fromRGB(160,200,160))
 
 local PTP=mkPage("Teleport",300)
 local tc=mkCard(PTP,4,270)
@@ -257,7 +264,7 @@ mkLab(esc,"红=碎片  青=眼镜",68,Color3.fromRGB(160,160,175))
 Pages.Info.Visible=true
 TInfo.BackgroundColor3=Color3.fromRGB(50,50,62); TInfo.TextColor3=Color3.new(1,1,1)
 Notify("界面已加载 FULL")
-print("[tau] UI OK FULL")
+print("[tau] UI OK")
 
 local function showBig(tx,col,dur)
 	Big.Text=tx; Big.TextColor3=col or Color3.fromRGB(255,220,80); Big.Visible=true
@@ -269,6 +276,12 @@ local function flashD()
 		for i=1,4 do Flash.BackgroundTransparency=0.55; alrt(); task.wait(0.25); Flash.BackgroundTransparency=0.85; task.wait(0.2) end
 		Flash.Visible=false; Flash.BackgroundTransparency=1
 	end)
+end
+local function pushModeHistory(name)
+	if not name or name=="" or name=="Unknown" then return end
+	if modeHistory[1]==name then return end
+	table.insert(modeHistory,1,name)
+	while #modeHistory>MAX_HISTORY do table.remove(modeHistory) end
 end
 local function switchTab(n)
 	click()
@@ -287,7 +300,7 @@ TESP.MouseButton1Click:Connect(function() switchTab("ESP") end)
 MinBtn.MouseButton1Click:Connect(function()
 	click(); isMin=not isMin
 	if isMin then Main.Size=UDim2.new(0,200,0,36); TabBar.Visible=false; Content.Visible=false; MinBtn.Text="+"
-	else Main.Size=UDim2.new(0,440,0,500); TabBar.Visible=true; Content.Visible=true; MinBtn.Text="–" end
+	else Main.Size=UDim2.new(0,440,0,520); TabBar.Visible=true; Content.Visible=true; MinBtn.Text="–" end
 end)
 
 local function inList(name,list)
@@ -362,8 +375,18 @@ local function pickup(o,typ)
 	end
 	task.delay(0.6,function()
 		if not o or not o.Parent then
-			if typ=="Fragment" then myFrags=math.min(5,myFrags+1); sessF=sessF+1; Notify("碎片 "..myFrags.."/5")
-			elseif typ=="Glasses" then gotGlass=true; sessG=sessG+1; Notify("眼镜已找到") end
+			if typ=="Fragment" then
+				myFrags=math.min(5,myFrags+1); sessF=sessF+1
+				if myFrags>=5 then
+					alrt()
+					showBig("碎片个人已满 5/5！\n（Tartarus 仍需全服共5个）",Color3.fromRGB(100,255,120),7)
+					Notify("个人碎片 5/5！全服集齐才出 Tartarus",true)
+				else
+					Notify("碎片 "..myFrags.."/5")
+				end
+			elseif typ=="Glasses" then
+				gotGlass=true; sessG=sessG+1; Notify("眼镜已找到")
+			end
 		end
 	end)
 end
@@ -491,19 +514,16 @@ local function markEnter()
 	if entered then return end; entered=true; enterT=tick(); rejoinSt="已进图，等待Loot..."
 end
 
--- ★ 下一模式：更勤扫 + 多种文案 + 大字秒提醒
 local function onNextMode(name)
 	if not name or name=="" or name==lastNext then return end
-	lastNext=name
-	nextMode=name
+	lastNext=name; nextMode=name
+	pushModeHistory("→"..name)
 	alrt()
-	showBig("下一模式: "..name, Color3.fromRGB(100,200,255), 6)
-	Notify("下一模式: "..name, true)
-	-- 危险模式额外红闪
+	showBig("下一模式: "..name,Color3.fromRGB(100,200,255),6)
+	Notify("下一模式: "..name,true)
 	local low=string.lower(name)
 	if low:find("doomsday") or low:find("tartarus") or low:find("deadnado") then
-		flashD()
-		showBig("⚠ 危险模式: "..name, Color3.fromRGB(255,70,70), 7)
+		flashD(); showBig("⚠ 危险模式: "..name,Color3.fromRGB(255,70,70),7)
 	end
 end
 
@@ -515,7 +535,6 @@ local function checkA()
 		if lo:find("doomsday") or lo:find("survive the end") then sd=true end
 		if lo:find("tartarus") then st=true end
 	end
-	-- 扫 Notifications（含 SelectedGamemode 全树）抓「下一模式」
 	local gui=LocalPlayer:FindFirstChild("PlayerGui")
 	local n=gui and gui:FindFirstChild("Notifications")
 	if n then
@@ -524,20 +543,11 @@ local function checkA()
 				local raw=g.Text or ""
 				if #raw>=5 and #raw<=220 then
 					local t=string.lower(raw)
-					-- 多种公布文案
-					local patterns={
-						"this round's gamemode is",
-						"the gamemode is",
-						"gamemode:",
-						"next gamemode",
-						"selected gamemode",
-					}
+					local patterns={"this round's gamemode is","the gamemode is","gamemode:","next gamemode","selected gamemode"}
 					for _,pat in ipairs(patterns) do
 						local a,b=t:find(pat,1,true)
 						if a then
-							local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$","")
-							-- 去掉多余句号
-							after=after:gsub("%.$",""):gsub("%s+$","")
+							local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""):gsub("%.$","")
 							if #after>1 and #after<40 then fn=after break end
 						end
 					end
@@ -552,7 +562,12 @@ local function checkA()
 	if st and not tartOK then tartOK=true; flashD(); showBig("⚠ TARTARUS",Color3.fromRGB(255,60,60),6); Notify("Tartarus!",true) end
 	if sd and not doomOK then doomOK=true; flashD(); showBig("⚠ DOOMSDAY",Color3.fromRGB(255,80,40),6); Notify("Doomsday!",true) end
 	if best then
-		if best~=curMode and (best=="Doomsday" or best=="Tartarus" or best=="Deadnado") then flashD(); showBig("⚠ "..best,Color3.fromRGB(255,70,70),5) end
+		if best~=curMode then
+			pushModeHistory(best)
+			if best=="Doomsday" or best=="Tartarus" or best=="Deadnado" then
+				flashD(); showBig("⚠ "..best,Color3.fromRGB(255,70,70),5)
+			end
+		end
 		curMode=best; lastModeT=tick()
 		if best=="Doomsday" then doomOK=true end
 		if best=="Tartarus" then tartOK=true end
@@ -691,12 +706,8 @@ end
 
 task.spawn(function() task.wait(1); pcall(scan); pcall(refPl); pcall(updDist); pcall(refESP) end)
 
--- 模式检测更勤：单独 0.8s 循环，更快抓住「下一模式」公布
 task.spawn(function()
-	while SG and SG.Parent do
-		pcall(checkA)
-		task.wait(0.8)
-	end
+	while SG and SG.Parent do pcall(checkA); task.wait(0.8) end
 end)
 
 task.spawn(function()
@@ -707,6 +718,13 @@ task.spawn(function()
 			elseif S.Enabled then StatusL.Text="状态: 仅自动捡取"; StatusL.TextColor3=Color3.fromRGB(100,200,255)
 			else StatusL.Text="状态: 关闭"; StatusL.TextColor3=Color3.fromRGB(255,100,100) end
 			FragL.Text=string.format("血月碎片: 地图%d | 我%d/5",fr,myFrags)
+			if myFrags>=5 then
+				FragFullL.Text="个人碎片: 已满 5/5 ✓"
+				FragFullL.TextColor3=Color3.fromRGB(100,255,120)
+			else
+				FragFullL.Text="个人碎片: "..myFrags.."/5"
+				FragFullL.TextColor3=Color3.fromRGB(180,180,195)
+			end
 			if gotGlass or (c.Glasses or 0)>0 then GlassL.Text="神秘眼镜: 已找到"; GlassL.TextColor3=Color3.fromRGB(100,255,120); ChadL.Text="Chad条件: 已满足"
 			else GlassL.Text="神秘眼镜: 未找到"; GlassL.TextColor3=Color3.fromRGB(255,160,100); ChadL.Text="Chad条件: 未满足" end
 			TartL.Text=tartOK and "Tartarus: 已出现" or "Tartarus: 未解锁"
@@ -715,6 +733,13 @@ task.spawn(function()
 			RejL.Text="重进提示: "..rejoinSt
 			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d",sessF,sessG,sessH,sessD)
 			MapL.Text=string.format("地图: 钥匙%d 灭火器%d 球棒%d",c.Key or 0,c.Ext or 0,c.Bat or 0)
+			if #modeHistory==0 then
+				HistL.Text="暂无记录（出模式后自动记录）"
+			else
+				local parts={}
+				for i=1,math.min(6,#modeHistory) do table.insert(parts,modeHistory[i]) end
+				HistL.Text=table.concat(parts,"  →  ")
+			end
 			if now-lastHeavy>=HEAVY then lastHeavy=now; scan(); updDist() end
 			if now-lastEsp>=EINT then lastEsp=now; refESP() end
 			if (S.Enabled or S.FullAuto) and now-lastScan>=SCAN then
@@ -776,7 +801,13 @@ RngUp.MouseButton1Click:Connect(function() click(); TRANGE=math.min(200,TRANGE+2
 SpecBtn.MouseButton1Click:Connect(startSpec)
 ChadBtn.MouseButton1Click:Connect(tryChad)
 ScanBtn.MouseButton1Click:Connect(function() click(); local c=scan(); updDist(); refESP(); Notify("扫描 碎片"..(c.Fragment or 0).." 眼镜"..(c.Glasses or 0)) end)
-ResetModeBtn.MouseButton1Click:Connect(function() click(); curMode="Unknown"; nextMode="Unknown"; lastNext=""; lastModeT=0; doomOK=false; tartOK=false; Notify("模式已重置") end)
+ResetModeBtn.MouseButton1Click:Connect(function()
+	click()
+	curMode="Unknown"; nextMode="Unknown"; lastNext=""; lastModeT=0; doomOK=false; tartOK=false
+	-- 模式历史保留；若要清空取消下一行注释
+	-- modeHistory={}
+	Notify("模式显示已重置")
+end)
 ShelBtn.MouseButton1Click:Connect(function() click(); toShel(false) end)
 RefBtn.MouseButton1Click:Connect(function() click(); refPl() end)
 CloseBtn.MouseButton1Click:Connect(function() click(); clrESP(); SG:Destroy() end)
