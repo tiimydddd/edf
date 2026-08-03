@@ -1,6 +1,5 @@
--- 灾难警告之VIP版本 FULL - UI Remake + 修复版
--- 修复：找卡 / 开箱稳定性
--- 新增：投票时自动投满「商场」
+-- 灾难警告之VIP版本 FULL - 最终版
+-- 进避难所优先内部物体 | 开箱/找卡加强 | 自动投满商场
 -- PlaceId: 7479931846
 
 local Players = game:GetService("Players")
@@ -29,7 +28,7 @@ local Settings = {
     God = false,
     BlackHole = false,
     DebrisFly = false,
-    AutoVoteMall = true, -- 默认开启：有商场就投满
+    AutoVoteMall = true,
 }
 
 local currentDisaster = "Unknown"
@@ -58,7 +57,20 @@ local FARM_CARD_INTERVAL = 4
 local AUTO_FARM_INTERVAL = 8
 local VOTE_INTERVAL = 1.2
 
-local ShelterNames = {"Shelter","Bunker","Underground","UndergroundShelter","Underground Bunker","ShelterEntrance","ShelterDoor","Entrance","避难所","ControlPanel","Control Room"}
+-- 避难所「里面」优先
+local ShelterInsideNames = {
+    "ControlPanel", "Control Panel", "ControlRoom", "Control Room",
+    "ShelterInterior", "InsideShelter", "SafeZone", "Safe Zone",
+    "BunkerInside", "UndergroundRoom", "ShelterRoom",
+    "Seat", "Chair", "Bench", "Couch",
+    "避难所内部", "控制室", "控制面板"
+}
+-- 门/入口（低优先级）
+local ShelterDoorNames = {
+    "ShelterDoor", "ShelterEntrance", "Entrance", "Door",
+    "Shelter", "Bunker", "Underground", "UndergroundShelter", "Underground Bunker", "避难所"
+}
+
 local ChestNames = {"Chest","Treasure","TreasureChest","Treasure Chest","Box","Crate","Loot","宝箱"}
 local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
 local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
@@ -215,7 +227,7 @@ local function createPage(name)
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = Color3.fromRGB(80, 90, 120)
-    page.CanvasSize = UDim2.new(0, 0, 0, 500)
+    page.CanvasSize = UDim2.new(0, 0, 0, 560)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -361,7 +373,7 @@ local PageShelter = createPage("Shelter")
 PageShelter.CanvasSize = UDim2.new(0, 0, 0, 320)
 makeSection(PageShelter, "自动流程", 10)
 local AutoFarmBtn = makeBtn(PageShelter, "★ Auto Farm", 34, false)
-local AutoShelterBtn = makeBtn(PageShelter, "秒开箱 → 避难所", 76, false)
+local AutoShelterBtn = makeBtn(PageShelter, "秒开箱 → 避难所内部", 76, false)
 makeSection(PageShelter, "手动操作", 122)
 local OpenChestOnlyBtn = makeBtn(PageShelter, "仅开箱", 146, false)
 local NearestChestBtn = makeBtn(PageShelter, "最近宝箱", 188, false)
@@ -384,7 +396,7 @@ local CardESPBtn = makeBtn(PageCard, "卡牌 ESP", 258, false)
 local PageTP = createPage("Teleport")
 PageTP.CanvasSize = UDim2.new(0, 0, 0, 380)
 makeSection(PageTP, "快捷传送", 10)
-local TPShelterBtn = makeBtn(PageTP, "TP Shelter（进避难所）", 34, false)
+local TPShelterBtn = makeBtn(PageTP, "TP Shelter（进内部）", 34, false)
 local TPHopBtn = makeBtn(PageTP, "Server Hop", 76, false)
 makeSection(PageTP, "传送到玩家", 122)
 local PlayerListFrame = Instance.new("ScrollingFrame")
@@ -401,7 +413,7 @@ local RefreshPlayersBtn = makeBtn(PageTP, "刷新玩家列表", 310, false)
 
 -- Extra
 local PageExtra = createPage("Extra")
-PageExtra.CanvasSize = UDim2.new(0, 0, 0, 560)
+PageExtra.CanvasSize = UDim2.new(0, 0, 0, 580)
 makeSection(PageExtra, "基础", 10)
 local AFKBtn = makeBtn(PageExtra, "Anti-AFK", 34, false)
 local ChestESPBtn = makeBtn(PageExtra, "宝箱 ESP", 76, false)
@@ -509,7 +521,8 @@ local function nameIn(obj, list)
     return false
 end
 
-local function isShelter(obj) return nameIn(obj, ShelterNames) end
+local function isShelterInside(obj) return nameIn(obj, ShelterInsideNames) end
+local function isShelterDoor(obj) return nameIn(obj, ShelterDoorNames) end
 local function isChest(obj) return nameIn(obj, ChestNames) end
 local function isCard(obj)
     if not nameIn(obj, CardNames) then return false end
@@ -538,7 +551,7 @@ local function bestPart(obj)
     return obj:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- ========== 加强版交互（解决开箱/找卡问题） ==========
+-- 加强交互
 local function tryInteract(obj, hrp)
     local part = bestPart(obj)
     if not part then return false end
@@ -555,14 +568,12 @@ local function tryInteract(obj, hrp)
     }
 
     local opened = false
-
     for _, offset in ipairs(offsets) do
         pcall(function()
             hrp.CFrame = CFrame.new(part.Position + offset)
         end)
         task.wait(0.12)
 
-        -- ProximityPrompt 多方式尝试
         local prompts = {}
         for _, d in ipairs(obj:GetDescendants()) do
             if d:IsA("ProximityPrompt") then table.insert(prompts, d) end
@@ -575,27 +586,21 @@ local function tryInteract(obj, hrp)
 
         for _, prompt in ipairs(prompts) do
             for i = 1, 15 do
-                pcall(function()
-                    fireproximityprompt(prompt)
-                end)
+                pcall(function() fireproximityprompt(prompt) end)
                 if i % 4 == 0 then task.wait(0.04) end
             end
             opened = true
         end
 
-        -- ClickDetector
         local clicks = {}
         for _, d in ipairs(obj:GetDescendants()) do
             if d:IsA("ClickDetector") then table.insert(clicks, d) end
         end
         for _, click in ipairs(clicks) do
-            for i = 1, 10 do
-                pcall(function() fireclickdetector(click) end)
-            end
+            for i = 1, 10 do pcall(function() fireclickdetector(click) end) end
             opened = true
         end
 
-        -- TouchInterest
         local ti = part:FindFirstChildOfClass("TouchInterest")
         if ti then
             pcall(function()
@@ -611,26 +616,20 @@ local function tryInteract(obj, hrp)
             break
         end
     end
-
     return opened
 end
--- =====================================================
 
 local function openChests()
     local hrp = getHRP()
     if not hrp then return false end
     cleanCache(knownChests)
     local opened = false
-
-    -- 先处理已缓存的
     for obj in pairs(knownChests) do
         if obj and obj.Parent then
             if tryInteract(obj, hrp) then opened = true end
             task.wait(0.08)
         end
     end
-
-    -- 再全图扫一次
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isChest(obj) then
             knownChests[obj] = true
@@ -641,38 +640,64 @@ local function openChests()
     return opened
 end
 
+-- ========== 进避难所：优先内部 ==========
 local function goToShelter()
     local hrp = getHRP()
     if not hrp then return false end
-    cleanCache(knownShelters)
 
-    for obj in pairs(knownShelters) do
-        if obj and obj.Parent then
-            local part = bestPart(obj)
-            if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                tryInteract(obj, hrp)
-                return true
-            end
-        end
-    end
+    -- 1. 优先找内部物体
+    local insideCandidates = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if isShelter(obj) then
-            knownShelters[obj] = true
+        if isShelterInside(obj) then
             local part = bestPart(obj)
             if part then
-                hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                tryInteract(obj, hrp)
-                return true
+                table.insert(insideCandidates, {obj = obj, part = part})
             end
         end
     end
+
+    if #insideCandidates > 0 then
+        local best, bestDist = nil, math.huge
+        for _, item in ipairs(insideCandidates) do
+            local d = (item.part.Position - hrp.Position).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = item
+            end
+        end
+        if best then
+            hrp.CFrame = best.part.CFrame + Vector3.new(0, 3, 0)
+            tryInteract(best.obj, hrp)
+            Notify("已进入避难所内部")
+            return true
+        end
+    end
+
+    -- 2. 找不到内部，用门并往里面偏移
+    local doorCandidates = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelterDoor(obj) then
+            local part = bestPart(obj)
+            if part then table.insert(doorCandidates, part) end
+        end
+    end
+
+    if #doorCandidates > 0 then
+        local part = doorCandidates[1]
+        local insideOffset = part.CFrame.LookVector * -8 + Vector3.new(0, 3, 0)
+        hrp.CFrame = part.CFrame + insideOffset
+        Notify("已尝试进入避难所内部（门偏移）")
+        return true
+    end
+
+    Notify("未找到避难所内部物体")
     return false
 end
+-- ========================================
 
 local function tpShelter()
     if goToShelter() then
-        Notify("已传送到避难所")
+        Notify("已传送到避难所内部")
     else
         Notify("未找到避难所")
     end
@@ -682,7 +707,7 @@ local function autoShelterFlow()
     Notify("秒开宝箱中...")
     openChests()
     task.wait(0.45)
-    Notify("前往避难所...")
+    Notify("前往避难所内部...")
     goToShelter()
 end
 
@@ -726,8 +751,6 @@ local function clickCardInStore()
 
     cleanCache(knownCards)
     local got = false
-
-    -- 优先处理已缓存卡
     for obj in pairs(knownCards) do
         if obj and obj.Parent then
             if tryInteract(obj, hrp) then
@@ -736,8 +759,6 @@ local function clickCardInStore()
             end
         end
     end
-
-    -- 全图再扫一次卡
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isCard(obj) then
             knownCards[obj] = true
@@ -756,7 +777,6 @@ local function autoFarmFlow()
     openChests()
     task.wait(0.5)
 
-    -- 去商店点卡（加强版）
     local store, part = findCardStore()
     if part then
         local hrp = getHRP()
@@ -766,13 +786,12 @@ local function autoFarmFlow()
             clickCardInStore()
         end
     else
-        -- 没找到商店也尝试直接点卡
         clickCardInStore()
     end
 
     task.wait(0.4)
     goToShelter()
-    Notify("Auto Farm 一轮完成")
+    Notify("Auto Farm 一轮完成（已进内部）")
 end
 
 local function openChestsOnly()
@@ -837,7 +856,7 @@ local function tpNearestCard()
     if success then Notify("已点击卡牌") else Notify("未找到卡牌") end
 end
 
--- ========== 自动投票「商场」 ==========
+-- 自动投票商场
 local function isMallText(text)
     if not text then return false end
     local t = text:lower()
@@ -852,30 +871,19 @@ local function autoVoteMall()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
 
-    -- 寻找投票相关的按钮 / 文本
     for _, gui in ipairs(pg:GetDescendants()) do
         if gui:IsA("TextButton") or gui:IsA("ImageButton") then
             local text = (gui.Text or ""):lower()
             local name = (gui.Name or ""):lower()
-
-            -- 检查按钮文字或名字是否包含商场关键词
             if isMallText(text) or isMallText(name) then
-                -- 多点几次，尽量投满
                 for i = 1, 8 do
-                    pcall(function()
-                        gui:Activate()
-                    end)
-                    pcall(function()
-                        firesignal(gui.MouseButton1Click)
-                    end)
-                    pcall(function()
-                        gui.MouseButton1Click:Fire()
-                    end)
+                    pcall(function() gui:Activate() end)
+                    pcall(function() firesignal(gui.MouseButton1Click) end)
+                    pcall(function() gui.MouseButton1Click:Fire() end)
                     task.wait(0.05)
                 end
             end
-        elseif gui:IsA("TextLabel") or gui:IsA("TextButton") then
-            -- 有些投票是点旁边的按钮，这里再辅助扫一次
+        elseif gui:IsA("TextLabel") then
             if isMallText(gui.Text) then
                 local parent = gui.Parent
                 if parent then
@@ -893,7 +901,6 @@ local function autoVoteMall()
         end
     end
 end
--- =====================================
 
 -- 真实方块操控
 local function getUnanchoredParts(range)
@@ -910,10 +917,8 @@ local function getUnanchoredParts(range)
                     break
                 end
             end
-            if not isCharacterPart then
-                if (obj.Position - myPos).Magnitude <= (range or 120) then
-                    table.insert(list, obj)
-                end
+            if not isCharacterPart and (obj.Position - myPos).Magnitude <= (range or 120) then
+                table.insert(list, obj)
             end
         end
     end
@@ -1184,7 +1189,7 @@ end)
 
 workspace.DescendantAdded:Connect(function(obj)
     task.defer(function()
-        if isShelter(obj) then knownShelters[obj] = true
+        if isShelterInside(obj) or isShelterDoor(obj) then knownShelters[obj] = true
         elseif isChest(obj) then knownChests[obj] = true
         elseif isCard(obj) then knownCards[obj] = true
         elseif isStore(obj) then knownStores[obj] = true
@@ -1202,7 +1207,7 @@ end)
 task.spawn(function()
     task.wait(1.5)
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if isShelter(obj) then knownShelters[obj] = true end
+        if isShelterInside(obj) or isShelterDoor(obj) then knownShelters[obj] = true end
         if isChest(obj) then knownChests[obj] = true end
         if isCard(obj) then knownCards[obj] = true end
         if isStore(obj) then knownStores[obj] = true end
@@ -1210,7 +1215,6 @@ task.spawn(function()
     refreshPlayerList()
 end)
 
--- 主循环
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
@@ -1219,7 +1223,7 @@ task.spawn(function()
 
         local statusText = "Ready"
         if Settings.AutoFarm then statusText = "★ Auto Farm ON"
-        elseif Settings.AutoShelter then statusText = "秒开箱→避难所 ON"
+        elseif Settings.AutoShelter then statusText = "秒开箱→内部 ON"
         elseif Settings.AutoFarmCard then statusText = "Farm Card ON"
         end
         StatusLabel.Text = "  Status: " .. statusText
@@ -1257,7 +1261,7 @@ task.spawn(function()
             local danger = dangerAlerts or theEndActive or isDangerDisaster(currentDisaster) or isDangerDisaster(nextDisaster)
             if danger then
                 lastDangerAuto = now
-                Notify("危险 → 开箱+进所")
+                Notify("危险 → 开箱+进内部")
                 autoShelterFlow()
             end
         end
@@ -1269,13 +1273,10 @@ task.spawn(function()
             lastFarmCard = now
             autoFarmCard()
         end
-
-        -- 自动投票商场
         if Settings.AutoVoteMall and (now - lastVoteCheck) >= VOTE_INTERVAL then
             lastVoteCheck = now
             autoVoteMall()
         end
-
         if Settings.SpdOn or Settings.JumpOn then applySpdJump() end
         task.wait(0.35)
     end
@@ -1299,7 +1300,7 @@ task.spawn(function()
     end
 end)
 
--- 按钮绑定
+-- 按钮
 AutoFarmBtn.MouseButton1Click:Connect(function()
     Settings.AutoFarm = not Settings.AutoFarm
     AutoFarmBtn.BackgroundColor3 = Settings.AutoFarm and T.Accent or T.Off
@@ -1310,7 +1311,7 @@ end)
 AutoShelterBtn.MouseButton1Click:Connect(function()
     Settings.AutoShelter = not Settings.AutoShelter
     AutoShelterBtn.BackgroundColor3 = Settings.AutoShelter and T.On or T.Off
-    AutoShelterBtn.Text = Settings.AutoShelter and "秒开箱 → 避难所 ON" or "秒开箱 → 避难所"
+    AutoShelterBtn.Text = Settings.AutoShelter and "秒开箱 → 内部 ON" or "秒开箱 → 避难所内部"
     if Settings.AutoShelter then autoShelterFlow() end
 end)
 
@@ -1486,5 +1487,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP FULL 已加载（修复+商场投票）")
-print("Disaster Warning VIP loaded - Fixed interact + Auto vote Mall")
+Notify("灾难警告 VIP FULL 最终版已加载")
+print("Disaster Warning VIP FULL loaded - Shelter interior priority")
