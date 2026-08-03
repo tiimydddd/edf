@@ -59,11 +59,7 @@ local AUTO_FARM_INTERVAL = 8
 local VOTE_INTERVAL = 1.2
 
 local ShelterInsideNames = {
-    "ControlPanel", "Control Panel", "ControlRoom", "Control Room",
-    "ShelterInterior", "InsideShelter", "SafeZone", "Safe Zone",
-    "BunkerInside", "UndergroundRoom", "ShelterRoom",
-    "Seat", "Chair", "Bench", "Couch",
-    "避难所内部", "控制室", "控制面板"
+    "Base"
 }
 local ShelterDoorNames = {
     "ShelterDoor", "ShelterEntrance", "Entrance", "Door",
