@@ -1,5 +1,6 @@
--- tau only apple FULL (Music History 30 + No Fall Injury + Boat Fly)
--- 已移除 Try Chad
+-- tau only apple FULL
+-- Music History 30 + No Fall Injury(Bones防骨折) + Boat Fly + 加强模式检测
+-- 已移除 Try Chad | 无重复代码
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -10,6 +11,7 @@ local RS = game:GetService("RunService")
 local RPS = game:GetService("ReplicatedStorage")
 local TS = game:GetService("TeleportService")
 local SS = game:GetService("SoundService")
+local CoreGui = game:GetService("CoreGui")
 local PLACE = 2313058949
 
 local C = {
@@ -31,12 +33,12 @@ local kF, kG, kE = {}, {}, {}
 local tScan, tShel, tHeavy, tTorn, tFly, tEsp, tBoat = 0, 0, 0, 0, 0, 0, 0
 local isMin, isSpec = false, false
 local TRANGE = 80
-local tart = false
+local tart, tartarusActive = false, false
+local currentMode = "Unknown"
 local mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0}
 local firstChk, rejSt, alerting, entered, enterT = false, "等待进入地图...", false, false, 0
 local sF, sG, sH = 0, 0, 0
-local tried = {}
-local originalIds = {}
+local tried, originalIds = {}, {}
 local injuryConn = nil
 local musicHistory = {}
 local MAX_HISTORY = 30
@@ -53,11 +55,9 @@ local function snd(id, v)
         task.delay(3, function() if s and s.Parent then s:Destroy() end end)
     end)
 end
-
 local function click() snd("rbxassetid://6895079853", 0.4) end
 local function nfy() snd("rbxassetid://4590662766", 0.5) end
 local function alrt() snd("rbxassetid://5153789655", 0.7) end
-
 local function N(m, a)
     nfy()
     if a then alrt() end
@@ -66,18 +66,54 @@ local function N(m, a)
     end)
 end
 
-local pg = LP:WaitForChild("PlayerGui")
+-- 清理旧 UI
 pcall(function()
-    local o = pg:FindFirstChild("tau_only_apple")
-    if o then o:Destroy() end
+    for _, root in ipairs({CoreGui, LP:FindFirstChild("PlayerGui")}) do
+        if root then
+            local o = root:FindFirstChild("tau_only_apple")
+            if o then o:Destroy() end
+        end
+    end
+    if typeof(gethui) == "function" then
+        local h = gethui()
+        if h then
+            local o = h:FindFirstChild("tau_only_apple")
+            if o then o:Destroy() end
+        end
+    end
 end)
 
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "tau_only_apple"
 Gui.ResetOnSpawn = false
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.DisplayOrder = 999999
 Gui.IgnoreGuiInset = true
-Gui.Parent = pg
+pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(Gui) end
+end)
+
+do
+    local ok = false
+    if typeof(gethui) == "function" then
+        local s, hui = pcall(gethui)
+        if s and hui then
+            ok = pcall(function() Gui.Parent = hui end) and Gui.Parent ~= nil
+        end
+    end
+    if not ok then
+        ok = pcall(function() Gui.Parent = CoreGui end) and Gui.Parent ~= nil
+    end
+    if not ok then
+        local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
+        if pg then pcall(function() Gui.Parent = pg end) end
+    end
+    if not Gui.Parent then
+        warn("[tau] UI mount failed")
+        return
+    end
+    print("[tau] UI Parent =", tostring(Gui.Parent))
+end
 
 local Big = Instance.new("TextLabel")
 Big.Size = UDim2.new(1, 0, 0, 50)
@@ -178,7 +214,12 @@ local function mkTab(tx)
     return b
 end
 
-local T1, T2, T3, T4, T5, T6 = mkTab("Info"), mkTab("Loot"), mkTab("效率"), mkTab("传送"), mkTab("Extra"), mkTab("ESP")
+local T1 = mkTab("Info")
+local T2 = mkTab("Loot")
+local T3 = mkTab("效率")
+local T4 = mkTab("传送")
+local T5 = mkTab("Extra")
+local T6 = mkTab("ESP")
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -16, 1, -76)
@@ -276,23 +317,24 @@ local function mkB(par, tx, y, col)
     return b
 end
 
--- ==================== Pages ====================
-local P1 = mkPage("Info", 480)
-local ic = mkCard(P1, 4, 360)
+-- Pages
+local P1 = mkPage("Info", 500)
+local ic = mkCard(P1, 4, 380)
 local StatusL = mkL(ic, "状态: 关闭", 6)
 mkL(ic, "── 进度 ──", 26, Color3.fromRGB(120, 120, 140))
 local FragL = mkL(ic, "血月碎片: 地图0 | 我0/5", 44)
 local FragFullL = mkL(ic, "个人碎片: 未满", 62)
 local GlassL = mkL(ic, "神秘眼镜: 未找到", 80)
-local TartL = mkL(ic, "Tartarus: 未解锁", 98)
-mkL(ic, "── 会话 ──", 126, Color3.fromRGB(120, 120, 140))
-local RejL = mkL(ic, "重进提示: 等待进入地图...", 144)
-local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 162, Color3.fromRGB(160, 200, 160))
-local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 180, Color3.fromRGB(150, 150, 165))
-mkL(ic, "── 碎片距离 ──", 204, Color3.fromRGB(120, 120, 140))
+local ModeL = mkL(ic, "当前模式: Unknown", 98)
+local TartL = mkL(ic, "Tartarus: 未解锁", 116)
+mkL(ic, "── 会话 ──", 140, Color3.fromRGB(120, 120, 140))
+local RejL = mkL(ic, "重进提示: 等待进入地图...", 158)
+local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 176, Color3.fromRGB(160, 200, 160))
+local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 194, Color3.fromRGB(150, 150, 165))
+mkL(ic, "── 碎片距离 ──", 218, Color3.fromRGB(120, 120, 140))
 local DistF = Instance.new("ScrollingFrame")
 DistF.Size = UDim2.new(1, -20, 0, 90)
-DistF.Position = UDim2.new(0, 10, 0, 222)
+DistF.Position = UDim2.new(0, 10, 0, 236)
 DistF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 DistF.BorderSizePixel = 0
 DistF.ScrollBarThickness = 3
@@ -410,13 +452,12 @@ RngUp.Parent = xc
 Instance.new("UICorner", RngUp).CornerRadius = UDim.new(0, 6)
 local SpecB = mkB(xc, "Open Spectate", 320, Color3.fromRGB(40, 90, 120))
 
--- 音乐区域
 mkL(xc, "【自定义音乐 (最多30首)】", 360, Color3.fromRGB(140, 200, 255))
 local MusicIdBox = Instance.new("TextBox")
 MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
 MusicIdBox.Position = UDim2.new(0, 10, 0, 380)
 MusicIdBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
-MusicIdBox.PlaceholderText = "音乐 ID (数字或 rbxassetid://)"
+MusicIdBox.PlaceholderText = "音乐 ID"
 MusicIdBox.Text = ""
 MusicIdBox.TextColor3 = Color3.new(1, 1, 1)
 MusicIdBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 155)
@@ -429,7 +470,7 @@ local MusicNameBox = Instance.new("TextBox")
 MusicNameBox.Size = UDim2.new(1, -20, 0, 24)
 MusicNameBox.Position = UDim2.new(0, 10, 0, 408)
 MusicNameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
-MusicNameBox.PlaceholderText = "给这首歌起名字（例如：血月）"
+MusicNameBox.PlaceholderText = "歌名"
 MusicNameBox.Text = ""
 MusicNameBox.TextColor3 = Color3.new(1, 1, 1)
 MusicNameBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 155)
@@ -462,7 +503,6 @@ T1.TextColor3 = Color3.new(1, 1, 1)
 N("界面已加载")
 print("[tau] UI OK")
 
--- ==================== 函数区 ====================
 local function showBig(tx, col, dur)
     Big.Text = tx
     Big.TextColor3 = col or Color3.fromRGB(255, 220, 80)
@@ -611,11 +651,8 @@ local function pickup(o, typ)
     local part = best(o)
     if not part then return end
     local offs = {
-        Vector3.new(0, 2, 0),
-        Vector3.new(0, 1.6, 1.5),
-        Vector3.new(0, 1.6, -1.5),
-        Vector3.new(1.5, 1.6, 0),
-        Vector3.new(-1.5, 1.6, 0)
+        Vector3.new(0, 2, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(0, 1.6, -1.5),
+        Vector3.new(1.5, 1.6, 0), Vector3.new(-1.5, 1.6, 0)
     }
     for _, off in ipairs(offs) do
         if not o.Parent then break end
@@ -641,8 +678,8 @@ local function pickup(o, typ)
                 sF = sF + 1
                 if myF >= 5 then
                     alrt()
-                    showBig("碎片个人已满 5/5！\n（仍需全服共5个）", Color3.fromRGB(100, 255, 120), 7)
-                    N("个人碎片 5/5！全服集齐才出 Tartarus", true)
+                    showBig("碎片个人已满 5/5！", Color3.fromRGB(100, 255, 120), 7)
+                    N("个人碎片 5/5！", true)
                 else
                     N("碎片 " .. myF .. "/5")
                 end
@@ -661,19 +698,17 @@ local function toShel(silent)
         if not silent then N("无角色") end
         return
     end
-    local tp
     for _, o in ipairs(workspace:GetDescendants()) do
         if isS(o) then
             local p = best(o)
-            if p then tp = p break end
+            if p then
+                h.CFrame = p.CFrame + Vector3.new(0, 5, 0)
+                if not silent then N("已传到避难所") end
+                return
+            end
         end
     end
-    if not tp then
-        if not silent then N("没找到避难所") end
-        return
-    end
-    h.CFrame = tp.CFrame + Vector3.new(0, 5, 0)
-    if not silent then N("已传到避难所") end
+    if not silent then N("没找到避难所") end
 end
 
 local function toPlr(pl)
@@ -800,18 +835,12 @@ local function refESP()
     end
 end
 
--- 音乐相关
 local function changeGameMusic(id)
     local success = false
     pcall(function()
         id = tostring(id or "")
-        if id == "" or id == "0" then
-            N("请输入有效的 rbxassetid")
-            return
-        end
-        if not string.find(id, "rbxassetid://") then
-            id = "rbxassetid://" .. id
-        end
+        if id == "" or id == "0" then return end
+        if not string.find(id, "rbxassetid://") then id = "rbxassetid://" .. id end
         local targets = {}
         local musicFolder = SS:FindFirstChild("Music")
         if musicFolder then
@@ -820,14 +849,9 @@ local function changeGameMusic(id)
             if gamemode and gamemode:IsA("Sound") then table.insert(targets, gamemode) end
             if bonus and bonus:IsA("Sound") then table.insert(targets, bonus) end
         end
-        if #targets == 0 then
-            N("没找到 Gamemode 或 BonusDisaster")
-            return
-        end
+        if #targets == 0 then return end
         for _, s in ipairs(targets) do
-            if not originalIds[s] then
-                originalIds[s] = s.SoundId
-            end
+            if not originalIds[s] then originalIds[s] = s.SoundId end
             s.SoundId = id
         end
         N("已更换音乐")
@@ -839,9 +863,7 @@ end
 local function restoreGameMusic()
     pcall(function()
         for s, oldId in pairs(originalIds) do
-            if s and s.Parent then
-                s.SoundId = oldId
-            end
+            if s and s.Parent then s.SoundId = oldId end
         end
         N("已恢复原来的音乐")
     end)
@@ -889,7 +911,6 @@ local function refreshMusicList()
             click()
             table.remove(musicHistory, i)
             refreshMusicList()
-            N("已删除: " .. item.name)
         end)
         y = y + 30
     end
@@ -908,31 +929,60 @@ local function addToHistory(name, id)
         end
     end
     table.insert(musicHistory, 1, {name = name, id = id})
-    while #musicHistory > MAX_HISTORY do
-        table.remove(musicHistory)
-    end
+    while #musicHistory > MAX_HISTORY do table.remove(musicHistory) end
     refreshMusicList()
 end
 
--- No Fall Injury
+-- Bones 加强 No Fall Injury
 local function enableNoInjury()
     if injuryConn then injuryConn:Disconnect() end
     injuryConn = RS.Heartbeat:Connect(function()
         if not C.NoInjury then return end
-        local hum = Hum()
-        local hrp = HRP()
+        local char = LP.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hum or not hrp then return end
         pcall(function()
             local state = hum:GetState()
             if state == Enum.HumanoidStateType.FallingDown
             or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.Physics then
+            or state == Enum.HumanoidStateType.Physics
+            or state == Enum.HumanoidStateType.Freefall then
+                if hrp.AssemblyLinearVelocity.Y < -100 then
+                    hrp.AssemblyLinearVelocity = Vector3.new(
+                        hrp.AssemblyLinearVelocity.X * 0.3,
+                        math.max(hrp.AssemblyLinearVelocity.Y, -80),
+                        hrp.AssemblyLinearVelocity.Z * 0.3
+                    )
+                end
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                 hum:ChangeState(Enum.HumanoidStateType.Running)
             end
-            if hum.WalkSpeed < 16 and not C.SpdOn then
-                hum.WalkSpeed = 16
+            local bones = char:FindFirstChild("Bones")
+            if bones then
+                for _, bone in ipairs(bones:GetChildren()) do
+                    if bone:IsA("BoolValue") and bone.Value == true then
+                        bone.Value = false
+                    end
+                end
             end
+            local gui = LP:FindFirstChild("PlayerGui")
+            if gui then
+                local menus = gui:FindFirstChild("Menus")
+                if menus then
+                    local broken = menus:FindFirstChild("BrokenBones")
+                    if broken and broken:FindFirstChild("Body") then
+                        for _, part in ipairs(broken.Body:GetChildren()) do
+                            if part:FindFirstChild("Broken") then
+                                part.Broken.Value = false
+                                part.BackgroundColor3 = Color3.fromRGB(85, 255, 127)
+                            end
+                        end
+                    end
+                end
+            end
+            if hum.WalkSpeed < 16 and not C.SpdOn then hum.WalkSpeed = 16 end
             hum.PlatformStand = false
             hum.Sit = false
         end)
@@ -940,17 +990,12 @@ local function enableNoInjury()
 end
 
 local function disableNoInjury()
-    if injuryConn then
-        injuryConn:Disconnect()
-        injuryConn = nil
-    end
+    if injuryConn then injuryConn:Disconnect() injuryConn = nil end
 end
 
--- ★ Boat Fly
 local function doBoatFly()
     local hrp = HRP()
     if not hrp then return end
-
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("VehicleSeat") or obj:IsA("Seat") then
             local model = obj:FindFirstAncestorOfClass("Model")
@@ -961,16 +1006,12 @@ local function doBoatFly()
                     if primary and (primary.Position - hrp.Position).Magnitude < 90 then
                         local old = primary:FindFirstChild("BoatFlyForce")
                         if old then old:Destroy() end
-
                         local bv = Instance.new("BodyVelocity")
                         bv.Name = "BoatFlyForce"
                         bv.MaxForce = Vector3.new(0, 1e6, 0)
                         bv.Velocity = Vector3.new(0, 48, 0)
                         bv.Parent = primary
-
-                        task.delay(1.4, function()
-                            if bv and bv.Parent then bv:Destroy() end
-                        end)
+                        task.delay(1.4, function() if bv and bv.Parent then bv:Destroy() end end)
                     end
                 end
             end
@@ -982,9 +1023,8 @@ local function hop()
     click()
     sH = sH + 1
     N("换服中...", true)
-    local pid = game.PlaceId
-    pcall(function() TS:TeleportAsync(pid, {LP}) end)
-    pcall(function() TS:Teleport(pid, LP) end)
+    pcall(function() TS:TeleportAsync(game.PlaceId, {LP}) end)
+    pcall(function() TS:Teleport(game.PlaceId, LP) end)
     pcall(function() TS:Teleport(PLACE, LP) end)
 end
 
@@ -996,14 +1036,45 @@ local function alertNo()
         N("进图后无碎片，建议换服", true)
         alrt()
         task.wait(1.2)
-        if not C.Rej then
-            alerting = false
-            rejSt = "已取消"
-            return
-        end
+        if not C.Rej then alerting = false rejSt = "已取消" return end
     end
     alerting = false
     rejSt = "无碎片（已提示）"
+end
+
+-- 加强模式检测
+do
+    local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
+    local EventSignal = Signals and Signals:FindFirstChild("Event")
+    if EventSignal then
+        EventSignal.OnClientEvent:Connect(function(data)
+            if typeof(data) ~= "table" or not data.reason then return end
+            local reason = data.reason
+            if reason == "Cutscene" and data.F and data.F.Name then
+                currentMode = data.F.Name
+                if data.F.Name == "Tartarus" then
+                    tartarusActive = true
+                    tart = true
+                    alrt()
+                    showBig("Tartarus 已出现！", Color3.fromRGB(255, 100, 80), 6)
+                    N("Tartarus 模式开启", true)
+                end
+            elseif reason == "TartarusClock" or reason == "TartarusSummon" then
+                tartarusActive = true
+                tart = true
+                if data.B then N("Tartarus: " .. tostring(data.B), true) end
+            elseif reason == "Intermission" and data.A == true then
+                currentMode = "Intermission"
+            elseif reason == "DoomsDayForecast" then
+                currentMode = "Doomsday"
+                N("Doomsday Forecast 出现！", true)
+            elseif reason == "ChadSummon" then
+                N("Chad 已召唤！", true)
+            elseif reason == "TwistyTalk" and data.A then
+                N("Twisty: " .. tostring(data.A))
+            end
+        end)
+    end
 end
 
 local function getObj()
@@ -1032,35 +1103,37 @@ end
 
 local function checkEnter()
     local ot = getObj()
-    if ot and #ot >= 5 then
-        local lo = string.lower(ot)
-        if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then
-            markEnter()
-        end
-        if lo:find("tartarus") and not tart then
+    if not ot or #ot < 3 then return end
+    local lo = string.lower(ot)
+    if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then
+        markEnter()
+    end
+    if lo:find("tartarus") then
+        if not tart then
             tart = true
+            tartarusActive = true
             alrt()
             showBig("Tartarus 已出现", Color3.fromRGB(255, 120, 80), 5)
             N("Tartarus!", true)
         end
+        currentMode = "Tartarus"
+    elseif lo:find("doomsday") or lo:find("doom") then
+        currentMode = "Doomsday"
+    elseif lo:find("chad") then
+        currentMode = "Chad"
+    elseif lo:find("twisty") then
+        currentMode = "Twisty"
+    elseif lo:find("weeping") then
+        currentMode = "Weeping Angel"
     end
 end
 
 local function checkFirst()
-    if not C.Rej then
-        rejSt = "已关闭"
-        return
-    end
+    if not C.Rej then rejSt = "已关闭" return end
     if firstChk or alerting then return end
-    if not entered then
-        rejSt = "等待进入地图..."
-        return
-    end
+    if not entered then rejSt = "等待进入地图..." return end
     local left = math.ceil(8 - (tick() - enterT))
-    if left > 0 then
-        rejSt = "进图检测: " .. left .. "秒"
-        return
-    end
+    if left > 0 then rejSt = "进图检测: " .. left .. "秒" return end
     firstChk = true
     scan()
     local fr = mapC.Fragment or cntF()
@@ -1094,16 +1167,12 @@ end
 
 local function onGod()
     offGod()
-    gC = RS.Heartbeat:Connect(function()
-        if C.God then forceHP() end
-    end)
+    gC = RS.Heartbeat:Connect(function() if C.God then forceHP() end end)
     local ch = LP.Character
     if ch then
         local h = ch:FindFirstChildOfClass("Humanoid")
         if h then
-            hC = h.HealthChanged:Connect(function()
-                if C.God then forceHP() end
-            end)
+            hC = h.HealthChanged:Connect(function() if C.God then forceHP() end end)
         end
     end
     fC = RS.Heartbeat:Connect(function()
@@ -1136,9 +1205,7 @@ local function doTorn()
     local pos = h.Position
     local ch = LP.Character
     local parts
-    local ok = pcall(function()
-        parts = workspace:GetPartBoundsInRadius(pos, TRANGE)
-    end)
+    local ok = pcall(function() parts = workspace:GetPartBoundsInRadius(pos, TRANGE) end)
     if not ok or not parts then return end
     for _, o in ipairs(parts) do
         if o:IsA("BasePart") and not o.Anchored and o.Parent then
@@ -1149,9 +1216,7 @@ local function doTorn()
                     local sf = 1 - (d / TRANGE)
                     if d < 20 then sf = sf * 0.3 end
                     local f = dir * (110 * sf) + Vector3.new(0, 22 * sf * 0.5, 0)
-                    if isF(o) or (o.Parent and isF(o.Parent)) then
-                        f = f * 1.45
-                    end
+                    if isF(o) or (o.Parent and isF(o.Parent)) then f = f * 1.45 end
                     pcall(function() o.AssemblyLinearVelocity = f end)
                 end
             end
@@ -1174,9 +1239,7 @@ local function doFly()
                 bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
                 bv.Velocity = Vector3.new((math.random() - 0.5) * 36, 35, (math.random() - 0.5) * 36)
                 bv.Parent = p
-                task.delay(1.2, function()
-                    if bv and bv.Parent then bv:Destroy() end
-                end)
+                task.delay(1.2, function() if bv and bv.Parent then bv:Destroy() end end)
             end
         end
     end
@@ -1189,9 +1252,7 @@ local function afk()
     end)
 end
 
-LP.Idled:Connect(function()
-    if C.AFK then afk() end
-end)
+LP.Idled:Connect(function() if C.AFK then afk() end end)
 
 task.spawn(function()
     while Gui and Gui.Parent do
@@ -1205,22 +1266,13 @@ workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
         if isF(o) then
             kF[o] = true
-            if C.En or C.FA then
-                task.wait(0.12)
-                pickup(o, "Fragment")
-            end
+            if C.En or C.FA then task.wait(0.12) pickup(o, "Fragment") end
         elseif isG(o) then
             kG[o] = true
-            if (C.En or C.FA) and not C.OnlyF then
-                task.wait(0.12)
-                pickup(o, "Glasses")
-            end
-        elseif inL(o.Name, KeyN) then
-            kE[o] = "Key"
-        elseif inL(o.Name, ExtN) then
-            kE[o] = "Ext"
-        elseif inL(o.Name, BatN) then
-            kE[o] = "Bat"
+            if (C.En or C.FA) and not C.OnlyF then task.wait(0.12) pickup(o, "Glasses") end
+        elseif inL(o.Name, KeyN) then kE[o] = "Key"
+        elseif inL(o.Name, ExtN) then kE[o] = "Ext"
+        elseif inL(o.Name, BatN) then kE[o] = "Bat"
         end
     end)
 end)
@@ -1333,7 +1385,8 @@ task.spawn(function()
                 GlassL.Text = "神秘眼镜: 未找到"
                 GlassL.TextColor3 = Color3.fromRGB(255, 160, 100)
             end
-            TartL.Text = tart and "Tartarus: 已出现" or "Tartarus: 未解锁"
+            ModeL.Text = "当前模式: " .. currentMode
+            TartL.Text = (tart or tartarusActive) and "Tartarus: 已出现" or "Tartarus: 未解锁"
             RejL.Text = "重进提示: " .. rejSt
             SessL.Text = string.format("会话: 碎片%d 眼镜%d 换服%d", sF, sG, sH)
             MapL.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d", c.Key or 0, c.Ext or 0, c.Bat or 0)
@@ -1406,17 +1459,13 @@ task.spawn(function()
     end
 end)
 
--- Buttons
 FA_tr.MouseButton1Click:Connect(function()
     click()
     C.FA = not C.FA
     if C.FA then
         C.En = true
         C.OnlyF = false
-        if C.FAShel then
-            toShel(false)
-            tShel = tick()
-        end
+        if C.FAShel then toShel(false) tShel = tick() end
         N("Full Auto ON")
     else
         C.En = false
@@ -1424,35 +1473,13 @@ FA_tr.MouseButton1Click:Connect(function()
     end
     applyUI()
 end)
-
-SH_tr.MouseButton1Click:Connect(function()
-    click()
-    C.FAShel = not C.FAShel
-    applyUI()
-end)
-
-LO_tr.MouseButton1Click:Connect(function()
-    click()
-    C.En = not C.En
-    applyUI()
-end)
-
-FOBtn.MouseButton1Click:Connect(function()
-    click()
-    C.OnlyF = true
-    applyUI()
-end)
-
-FGBtn.MouseButton1Click:Connect(function()
-    click()
-    C.OnlyF = false
-    applyUI()
-end)
-
+SH_tr.MouseButton1Click:Connect(function() click() C.FAShel = not C.FAShel applyUI() end)
+LO_tr.MouseButton1Click:Connect(function() click() C.En = not C.En applyUI() end)
+FOBtn.MouseButton1Click:Connect(function() click() C.OnlyF = true applyUI() end)
+FGBtn.MouseButton1Click:Connect(function() click() C.OnlyF = false applyUI() end)
 Key_tr.MouseButton1Click:Connect(function() click() C.Key = not C.Key applyUI() end)
 Ext_tr.MouseButton1Click:Connect(function() click() C.Ext = not C.Ext applyUI() end)
 Bat_tr.MouseButton1Click:Connect(function() click() C.Bat = not C.Bat applyUI() end)
-
 RJ_tr.MouseButton1Click:Connect(function()
     click()
     C.Rej = not C.Rej
@@ -1467,9 +1494,7 @@ RJ_tr.MouseButton1Click:Connect(function()
     end
     applyUI()
 end)
-
 HopB.MouseButton1Click:Connect(hop)
-
 JobB.MouseButton1Click:Connect(function()
     click()
     local id = tostring(game.JobId)
@@ -1480,78 +1505,65 @@ JobB.MouseButton1Click:Connect(function()
         N("JobId: " .. id)
     end
 end)
-
 AFK_tr.MouseButton1Click:Connect(function() click() C.AFK = not C.AFK applyUI() end)
-
 God_tr.MouseButton1Click:Connect(function()
     click()
     C.God = not C.God
     if C.God then onGod() else offGod() end
     applyUI()
 end)
-
 Inj_tr.MouseButton1Click:Connect(function()
     click()
     C.NoInjury = not C.NoInjury
     if C.NoInjury then
         enableNoInjury()
-        N("No Fall Injury ON")
+        N("No Fall Injury ON（防骨折）")
     else
         disableNoInjury()
         N("No Fall Injury OFF")
     end
     applyUI()
 end)
-
 Tor_tr.MouseButton1Click:Connect(function() click() C.Torn = not C.Torn applyUI() end)
 Fly_tr.MouseButton1Click:Connect(function() click() C.Fly = not C.Fly applyUI() end)
-
 Boat_tr.MouseButton1Click:Connect(function()
     click()
     C.BoatFly = not C.BoatFly
     setTog(Boat_tr, Boat_th, C.BoatFly)
     N(C.BoatFly and "Boat Fly ON" or "Boat Fly OFF")
 end)
-
 Spd_tr.MouseButton1Click:Connect(function() click() C.SpdOn = not C.SpdOn applySpd() applyUI() end)
-
 ESP_tr.MouseButton1Click:Connect(function()
     click()
     C.ESP = not C.ESP
     if not C.ESP then clrESP() end
     applyUI()
 end)
-
 SpdDn.MouseButton1Click:Connect(function()
     click()
     C.Spd = math.max(16, C.Spd - 4)
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end)
-
 SpdUp.MouseButton1Click:Connect(function()
     click()
     C.Spd = math.min(80, C.Spd + 4)
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end)
-
 RngDn.MouseButton1Click:Connect(function()
     click()
     TRANGE = math.max(20, TRANGE - 20)
     RngL.Text = "Pull Range: " .. TRANGE
 end)
-
 RngUp.MouseButton1Click:Connect(function()
     click()
     TRANGE = math.min(200, TRANGE + 20)
     RngL.Text = "Pull Range: " .. TRANGE
 end)
-
 SpecB.MouseButton1Click:Connect(startSpec)
 ShelB.MouseButton1Click:Connect(function() click() toShel(false) end)
 RefB.MouseButton1Click:Connect(function() click() refPl() end)
-
 AddMusicB.MouseButton1Click:Connect(function()
     click()
     local id = MusicIdBox.Text
@@ -1561,12 +1573,10 @@ AddMusicB.MouseButton1Click:Connect(function()
         MusicNameBox.Text = ""
     end
 end)
-
 RestoreMusicB.MouseButton1Click:Connect(function()
     click()
     restoreGameMusic()
 end)
-
 ClB.MouseButton1Click:Connect(function()
     click()
     clrESP()
@@ -1594,4 +1604,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL ready - Music History 30 + No Fall Injury + Boat Fly (No Chad)")
+print("[tau] FULL ready - Bones防骨折 + 加强模式检测 + Boat Fly")
