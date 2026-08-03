@@ -1,9 +1,1 @@
-local g = Instance.new("ScreenGui")
-g.Name = "T1"
-g.Parent = game.Players.LocalPlayer.PlayerGui
-local f = Instance.new("Frame")
-f.Size = UDim2.new(0,200,0,80)
-f.Position = UDim2.new(0.5,-100,0.5,-40)
-f.BackgroundColor3 = Color3.fromRGB(255,0,0)
-f.Parent = g
-print("A ok", g.Parent)
+print("HELLO FROM EXECUTOR")
