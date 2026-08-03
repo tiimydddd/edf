@@ -27,15 +27,21 @@ local KeyN = {"Shelter Key", "ShelterKey", "避难所钥匙"}
 local ExtN = {"Fire Extinguisher", "Extinguisher", "灭火器"}
 local BatN = {"Baseball Bat", "BaseballBat", "棒球棒"}
 local ShelN = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlRoom", "Control Room"}
+-- 更多地图物品
+local MedN = {"Medkit", "Med Kit", "First Aid", "FirstAid", "Bandage", "Health Kit", "急救包", "绷带", "医疗包"}
+local FoodN = {"Food", "Apple", "Bread", "Water", "Bottle", "Snack", "食物", "水", "苹果"}
+local LightN = {"Flashlight", "Torch", "Lantern", "Light", "手电筒", "灯"}
+local MiscN = {"Rope", "Gas Mask", "GasMask", "Radio", "Walkie", "Map", "Compass", "绳子", "防毒面具", "对讲机"}
 
 local myF, gotG = 0, false
 local kF, kG, kE = {}, {}, {}
+local kMap = {} -- 全部地图物品 {obj = true, type = "..."}
 local tScan, tShel, tHeavy, tTorn, tFly, tEsp, tBoat = 0, 0, 0, 0, 0, 0, 0
 local isMin, isSpec = false, false
 local TRANGE = 80
 local tart, tartarusActive = false, false
 local currentMode = "Unknown"
-local mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0}
+local mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0, Med = 0, Food = 0, Light = 0, Misc = 0, Other = 0}
 local firstChk, rejSt, alerting, entered, enterT = false, "等待进入地图...", false, false, 0
 local sF, sG, sH = 0, 0, 0
 local tried, originalIds = {}, {}
@@ -318,8 +324,8 @@ local function mkB(par, tx, y, col)
 end
 
 -- Pages
-local P1 = mkPage("Info", 500)
-local ic = mkCard(P1, 4, 380)
+local P1 = mkPage("Info", 720)
+local ic = mkCard(P1, 4, 680)
 local StatusL = mkL(ic, "状态: 关闭", 6)
 mkL(ic, "── 进度 ──", 26, Color3.fromRGB(120, 120, 140))
 local FragL = mkL(ic, "血月碎片: 地图0 | 我0/5", 44)
@@ -330,10 +336,10 @@ local TartL = mkL(ic, "Tartarus: 未解锁", 116)
 mkL(ic, "── 会话 ──", 140, Color3.fromRGB(120, 120, 140))
 local RejL = mkL(ic, "重进提示: 等待进入地图...", 158)
 local SessL = mkL(ic, "会话: 碎片0 眼镜0 换服0", 176, Color3.fromRGB(160, 200, 160))
-local MapL = mkL(ic, "地图: 钥匙0 灭火器0 球棒0", 194, Color3.fromRGB(150, 150, 165))
-mkL(ic, "── 碎片距离 ──", 218, Color3.fromRGB(120, 120, 140))
+local MapL = mkL(ic, "地图: 钥匙0 灭火0 棒0 药0 食0 灯0 杂0", 194, Color3.fromRGB(150, 150, 165))
+mkL(ic, "── 碎片距离(点击传送) ──", 218, Color3.fromRGB(120, 120, 140))
 local DistF = Instance.new("ScrollingFrame")
-DistF.Size = UDim2.new(1, -20, 0, 90)
+DistF.Size = UDim2.new(1, -20, 0, 70)
 DistF.Position = UDim2.new(0, 10, 0, 236)
 DistF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 DistF.BorderSizePixel = 0
@@ -342,6 +348,17 @@ DistF.CanvasSize = UDim2.new(0, 0, 0, 0)
 DistF.Parent = ic
 Instance.new("UICorner", DistF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", DistF).Padding = UDim.new(0, 2)
+mkL(ic, "── 全图物品(点击传送) ──", 314, Color3.fromRGB(120, 120, 140))
+local MapItemF = Instance.new("ScrollingFrame")
+MapItemF.Size = UDim2.new(1, -20, 0, 320)
+MapItemF.Position = UDim2.new(0, 10, 0, 332)
+MapItemF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+MapItemF.BorderSizePixel = 0
+MapItemF.ScrollBarThickness = 4
+MapItemF.CanvasSize = UDim2.new(0, 0, 0, 0)
+MapItemF.Parent = ic
+Instance.new("UICorner", MapItemF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", MapItemF).Padding = UDim.new(0, 2)
 
 local P2 = mkPage("Loot", 340)
 local lc = mkCard(P2, 4, 320)
@@ -595,32 +612,42 @@ local function cntF()
     return n
 end
 
+local function classifyItem(o)
+    if isF(o) then return "Fragment" end
+    if isG(o) then return "Glasses" end
+    if inL(o.Name, KeyN) and not (o.Parent and inL(o.Parent.Name, KeyN)) then return "Key" end
+    if inL(o.Name, ExtN) and not (o.Parent and inL(o.Parent.Name, ExtN)) then return "Ext" end
+    if inL(o.Name, BatN) and not (o.Parent and inL(o.Parent.Name, BatN)) then return "Bat" end
+    if inL(o.Name, MedN) and not (o.Parent and inL(o.Parent.Name, MedN)) then return "Med" end
+    if inL(o.Name, FoodN) and not (o.Parent and inL(o.Parent.Name, FoodN)) then return "Food" end
+    if inL(o.Name, LightN) and not (o.Parent and inL(o.Parent.Name, LightN)) then return "Light" end
+    if inL(o.Name, MiscN) and not (o.Parent and inL(o.Parent.Name, MiscN)) then return "Misc" end
+    -- 有 ProximityPrompt 的其他可交互物
+    if o:FindFirstChildWhichIsA("ProximityPrompt", true) then
+        local n = (o.Name or ""):lower()
+        if n:find("loot") or n:find("item") or n:find("pickup") or n:find("collect") then
+            return "Other"
+        end
+    end
+    return nil
+end
+
 local function scan()
-    local c = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0}
+    local c = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0, Med = 0, Food = 0, Light = 0, Misc = 0, Other = 0}
     local seen = {}
+    kMap = {}
     for _, o in ipairs(workspace:GetDescendants()) do
         if o:IsA("Model") or o:IsA("Tool") or o:IsA("BasePart") or o:IsA("Folder") then
             local id = tostring(o)
             if not seen[id] then
-                if isF(o) then
-                    c.Fragment = c.Fragment + 1
-                    kF[o] = true
-                    seen[id] = true
-                elseif isG(o) then
-                    c.Glasses = c.Glasses + 1
-                    kG[o] = true
-                    seen[id] = true
-                elseif inL(o.Name, KeyN) and not (o.Parent and inL(o.Parent.Name, KeyN)) then
-                    c.Key = c.Key + 1
-                    kE[o] = "Key"
-                    seen[id] = true
-                elseif inL(o.Name, ExtN) and not (o.Parent and inL(o.Parent.Name, ExtN)) then
-                    c.Ext = c.Ext + 1
-                    kE[o] = "Ext"
-                    seen[id] = true
-                elseif inL(o.Name, BatN) and not (o.Parent and inL(o.Parent.Name, BatN)) then
-                    c.Bat = c.Bat + 1
-                    kE[o] = "Bat"
+                local typ = classifyItem(o)
+                if typ then
+                    c[typ] = (c[typ] or 0) + 1
+                    kMap[o] = typ
+                    if typ == "Fragment" then kF[o] = true
+                    elseif typ == "Glasses" then kG[o] = true
+                    elseif typ == "Key" or typ == "Ext" or typ == "Bat" then kE[o] = typ
+                    end
                     seen[id] = true
                 end
             end
@@ -785,6 +812,65 @@ local function updDist()
         y = y + 22
     end
     DistF.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+local typeColor = {
+    Fragment = Color3.fromRGB(255, 100, 100),
+    Glasses = Color3.fromRGB(80, 220, 220),
+    Key = Color3.fromRGB(255, 200, 80),
+    Ext = Color3.fromRGB(255, 140, 60),
+    Bat = Color3.fromRGB(180, 140, 100),
+    Med = Color3.fromRGB(100, 220, 120),
+    Food = Color3.fromRGB(200, 180, 100),
+    Light = Color3.fromRGB(255, 255, 150),
+    Misc = Color3.fromRGB(160, 160, 200),
+    Other = Color3.fromRGB(180, 180, 180),
+}
+
+local function updMapItems()
+    for _, ch in ipairs(MapItemF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    local h = HRP()
+    local pos = h and h.Position or Vector3.zero
+    local list = {}
+    for o, typ in pairs(kMap) do
+        if o and o.Parent then
+            local p = best(o)
+            if p then
+                table.insert(list, {
+                    o = o, typ = typ, p = p,
+                    d = (p.Position - pos).Magnitude,
+                    name = o.Name
+                })
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.d < b.d end)
+    local y = 0
+    for _, d in ipairs(list) do
+        local col = typeColor[d.typ] or Color3.fromRGB(180, 180, 180)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -6, 0, 22)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        b.Text = string.format("[%s] %s  %.0f", d.typ, string.sub(d.name, 1, 18), d.d)
+        b.TextColor3 = col
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 11
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = MapItemF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        b.MouseButton1Click:Connect(function()
+            click()
+            local hh = HRP()
+            if hh and d.p and d.p.Parent then
+                hh.CFrame = d.p.CFrame + Vector3.new(0, 3, 0)
+                N("已传到: " .. d.name)
+            end
+        end)
+        y = y + 24
+    end
+    MapItemF.CanvasSize = UDim2.new(0, 0, 0, y + 4)
 end
 
 local espF = Instance.new("Folder")
@@ -1344,6 +1430,7 @@ task.spawn(function()
     pcall(scan)
     pcall(refPl)
     pcall(updDist)
+    pcall(updMapItems)
     pcall(refESP)
 end)
 
@@ -1389,12 +1476,14 @@ task.spawn(function()
             TartL.Text = (tart or tartarusActive) and "Tartarus: 已出现" or "Tartarus: 未解锁"
             RejL.Text = "重进提示: " .. rejSt
             SessL.Text = string.format("会话: 碎片%d 眼镜%d 换服%d", sF, sG, sH)
-            MapL.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d", c.Key or 0, c.Ext or 0, c.Bat or 0)
+            MapL.Text = string.format("地图: 钥%d 灭%d 棒%d 药%d 食%d 灯%d 杂%d",
+                c.Key or 0, c.Ext or 0, c.Bat or 0, c.Med or 0, c.Food or 0, c.Light or 0, (c.Misc or 0) + (c.Other or 0))
 
             if now - tHeavy >= 2.5 then
                 tHeavy = now
                 scan()
                 updDist()
+                updMapItems()
             end
             if now - tEsp >= 0.5 then
                 tEsp = now
