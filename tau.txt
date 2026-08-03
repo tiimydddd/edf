@@ -1,6 +1,5 @@
--- tau only apple FULL (流畅优化版)
--- Music History 30 + No Fall Injury + Boat Fly + 加强模式检测
--- 卡顿优化：拉长间隔 / 缓存船 / 限制单次捡取
+-- tau only apple FULL (流畅优化)
+-- 无 Tornado | 黑洞一键拉碎片 | Boat/Yacht | Fragment Fly | Music | NoInjury
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -16,7 +15,7 @@ local PLACE = 2313058949
 
 local C = {
     En = false, OnlyF = true, FA = false, FAShel = true, AFK = true,
-    Torn = false, God = false, Fly = false, Rej = true, ESP = true,
+    God = false, Fly = false, Rej = true, ESP = true,
     SpdOn = false, Spd = 16, Key = false, Ext = false, Bat = false,
     NoInjury = false, BoatFly = false
 }
@@ -30,9 +29,8 @@ local ShelN = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDo
 
 local myF, gotG = 0, false
 local kF, kG, kE = {}, {}, {}
-local tScan, tShel, tHeavy, tTorn, tFly, tEsp, tBoat, tInjuryGui = 0, 0, 0, 0, 0, 0, 0, 0
+local tScan, tShel, tHeavy, tFly, tEsp, tBoat, tInjuryGui = 0, 0, 0, 0, 0, 0, 0
 local isMin, isSpec = false, false
-local TRANGE = 80
 local tart, tartarusActive = false, false
 local currentMode = "Unknown"
 local mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0}
@@ -318,6 +316,7 @@ local function mkB(par, tx, y, col)
     return b
 end
 
+-- Info
 local P1 = mkPage("Info", 500)
 local ic = mkCard(P1, 4, 380)
 local StatusL = mkL(ic, "状态: 关闭", 6)
@@ -343,6 +342,7 @@ DistF.Parent = ic
 Instance.new("UICorner", DistF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", DistF).Padding = UDim.new(0, 2)
 
+-- Loot
 local P2 = mkPage("Loot", 340)
 local lc = mkCard(P2, 4, 320)
 mkL(lc, "【自动捡取】", 6, Color3.fromRGB(140, 200, 255))
@@ -375,6 +375,7 @@ local Key_tr, Key_th = mkTog(lc, "钥匙", 184, false)
 local Ext_tr, Ext_th = mkTog(lc, "灭火器", 210, false)
 local Bat_tr, Bat_th = mkTog(lc, "棒球棒", 236, false)
 
+-- 效率
 local P3 = mkPage("Eff", 200)
 local ec = mkCard(P3, 4, 170)
 mkL(ec, "【效率】", 6, Color3.fromRGB(140, 200, 255))
@@ -382,6 +383,7 @@ local RJ_tr, RJ_th = mkTog(ec, "进图无碎片仅提示", 26, true)
 local HopB = mkB(ec, "立即换服", 60, Color3.fromRGB(50, 90, 140))
 local JobB = mkB(ec, "复制 JobId", 94, Color3.fromRGB(45, 70, 90))
 
+-- 传送
 local P4 = mkPage("Teleport", 250)
 local tc = mkCard(P4, 4, 220)
 local ShelB = mkB(tc, "传送到避难所", 10, Color3.fromRGB(45, 45, 58))
@@ -398,20 +400,20 @@ Instance.new("UICorner", PlF).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlF).Padding = UDim.new(0, 3)
 local RefB = mkB(tc, "刷新玩家", 170, Color3.fromRGB(45, 45, 58))
 
-local P5 = mkPage("Extra", 820)
-local xc = mkCard(P5, 4, 800)
+-- Extra（无 Tornado，有黑洞）
+local P5 = mkPage("Extra", 780)
+local xc = mkCard(P5, 4, 760)
 mkL(xc, "【功能】", 6, Color3.fromRGB(140, 200, 255))
 local AFK_tr, AFK_th = mkTog(xc, "Anti-AFK", 26, true)
 local God_tr, God_th = mkTog(xc, "God Mode", 52, false)
 local Inj_tr, Inj_th = mkTog(xc, "No Fall Injury", 78, false)
-local Tor_tr, Tor_th = mkTog(xc, "Tornado Pull", 104, false)
-local Fly_tr, Fly_th = mkTog(xc, "Fragment Fly", 130, false)
-local Boat_tr, Boat_th = mkTog(xc, "Boat Fly", 156, false)
-local Spd_tr, Spd_th = mkTog(xc, "WalkSpeed", 182, false)
-local SpdL = mkL(xc, "Speed: 16", 210)
+local Fly_tr, Fly_th = mkTog(xc, "Fragment Fly（持续飘）", 104, false)
+local Boat_tr, Boat_th = mkTog(xc, "Boat / Yacht Fly", 130, false)
+local Spd_tr, Spd_th = mkTog(xc, "WalkSpeed", 156, false)
+local SpdL = mkL(xc, "Speed: 16", 184)
 local SpdDn = Instance.new("TextButton")
 SpdDn.Size = UDim2.new(0, 80, 0, 24)
-SpdDn.Position = UDim2.new(0, 10, 0, 230)
+SpdDn.Position = UDim2.new(0, 10, 0, 204)
 SpdDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 SpdDn.Text = "Speed-4"
 SpdDn.TextColor3 = Color3.new(1, 1, 1)
@@ -421,7 +423,7 @@ SpdDn.Parent = xc
 Instance.new("UICorner", SpdDn).CornerRadius = UDim.new(0, 6)
 local SpdUp = Instance.new("TextButton")
 SpdUp.Size = UDim2.new(0, 80, 0, 24)
-SpdUp.Position = UDim2.new(0, 100, 0, 230)
+SpdUp.Position = UDim2.new(0, 100, 0, 204)
 SpdUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 SpdUp.Text = "Speed+4"
 SpdUp.TextColor3 = Color3.new(1, 1, 1)
@@ -429,33 +431,14 @@ SpdUp.Font = Enum.Font.GothamBold
 SpdUp.TextSize = 11
 SpdUp.Parent = xc
 Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
-local RngL = mkL(xc, "Pull Range: 80", 262)
-local RngDn = Instance.new("TextButton")
-RngDn.Size = UDim2.new(0, 80, 0, 24)
-RngDn.Position = UDim2.new(0, 10, 0, 282)
-RngDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-RngDn.Text = "Range-20"
-RngDn.TextColor3 = Color3.new(1, 1, 1)
-RngDn.Font = Enum.Font.GothamBold
-RngDn.TextSize = 11
-RngDn.Parent = xc
-Instance.new("UICorner", RngDn).CornerRadius = UDim.new(0, 6)
-local RngUp = Instance.new("TextButton")
-RngUp.Size = UDim2.new(0, 80, 0, 24)
-RngUp.Position = UDim2.new(0, 100, 0, 282)
-RngUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-RngUp.Text = "Range+20"
-RngUp.TextColor3 = Color3.new(1, 1, 1)
-RngUp.Font = Enum.Font.GothamBold
-RngUp.TextSize = 11
-RngUp.Parent = xc
-Instance.new("UICorner", RngUp).CornerRadius = UDim.new(0, 6)
-local SpecB = mkB(xc, "Open Spectate", 320, Color3.fromRGB(40, 90, 120))
 
-mkL(xc, "【自定义音乐 (最多30首)】", 360, Color3.fromRGB(140, 200, 255))
+local BlackHoleB = mkB(xc, "黑洞拉取碎片（点一下）", 240, Color3.fromRGB(90, 40, 130))
+local SpecB = mkB(xc, "Open Spectate", 274, Color3.fromRGB(40, 90, 120))
+
+mkL(xc, "【自定义音乐 (最多30首)】", 312, Color3.fromRGB(140, 200, 255))
 local MusicIdBox = Instance.new("TextBox")
 MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
-MusicIdBox.Position = UDim2.new(0, 10, 0, 380)
+MusicIdBox.Position = UDim2.new(0, 10, 0, 332)
 MusicIdBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
 MusicIdBox.PlaceholderText = "音乐 ID"
 MusicIdBox.Text = ""
@@ -468,7 +451,7 @@ MusicIdBox.Parent = xc
 Instance.new("UICorner", MusicIdBox).CornerRadius = UDim.new(0, 6)
 local MusicNameBox = Instance.new("TextBox")
 MusicNameBox.Size = UDim2.new(1, -20, 0, 24)
-MusicNameBox.Position = UDim2.new(0, 10, 0, 408)
+MusicNameBox.Position = UDim2.new(0, 10, 0, 360)
 MusicNameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
 MusicNameBox.PlaceholderText = "歌名"
 MusicNameBox.Text = ""
@@ -479,11 +462,11 @@ MusicNameBox.TextSize = 12
 MusicNameBox.ClearTextOnFocus = false
 MusicNameBox.Parent = xc
 Instance.new("UICorner", MusicNameBox).CornerRadius = UDim.new(0, 6)
-local AddMusicB = mkB(xc, "添加并更换", 438, Color3.fromRGB(50, 120, 80))
-local RestoreMusicB = mkB(xc, "恢复原来音乐", 468, Color3.fromRGB(90, 70, 50))
+local AddMusicB = mkB(xc, "添加并更换", 390, Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkB(xc, "恢复原来音乐", 420, Color3.fromRGB(90, 70, 50))
 MusicListFrame = Instance.new("ScrollingFrame")
 MusicListFrame.Size = UDim2.new(1, -20, 0, 220)
-MusicListFrame.Position = UDim2.new(0, 10, 0, 504)
+MusicListFrame.Position = UDim2.new(0, 10, 0, 456)
 MusicListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 MusicListFrame.BorderSizePixel = 0
 MusicListFrame.ScrollBarThickness = 4
@@ -491,6 +474,7 @@ MusicListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 MusicListFrame.Parent = xc
 Instance.new("UICorner", MusicListFrame).CornerRadius = UDim.new(0, 6)
 
+-- ESP
 local P6 = mkPage("ESP", 130)
 local esc = mkCard(P6, 4, 100)
 mkL(esc, "【ESP】", 6, Color3.fromRGB(140, 200, 255))
@@ -500,8 +484,8 @@ mkL(esc, "红=碎片 青=眼镜", 58, Color3.fromRGB(160, 160, 175))
 Pages.Info.Visible = true
 T1.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
 T1.TextColor3 = Color3.new(1, 1, 1)
-N("流畅优化版已加载")
-print("[tau] smooth UI OK")
+N("已加载 | 黑洞一键拉碎片")
+print("[tau] smooth + blackhole")
 
 local function showBig(tx, col, dur)
     Big.Text = tx
@@ -834,6 +818,52 @@ local function refESP()
     end
 end
 
+-- ★ 黑洞：点一下，碎片飞向你
+local function blackHolePull()
+    local hrp = HRP()
+    if not hrp then
+        N("无角色")
+        return
+    end
+    local target = hrp.Position + Vector3.new(0, 3, 0)
+    local count = 0
+    clean(kF)
+    for o in pairs(kF) do
+        if o and o.Parent then
+            local p = best(o)
+            if p then
+                pcall(function()
+                    p.Anchored = false
+                    if o:IsA("Model") then
+                        for _, part in ipairs(o:GetDescendants()) do
+                            if part:IsA("BasePart") then part.Anchored = false end
+                        end
+                    end
+                    local dir = target - p.Position
+                    local dist = math.max(dir.Magnitude, 1)
+                    dir = dir.Unit
+                    local speed = math.clamp(dist * 2.2, 40, 140)
+                    p.AssemblyLinearVelocity = dir * speed + Vector3.new(0, 18, 0)
+                    local old = p:FindFirstChild("BlackHoleForce")
+                    if old then old:Destroy() end
+                    local bv = Instance.new("BodyVelocity")
+                    bv.Name = "BlackHoleForce"
+                    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    bv.Velocity = dir * speed + Vector3.new(0, 12, 0)
+                    bv.Parent = p
+                    task.delay(1.6, function() if bv and bv.Parent then bv:Destroy() end end)
+                end)
+                count = count + 1
+            end
+        end
+    end
+    if count > 0 then
+        N("黑洞拉取 " .. count .. " 个碎片", true)
+    else
+        N("附近没有碎片")
+    end
+end
+
 local function changeGameMusic(id)
     local success = false
     pcall(function()
@@ -957,7 +987,6 @@ local function enableNoInjury()
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                 hum:ChangeState(Enum.HumanoidStateType.Running)
             end
-            -- Bones / GUI 降低频率
             if tick() - tInjuryGui >= 0.4 then
                 tInjuryGui = tick()
                 local bones = char:FindFirstChild("Bones")
@@ -995,15 +1024,16 @@ local function disableNoInjury()
     if injuryConn then injuryConn:Disconnect() injuryConn = nil end
 end
 
--- 船缓存，减少全图扫描
 local function refreshBoatCache()
     boatCache = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("VehicleSeat") or obj:IsA("Seat") then
-            local model = obj:FindFirstAncestorOfClass("Model")
+        if obj:IsA("VehicleSeat") or obj:IsA("Seat") or obj:IsA("Model") then
+            local model = obj:IsA("Model") and obj or obj:FindFirstAncestorOfClass("Model")
             if model then
                 local name = model.Name:lower()
-                if name:find("boat") or name:find("ship") or name:find("raft") or name:find("canoe") or name:find("vessel") then
+                if name:find("boat") or name:find("ship") or name:find("raft")
+                or name:find("canoe") or name:find("vessel") or name:find("yacht")
+                or name:find("帆船") or name:find("游艇") then
                     boatCache[model] = true
                 end
             end
@@ -1014,25 +1044,63 @@ end
 local function doBoatFly()
     local hrp = HRP()
     if not hrp then return end
-    if tick() - tBoatScan >= 6 then
+    if tick() - tBoatScan >= 5 then
         tBoatScan = tick()
         refreshBoatCache()
     end
     for model in pairs(boatCache) do
         if model and model.Parent then
-            local primary = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-            if primary and (primary.Position - hrp.Position).Magnitude < 90 then
-                local old = primary:FindFirstChild("BoatFlyForce")
-                if old then old:Destroy() end
-                local bv = Instance.new("BodyVelocity")
-                bv.Name = "BoatFlyForce"
-                bv.MaxForce = Vector3.new(0, 1e6, 0)
-                bv.Velocity = Vector3.new(0, 48, 0)
-                bv.Parent = primary
-                task.delay(1.4, function() if bv and bv.Parent then bv:Destroy() end end)
+            local primary = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+            if primary and (primary.Position - hrp.Position).Magnitude < 120 then
+                for _, p in ipairs(model:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        p.Anchored = false
+                        p.AssemblyLinearVelocity = Vector3.new(
+                            p.AssemblyLinearVelocity.X,
+                            55,
+                            p.AssemblyLinearVelocity.Z
+                        )
+                    end
+                end
             end
         else
             boatCache[model] = nil
+        end
+    end
+end
+
+-- Fragment Fly（持续飘）
+local function doFly()
+    local h = HRP()
+    if not h then return end
+    local pos = h.Position
+    local n = 0
+    for o in pairs(kF) do
+        if n >= 8 then break end
+        if o and o.Parent then
+            local p = best(o)
+            if p and (p.Position - pos).Magnitude <= 80 then
+                pcall(function()
+                    p.Anchored = false
+                    if o:IsA("Model") then
+                        for _, part in ipairs(o:GetDescendants()) do
+                            if part:IsA("BasePart") then part.Anchored = false end
+                        end
+                    end
+                    local side = (math.random() - 0.5) * 40
+                    local up = 40 + math.random() * 25
+                    p.AssemblyLinearVelocity = Vector3.new(side, up, (math.random() - 0.5) * 40)
+                    local old = p:FindFirstChild("FragFlyForce")
+                    if old then old:Destroy() end
+                    local bv = Instance.new("BodyVelocity")
+                    bv.Name = "FragFlyForce"
+                    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    bv.Velocity = Vector3.new(side * 0.5, up, (math.random() - 0.5) * 20)
+                    bv.Parent = p
+                    task.delay(1.5, function() if bv and bv.Parent then bv:Destroy() end end)
+                end)
+                n = n + 1
+            end
         end
     end
 end
@@ -1216,55 +1284,6 @@ LP.CharacterAdded:Connect(function()
     applySpd()
 end)
 
-local function doTorn()
-    local h = HRP()
-    if not h then return end
-    local pos = h.Position
-    local ch = LP.Character
-    local parts
-    local ok = pcall(function() parts = workspace:GetPartBoundsInRadius(pos, TRANGE) end)
-    if not ok or not parts then return end
-    for _, o in ipairs(parts) do
-        if o:IsA("BasePart") and not o.Anchored and o.Parent then
-            if not (ch and o:IsDescendantOf(ch)) then
-                local d = (o.Position - pos).Magnitude
-                if d >= 9 then
-                    local dir = (pos - o.Position).Unit
-                    local sf = 1 - (d / TRANGE)
-                    if d < 20 then sf = sf * 0.3 end
-                    local f = dir * (110 * sf) + Vector3.new(0, 22 * sf * 0.5, 0)
-                    if isF(o) or (o.Parent and isF(o.Parent)) then f = f * 1.45 end
-                    pcall(function() o.AssemblyLinearVelocity = f end)
-                end
-            end
-        end
-    end
-end
-
-local function doFly()
-    local h = HRP()
-    if not h then return end
-    local pos = h.Position
-    local n = 0
-    for o in pairs(kF) do
-        if n >= 4 then break end
-        if o and o.Parent then
-            local p = best(o)
-            if p and not p.Anchored and (p.Position - pos).Magnitude <= 60 then
-                local old = p:FindFirstChild("FragFlyForce")
-                if old then old:Destroy() end
-                local bv = Instance.new("BodyVelocity")
-                bv.Name = "FragFlyForce"
-                bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                bv.Velocity = Vector3.new((math.random() - 0.5) * 36, 35, (math.random() - 0.5) * 36)
-                bv.Parent = p
-                task.delay(1.2, function() if bv and bv.Parent then bv:Destroy() end end)
-                n = n + 1
-            end
-        end
-    end
-end
-
 local function afk()
     pcall(function()
         VU:CaptureController()
@@ -1337,7 +1356,6 @@ local function applyUI()
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(God_tr, God_th, C.God)
     setTog(Inj_tr, Inj_th, C.NoInjury)
-    setTog(Tor_tr, Tor_th, C.Torn)
     setTog(Fly_tr, Fly_th, C.Fly)
     setTog(Boat_tr, Boat_th, C.BoatFly)
     setTog(Spd_tr, Spd_th, C.SpdOn)
@@ -1354,7 +1372,6 @@ local function applyUI()
     end
     if C.God then onGod() else offGod() end
     if C.NoInjury then enableNoInjury() else disableNoInjury() end
-    RngL.Text = "Pull Range: " .. TRANGE
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end
@@ -1375,7 +1392,6 @@ task.spawn(function()
     end
 end)
 
--- ★ 主循环：间隔拉长，减轻卡顿
 task.spawn(function()
     while Gui and Gui.Parent do
         pcall(function()
@@ -1470,10 +1486,6 @@ task.spawn(function()
                 tShel = now
                 toShel(true)
             end
-            if C.Torn and now - tTorn >= 0.7 then
-                tTorn = now
-                doTorn()
-            end
             if C.Fly and now - tFly >= 1.2 then
                 tFly = now
                 doFly()
@@ -1553,14 +1565,13 @@ Inj_tr.MouseButton1Click:Connect(function()
     end
     applyUI()
 end)
-Tor_tr.MouseButton1Click:Connect(function() click() C.Torn = not C.Torn applyUI() end)
 Fly_tr.MouseButton1Click:Connect(function() click() C.Fly = not C.Fly applyUI() end)
 Boat_tr.MouseButton1Click:Connect(function()
     click()
     C.BoatFly = not C.BoatFly
     setTog(Boat_tr, Boat_th, C.BoatFly)
     if C.BoatFly then refreshBoatCache() end
-    N(C.BoatFly and "Boat Fly ON" or "Boat Fly OFF")
+    N(C.BoatFly and "Boat/Yacht Fly ON" or "Boat Fly OFF")
 end)
 Spd_tr.MouseButton1Click:Connect(function() click() C.SpdOn = not C.SpdOn applySpd() applyUI() end)
 ESP_tr.MouseButton1Click:Connect(function()
@@ -1581,15 +1592,9 @@ SpdUp.MouseButton1Click:Connect(function()
     SpdL.Text = "Speed: " .. C.Spd
     applySpd()
 end)
-RngDn.MouseButton1Click:Connect(function()
+BlackHoleB.MouseButton1Click:Connect(function()
     click()
-    TRANGE = math.max(20, TRANGE - 20)
-    RngL.Text = "Pull Range: " .. TRANGE
-end)
-RngUp.MouseButton1Click:Connect(function()
-    click()
-    TRANGE = math.min(200, TRANGE + 20)
-    RngL.Text = "Pull Range: " .. TRANGE
+    blackHolePull()
 end)
 SpecB.MouseButton1Click:Connect(startSpec)
 ShelB.MouseButton1Click:Connect(function() click() toShel(false) end)
@@ -1634,4 +1639,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL smooth ready")
+print("[tau] FULL ready - BlackHole | no Tornado")
