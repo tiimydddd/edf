@@ -1,5 +1,4 @@
--- tau only apple MEDIUM + Custom Music (直接换ID)
--- 存文件 tau.lua → 执行器用「打开文件」执行
+-- tau only apple MEDIUM + Custom Music (只换 Gamemode & BonusDisaster)
 local Players=game:GetService("Players")
 local LP=Players.LocalPlayer
 local SG=game:GetService("StarterGui")
@@ -142,7 +141,6 @@ b.BackgroundColor3=col or Color3.fromRGB(45,45,58);b.Text=tx;b.TextColor3=Color3
 b.Font=Enum.Font.GothamBold;b.TextSize=12;b.Parent=par;Instance.new("UICorner",b).CornerRadius=UDim.new(0,8);return b
 end
 
--- ==================== Pages ====================
 local P1=mkPage("Info",480)
 local ic=mkCard(P1,4,360)
 local StatusL=mkL(ic,"状态: 关闭",6)
@@ -226,8 +224,7 @@ RngUp.Font=Enum.Font.GothamBold;RngUp.TextSize=11;RngUp.Parent=xc;Instance.new("
 local SpecB=mkB(xc,"Open Spectate",268,Color3.fromRGB(40,90,120))
 local ChadB=mkB(xc,"Try Chad",302,Color3.fromRGB(120,80,40))
 
--- 自定义音乐 UI
-mkL(xc,"【自定义音乐】",340,Color3.fromRGB(140,200,255))
+mkL(xc,"【自定义音乐 (仅Gamemode+BonusDisaster)】",340,Color3.fromRGB(140,200,255))
 local MusicBox=Instance.new("TextBox")
 MusicBox.Size=UDim2.new(1,-20,0,26)
 MusicBox.Position=UDim2.new(0,10,0,362)
@@ -242,7 +239,7 @@ MusicBox.ClearTextOnFocus=false
 MusicBox.Parent=xc
 Instance.new("UICorner",MusicBox).CornerRadius=UDim.new(0,6)
 
-local ChangeMusicB=mkB(xc,"更换游戏音乐 ID",396,Color3.fromRGB(50,120,80))
+local ChangeMusicB=mkB(xc,"更换 Gamemode/BonusDisaster",396,Color3.fromRGB(50,120,80))
 local RestoreMusicB=mkB(xc,"恢复原来音乐",428,Color3.fromRGB(90,70,50))
 
 local P6=mkPage("ESP",130)
@@ -280,7 +277,6 @@ if isMin then Main.Size=UDim2.new(0,180,0,34);TabBar.Visible=false;Content.Visib
 else Main.Size=UDim2.new(0,420,0,460);TabBar.Visible=true;Content.Visible=true;MinB.Text="–" end
 end)
 
--- ==================== Functions ====================
 local function inL(name,list)
 local n=(name or ""):lower()
 for _,v in ipairs(list) do if n==v:lower() or n:find(v:lower(),1,true) then return true end end
@@ -437,7 +433,7 @@ for o in pairs(kF) do if o and o.Parent then addESP(o,Color3.fromRGB(255,70,70),
 for o in pairs(kG) do if o and o.Parent then addESP(o,Color3.fromRGB(80,220,220),"G") end end
 end
 
--- 自定义音乐（直接换 SoundId）
+-- 只换 Gamemode 和 BonusDisaster
 local function changeGameMusic(id)
 pcall(function()
 id=tostring(id or "")
@@ -447,21 +443,19 @@ if not string.find(id,"rbxassetid://") then id="rbxassetid://"..id end
 local targets={}
 local musicFolder=SS:FindFirstChild("Music")
 if musicFolder then
-for _,s in ipairs(musicFolder:GetDescendants()) do
-if s:IsA("Sound") then table.insert(targets,s) end
+local gamemode=musicFolder:FindFirstChild("Gamemode")
+local bonus=musicFolder:FindFirstChild("BonusDisaster")
+if gamemode and gamemode:IsA("Sound") then table.insert(targets,gamemode) end
+if bonus and bonus:IsA("Sound") then table.insert(targets,bonus) end
 end
-end
-local names={"BonusDisaster","Gamemode","Intermission","Map","TutorialMusic","Tornado","Blizzard","Fire","LoadComplete","Tutorial"}
-for _,name in ipairs(names) do
-local s=SS:FindFirstChild(name,true)
-if s and s:IsA("Sound") then table.insert(targets,s) end
-end
+
+if #targets==0 then N("没找到 Gamemode 或 BonusDisaster") return end
+
 for _,s in ipairs(targets) do
 if not originalIds[s] then originalIds[s]=s.SoundId end
 s.SoundId=id
-if not s.IsPlaying then s:Play() end
 end
-N("已更换游戏音乐 ID")
+N("已只更换 Gamemode 和 BonusDisaster")
 end)
 end
 
@@ -470,7 +464,7 @@ pcall(function()
 for s,oldId in pairs(originalIds) do
 if s and s.Parent then s.SoundId=oldId end
 end
-N("已恢复原来的游戏音乐")
+N("已恢复原来的音乐")
 end)
 end
 
@@ -697,7 +691,6 @@ task.wait(0.12)
 end
 end)
 
--- Buttons
 FA_tr.MouseButton1Click:Connect(function()
 click();C.FA=not C.FA
 if C.FA then C.En=true;C.OnlyF=false;if C.FAShel then toShel(false);tShel=tick() end;N("Full Auto ON")
@@ -761,4 +754,4 @@ end
 end)
 
 applyUI()
-print("[tau] ready + Custom Music")
+print("[tau] ready - Only Gamemode & BonusDisaster music")
