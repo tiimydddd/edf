@@ -1,5 +1,4 @@
--- 灾难警告之VIP版本 FULL - 精简修正版
--- 积分可自定义 | 灾难读 Values.CurrentDisaster | DangerAlert 读 Values.DangerAlert
+-- 灾难警告之VIP版本 FULL - 含排队灾难
 -- PlaceId: 7479931846
 
 local Players = game:GetService("Players")
@@ -32,9 +31,6 @@ local currentDisaster = "Unknown"
 local dangerAlerts = false
 local theEndActive = false
 local isMinimized = false
-local knownChests = {}
-local knownCards = {}
-local knownStores = {}
 local lastAutoFarm = 0
 local lastDangerAuto = 0
 local lastCardCheck = 0
@@ -59,8 +55,40 @@ local ShelterDoorNames = {
 local ChestNames = {"Chest","Treasure","TreasureChest","Box","Crate","Loot","宝箱"}
 local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
 local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
-local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor Shower","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare"}
+local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare"}
 local MallKeywords = {"商场","mall","shopping","商店街","商业","market","plaza"}
+
+-- 灾难列表 (显示名 → Remote 名)
+local DisasterList = {
+    {"Meteors", "Meteors"},
+    {"Hurricane", "Hurricane"},
+    {"Tornado", "Tornado"},
+    {"Solar Flares", "SolarFlares"},
+    {"Hostile Planes", "HostilePlanes"},
+    {"Volcano", "Volcano"},
+    {"Tsunamis", "Tsunamis"},
+    {"Limnic Eruptions", "LimnicEruptions"},
+    {"Avalanche", "Avalanche"},
+    {"Dust Bowl", "DustBowl"},
+    {"Gamma Rays", "GammaRays"},
+    {"Blizzard", "Blizzard"},
+    {"Krampus", "Krampus"},
+    {"Krampus 2021", "Krampus2021"},
+    {"Nian", "Nian"},
+    {"Jellybean", "Jellybean"},
+    {"Hoshi Attack", "HoshiAttack"},
+    {"Air Strikes", "AirStrikes"},
+    {"Acid Rain", "AcidRain"},
+    {"Toast Attack", "ToastAttack"},
+    {"Ritual Storm", "RitualStorm"},
+    {"Battleship", "Battleship"},
+    {"Chemical Storm", "ChemicalStorm"},
+    {"Typhoon", "Typhoon"},
+    {"Homing Rays", "HomingRays"},
+    {"Comet Shower", "CometShower"},
+    {"Stonenado", "Stonenado"},
+    {"Random", "Random"},
+}
 
 local T = {
     Bg = Color3.fromRGB(16, 18, 26),
@@ -110,8 +138,8 @@ do
 end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 400, 0, 500)
-Main.Position = UDim2.new(0, 20, 0.1, 0)
+Main.Size = UDim2.new(0, 400, 0, 520)
+Main.Position = UDim2.new(0, 20, 0.08, 0)
 Main.BackgroundColor3 = T.Bg
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -200,7 +228,8 @@ end
 local TabInfo = makeTab("Info", "Info", 10)
 local TabMain = makeTab("Main", "Main", 50)
 local TabCard = makeTab("Card", "Card", 90)
-local TabExtra = makeTab("Extra", "Extra", 130)
+local TabQueue = makeTab("Queue", "Queue", 130)
+local TabExtra = makeTab("Extra", "Extra", 170)
 
 local Pages = {}
 local function createPage(name)
@@ -210,7 +239,7 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 440)
+    page.CanvasSize = UDim2.new(0, 0, 0, 500)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -316,7 +345,7 @@ local GetKeyBtn = makeBtn(PageMain, "拿钥匙 → 开门 → 进内部", 146, f
 local KeyOnlyBtn = makeBtn(PageMain, "只拿钥匙", 188, false)
 local FirstAidBtn = makeBtn(PageMain, "拿急救包", 230, false)
 
-makeSection(PageMain, "积分（可自定义数量）", 276)
+makeSection(PageMain, "积分（可自定义）", 276)
 local PointsBox = Instance.new("TextBox")
 PointsBox.Size = UDim2.new(1, -28, 0, 32)
 PointsBox.Position = UDim2.new(0, 14, 0, 300)
@@ -335,12 +364,77 @@ local PointsBtn = makeBtn(PageMain, "加积分", 344, false)
 
 -- Card
 local PageCard = createPage("Card")
-PageCard.CanvasSize = UDim2.new(0, 0, 0, 280)
+PageCard.CanvasSize = UDim2.new(0, 0, 0, 260)
 makeSection(PageCard, "卡牌", 10)
 local AutoCardBtn = makeBtn(PageCard, "自动捡卡", 34, false)
 local ClickCardBtn = makeBtn(PageCard, "点卡（商店）", 76, false)
 local StoreTPBtn = makeBtn(PageCard, "传到 Card Store", 118, false)
 local CardESPBtn = makeBtn(PageCard, "卡牌 ESP", 160, false)
+
+-- Queue（排队灾难）
+local PageQueue = createPage("Queue")
+PageQueue.CanvasSize = UDim2.new(0, 0, 0, 900)
+makeSection(PageQueue, "排队灾难（VIP服务器）", 10)
+
+local QueueHint = Instance.new("TextLabel")
+QueueHint.Size = UDim2.new(1, -28, 0, 18)
+QueueHint.Position = UDim2.new(0, 14, 0, 32)
+QueueHint.BackgroundTransparency = 1
+QueueHint.Text = "点一下即可排队对应灾难"
+QueueHint.TextColor3 = T.Sub
+QueueHint.Font = Enum.Font.Gotham
+QueueHint.TextSize = 11
+QueueHint.TextXAlignment = Enum.TextXAlignment.Left
+QueueHint.Parent = PageQueue
+
+local queueY = 56
+for i, data in ipairs(DisasterList) do
+    local displayName, remoteName = data[1], data[2]
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -28, 0, 30)
+    btn.Position = UDim2.new(0, 14, 0, queueY)
+    btn.BackgroundColor3 = T.Off
+    btn.Text = displayName
+    btn.TextColor3 = T.Text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 12
+    btn.Parent = PageQueue
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        btn.BackgroundColor3 = T.On
+        pcall(function()
+            local disasters = ReplicatedStorage:FindFirstChild("VIPServer")
+            if disasters then
+                disasters = disasters:FindFirstChild("Disasters")
+            end
+            if disasters then
+                local remote = disasters:FindFirstChild(remoteName)
+                if remote then
+                    remote:FireServer()
+                end
+            end
+            pcall(function()
+                ReplicatedStorage.DisasterMessage2:Fire("Classic")
+            end)
+            pcall(function()
+                local style = ReplicatedStorage:FindFirstChild("VIPServer")
+                if style then
+                    style = style:FindFirstChild("GameStyle")
+                    if style then
+                        local classic = style:FindFirstChild("Classic")
+                        if classic then classic:FireServer() end
+                    end
+                end
+            end)
+        end)
+        Notify("已排队: " .. displayName)
+        task.delay(0.6, function() if btn then btn.BackgroundColor3 = T.Off end end)
+    end)
+
+    queueY = queueY + 34
+end
+PageQueue.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
 
 -- Extra
 local PageExtra = createPage("Extra")
@@ -394,11 +488,11 @@ TabInfo.TextColor3 = T.Text
 
 local function switchTab(name)
     for n, page in pairs(Pages) do page.Visible = (n == name) end
-    for _, tab in pairs({TabInfo, TabMain, TabCard, TabExtra}) do
+    for _, tab in pairs({TabInfo, TabMain, TabCard, TabQueue, TabExtra}) do
         tab.BackgroundColor3 = T.Side
         tab.TextColor3 = T.Sub
     end
-    local map = {Info = TabInfo, Main = TabMain, Card = TabCard, Extra = TabExtra}
+    local map = {Info = TabInfo, Main = TabMain, Card = TabCard, Queue = TabQueue, Extra = TabExtra}
     if map[name] then
         map[name].BackgroundColor3 = T.On
         map[name].TextColor3 = T.Text
@@ -408,6 +502,7 @@ end
 TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
 TabMain.MouseButton1Click:Connect(function() switchTab("Main") end)
 TabCard.MouseButton1Click:Connect(function() switchTab("Card") end)
+TabQueue.MouseButton1Click:Connect(function() switchTab("Queue") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
 
 MinBtn.MouseButton1Click:Connect(function()
@@ -419,7 +514,7 @@ MinBtn.MouseButton1Click:Connect(function()
         MinBtn.Text = "+"
         Title.Text = "灾难警告 VIP"
     else
-        Main.Size = UDim2.new(0, 400, 0, 500)
+        Main.Size = UDim2.new(0, 400, 0, 520)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
@@ -479,12 +574,10 @@ local function isDangerDisaster(name)
     return false
 end
 
--- ========== 正确读取 Values ==========
 local function updateDisasterFromValues()
     local values = Workspace:FindFirstChild("Values")
     if not values then return end
 
-    -- 当前灾难
     local cd = values:FindFirstChild("CurrentDisaster")
     if cd then
         local v = cd.Value
@@ -495,10 +588,8 @@ local function updateDisasterFromValues()
         end
     end
 
-    -- Danger Alert
     local da = values:FindFirstChild("DangerAlert")
     if da then
-        -- 可能是 BoolValue / NumberValue / StringValue
         local val = da.Value
         if typeof(val) == "boolean" then
             dangerAlerts = val
@@ -512,12 +603,9 @@ local function updateDisasterFromValues()
         end
     end
 
-    -- The End 判断
     theEndActive = tostring(currentDisaster):lower():find("the end") ~= nil
 end
--- =====================================
 
--- Remote
 local function getKey()
     pcall(function() ReplicatedStorage.Misc.Key:FireServer() end)
 end
@@ -535,20 +623,14 @@ end
 local function tryInteract(obj, hrp)
     local part = bestPart(obj)
     if not part then return false end
-
     local offsets = {
-        Vector3.new(0, 3, 0),
-        Vector3.new(0, 2.5, 2),
-        Vector3.new(0, 2.5, -2),
-        Vector3.new(2, 2.5, 0),
-        Vector3.new(-2, 2.5, 0),
+        Vector3.new(0, 3, 0), Vector3.new(0, 2.5, 2), Vector3.new(0, 2.5, -2),
+        Vector3.new(2, 2.5, 0), Vector3.new(-2, 2.5, 0),
     }
-
     local opened = false
     for _, offset in ipairs(offsets) do
         pcall(function() hrp.CFrame = CFrame.new(part.Position + offset) end)
         task.wait(0.1)
-
         for _, d in ipairs(obj:GetDescendants()) do
             if d:IsA("ProximityPrompt") then
                 for i = 1, 12 do
@@ -561,7 +643,6 @@ local function tryInteract(obj, hrp)
                 opened = true
             end
         end
-
         local ti = part:FindFirstChildOfClass("TouchInterest")
         if ti then
             pcall(function()
@@ -609,7 +690,6 @@ end
 local function tryGetCard()
     local hrp = getHRP()
     if not hrp then return false end
-
     local storePart = nil
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isStore(obj) then
@@ -621,7 +701,6 @@ local function tryGetCard()
         hrp.CFrame = storePart.CFrame + Vector3.new(0, 4, 0)
         task.wait(0.25)
     end
-
     local got = false
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isCard(obj) then
@@ -634,13 +713,9 @@ local function tryGetCard()
     return got
 end
 
--- 核心流程
 local function keyAndEnterShelter()
     local hrp = getHRP()
-    if not hrp then
-        Notify("没有角色")
-        return
-    end
+    if not hrp then Notify("没有角色") return end
 
     Notify("1. 拿钥匙...")
     getKey()
@@ -650,21 +725,17 @@ local function keyAndEnterShelter()
     tryGetCard()
     task.wait(0.3)
 
-    Notify("3. 传送到避难所门...")
+    Notify("3. 传送到门...")
     local doorObj, doorPart = findShelterDoor()
     if doorPart then
         hrp.CFrame = doorPart.CFrame + Vector3.new(0, 3, 0)
         task.wait(0.25)
-
         Notify("4. 自动开门...")
         if doorObj then tryInteract(doorObj, hrp) end
         task.wait(0.4)
-
         local insideOffset = doorPart.CFrame.LookVector * -6 + Vector3.new(0, 2, 0)
         hrp.CFrame = doorPart.CFrame + insideOffset
         task.wait(0.3)
-    else
-        Notify("未找到门，尝试直接找内部...")
     end
 
     Notify("5. 进入内部...")
@@ -674,7 +745,7 @@ local function keyAndEnterShelter()
         if insideObj then tryInteract(insideObj, hrp) end
         Notify("已进入避难所内部")
     else
-        Notify("未找到内部物体，已尽量进入")
+        Notify("未找到内部，已尽量进入")
     end
 end
 
@@ -711,7 +782,6 @@ local function autoVoteMall()
     end
 end
 
--- ESP
 local chestEspFolder = Instance.new("Folder", ScreenGui)
 chestEspFolder.Name = "ChestESP"
 local cardEspFolder = Instance.new("Folder", ScreenGui)
@@ -801,12 +871,9 @@ LocalPlayer.CharacterAdded:Connect(function()
     if Settings.God then onGod() end
 end)
 
--- 主循环（正确读 Values）
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
-
-        -- 正确读取
         updateDisasterFromValues()
 
         StatusLabel.Text = "  Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or "Ready")
@@ -899,7 +966,6 @@ FirstAidBtn.MouseButton1Click:Connect(function()
     task.delay(0.8, function() if FirstAidBtn then FirstAidBtn.BackgroundColor3 = T.Off end end)
 end)
 
--- 积分 TextBox + 按钮
 PointsBox.FocusLost:Connect(function()
     local n = tonumber(PointsBox.Text)
     if n and n > 0 then
@@ -1026,5 +1092,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP 已加载（Values 正确读取）")
-print("Disaster Warning VIP - Values.CurrentDisaster + DangerAlert + custom points")
+Notify("灾难警告 VIP 已加载（含排队灾难）")
+print("Disaster Warning VIP - Queue Disaster + Values + custom points")
