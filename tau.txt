@@ -1,5 +1,5 @@
 -- TORNADO ALLEY ULTIMATE
--- BlackHole E: 开关持续螺旋吸 | Debris/Boat 冲高再掉 | 不动血月碎片
+-- UI 加强挂载 | BlackHole 持续开关 | Debris/Boat 冲高再掉
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -77,19 +77,20 @@ local function N(m, a)
     end)
 end
 
+-- 清理旧 UI
 pcall(function()
-    for _, root in ipairs({CoreGui, LP:FindFirstChild("PlayerGui")}) do
-        if root then
-            local o = root:FindFirstChild("GameHelper") or root:FindFirstChild("tau_only_apple")
+    local function wipe(root)
+        if not root then return end
+        for _, n in ipairs({"GameHelper", "tau_only_apple"}) do
+            local o = root:FindFirstChild(n)
             if o then o:Destroy() end
         end
     end
+    wipe(CoreGui)
+    wipe(LP:FindFirstChild("PlayerGui"))
     if typeof(gethui) == "function" then
-        local h = gethui()
-        if h then
-            local o = h:FindFirstChild("GameHelper") or h:FindFirstChild("tau_only_apple")
-            if o then o:Destroy() end
-        end
+        local s, h = pcall(gethui)
+        if s and h then wipe(h) end
     end
 end)
 
@@ -99,30 +100,38 @@ Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.DisplayOrder = 999999
 Gui.IgnoreGuiInset = true
+Gui.Enabled = true
+
 pcall(function()
     if syn and syn.protect_gui then syn.protect_gui(Gui) end
+    if fluxus and fluxus.protect_gui then fluxus.protect_gui(Gui) end
+    if protect_gui then protect_gui(Gui) end
 end)
 
-do
-    local ok = false
-    if typeof(gethui) == "function" then
-        local s, hui = pcall(gethui)
-        if s and hui then
-            ok = pcall(function() Gui.Parent = hui end) and Gui.Parent ~= nil
-        end
-    end
-    if not ok then
-        ok = pcall(function() Gui.Parent = CoreGui end) and Gui.Parent ~= nil
-    end
-    if not ok then
-        local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
-        if pg then pcall(function() Gui.Parent = pg end) end
-    end
-    if not Gui.Parent then
-        warn("[TAU] UI mount failed")
-        return
-    end
+local function tryParent(inst, target)
+    if not target then return false end
+    local ok = pcall(function() inst.Parent = target end)
+    return ok and inst.Parent ~= nil
 end
+
+local mounted = false
+if typeof(gethui) == "function" then
+    local s, hui = pcall(gethui)
+    if s and hui then mounted = tryParent(Gui, hui) end
+end
+if not mounted then
+    mounted = tryParent(Gui, CoreGui)
+end
+if not mounted then
+    local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 8)
+    if pg then mounted = tryParent(Gui, pg) end
+end
+if not mounted then
+    warn("[TAU] UI mount failed")
+    N("UI mount failed", true)
+    return
+end
+print("[TAU] UI parent =", Gui.Parent:GetFullName())
 
 local Big = Instance.new("TextLabel")
 Big.Size = UDim2.new(1, 0, 0, 50)
@@ -142,6 +151,7 @@ Main.Size = UDim2.new(0, 420, 0, 480)
 Main.Position = UDim2.new(0, 30, 0, 40)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
+Main.Visible = true
 Main.Parent = Gui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
@@ -326,7 +336,6 @@ local function mkB(par, tx, y, col)
     return b
 end
 
--- Info
 local P1 = mkPage("Info", 500)
 local ic = mkCard(P1, 4, 380)
 local StatusL = mkL(ic, "Status: Off", 6)
@@ -352,7 +361,6 @@ DistF.Parent = ic
 Instance.new("UICorner", DistF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", DistF).Padding = UDim.new(0, 2)
 
--- Loot
 local P2 = mkPage("Loot", 340)
 local lc = mkCard(P2, 4, 320)
 mkL(lc, "【Auto collect】", 6, Color3.fromRGB(140, 200, 255))
@@ -385,7 +393,6 @@ local Key_tr, Key_th = mkTog(lc, "Key", 184, false)
 local Ext_tr, Ext_th = mkTog(lc, "Extinguisher", 210, false)
 local Bat_tr, Bat_th = mkTog(lc, "Bat", 236, false)
 
--- Eff
 local P3 = mkPage("Eff", 200)
 local ec = mkCard(P3, 4, 170)
 mkL(ec, "【Efficiency】", 6, Color3.fromRGB(140, 200, 255))
@@ -393,7 +400,6 @@ local RJ_tr, RJ_th = mkTog(ec, "No frag → hint only", 26, true)
 local HopB = mkB(ec, "Rejoin server", 60, Color3.fromRGB(50, 90, 140))
 local JobB = mkB(ec, "Copy JobId", 94, Color3.fromRGB(45, 70, 90))
 
--- Teleport
 local P4 = mkPage("Teleport", 250)
 local tc = mkCard(P4, 4, 220)
 local ShelB = mkB(tc, "Teleport to Shelter", 10, Color3.fromRGB(45, 45, 58))
@@ -410,7 +416,6 @@ Instance.new("UICorner", PlF).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlF).Padding = UDim.new(0, 3)
 local RefB = mkB(tc, "Refresh players", 170, Color3.fromRGB(45, 45, 58))
 
--- Extra
 local P5 = mkPage("Extra", 800)
 local xc = mkCard(P5, 4, 780)
 mkL(xc, "【Features】", 6, Color3.fromRGB(140, 200, 255))
@@ -442,7 +447,6 @@ SpdUp.Font = Enum.Font.GothamBold
 SpdUp.TextSize = 11
 SpdUp.Parent = xc
 Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
-
 local SpecB = mkB(xc, "Spectate", 268, Color3.fromRGB(40, 90, 120))
 
 mkL(xc, "【Music (max 30)】", 308, Color3.fromRGB(140, 200, 255))
@@ -484,7 +488,6 @@ MusicListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 MusicListFrame.Parent = xc
 Instance.new("UICorner", MusicListFrame).CornerRadius = UDim.new(0, 6)
 
--- ESP
 local P6 = mkPage("ESP", 130)
 local esc = mkCard(P6, 4, 100)
 mkL(esc, "【ESP】", 6, Color3.fromRGB(140, 200, 255))
@@ -494,8 +497,8 @@ mkL(esc, "Red=Fragment  Cyan=Glasses", 58, Color3.fromRGB(160, 160, 175))
 Pages.Info.Visible = true
 T1.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
 T1.TextColor3 = Color3.new(1, 1, 1)
-N("Loaded")
-print("[TAU] ready")
+N("UI loaded")
+print("[TAU] UI OK")
 
 local function showBig(tx, col, dur)
     Big.Text = tx
@@ -655,10 +658,7 @@ local function pickup(o, typ)
     if not h then return end
     local part = best(o)
     if not part then return end
-    local offs = {
-        Vector3.new(0, 2, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(1.5, 1.6, 0)
-    }
-    for _, off in ipairs(offs) do
+    for _, off in ipairs({Vector3.new(0, 2, 0), Vector3.new(0, 1.6, 1.5), Vector3.new(1.5, 1.6, 0)}) do
         if not o.Parent then break end
         h.CFrame = part.CFrame + off
         task.wait(0.02)
@@ -839,7 +839,6 @@ local function refESP()
     end
 end
 
--- ★ E: 持续黑洞（跟着你）
 local function doBlackHoleContinuous()
     local hrp = HRP()
     if not hrp then return end
@@ -879,7 +878,6 @@ local function doBlackHoleContinuous()
     end
 end
 
--- Debris Fly：冲高再掉
 local function doFly()
     local list = {}
     for _, p in ipairs(workspace:GetDescendants()) do
@@ -1677,4 +1675,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[TAU] TORNADO ALLEY ULTIMATE | BlackHole toggle E")
+print("[TAU] ready | parent=" .. tostring(Gui.Parent and Gui.Parent:GetFullName()))
