@@ -1,5 +1,6 @@
--- 灾难警告之VIP版本 FULL - 含排队灾难
+-- 灾难警告之VIP版本 FULL - 最终整合版
 -- PlaceId: 7479931846
+-- 拿钥匙→卡→门→内部 | 沙尘暴→Flares→门 | Values正确读取 | 积分自定义 | 排队灾难
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -55,10 +56,11 @@ local ShelterDoorNames = {
 local ChestNames = {"Chest","Treasure","TreasureChest","Box","Crate","Loot","宝箱"}
 local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
 local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
-local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare"}
+local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare","Dust Bowl"}
 local MallKeywords = {"商场","mall","shopping","商店街","商业","market","plaza"}
+local DustBowlNames = {"Dust Bowl", "DustBowl", "沙尘暴", "dust bowl"}
+local FlareKeywords = {"flares", "flare", "flaers", "solarflare", "solar flare"}
 
--- 灾难列表 (显示名 → Remote 名)
 local DisasterList = {
     {"Meteors", "Meteors"},
     {"Hurricane", "Hurricane"},
@@ -88,6 +90,7 @@ local DisasterList = {
     {"Comet Shower", "CometShower"},
     {"Stonenado", "Stonenado"},
     {"Random", "Random"},
+    {"The End (尝试)", "TheEnd"},
 }
 
 local T = {
@@ -102,6 +105,7 @@ local T = {
     Text = Color3.fromRGB(235, 240, 250),
     Sub = Color3.fromRGB(150, 160, 180),
     Red = Color3.fromRGB(190, 55, 55),
+    Black = Color3.fromRGB(20, 20, 25),
 }
 
 pcall(function()
@@ -269,9 +273,20 @@ local function makeBtn(parent, text, y, on)
     btn.TextColor3 = T.Text
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 13
+    btn.AutoButtonColor = false
     btn.Parent = parent
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
     return btn
+end
+
+local function Notify(msg)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "灾难警告 VIP",
+            Text = tostring(msg),
+            Duration = 3
+        })
+    end)
 end
 
 -- Info
@@ -371,70 +386,20 @@ local ClickCardBtn = makeBtn(PageCard, "点卡（商店）", 76, false)
 local StoreTPBtn = makeBtn(PageCard, "传到 Card Store", 118, false)
 local CardESPBtn = makeBtn(PageCard, "卡牌 ESP", 160, false)
 
--- Queue（排队灾难）
+-- Queue
 local PageQueue = createPage("Queue")
-PageQueue.CanvasSize = UDim2.new(0, 0, 0, 900)
+PageQueue.CanvasSize = UDim2.new(0, 0, 0, 1000)
 makeSection(PageQueue, "排队灾难（VIP服务器）", 10)
-
 local QueueHint = Instance.new("TextLabel")
 QueueHint.Size = UDim2.new(1, -28, 0, 18)
 QueueHint.Position = UDim2.new(0, 14, 0, 32)
 QueueHint.BackgroundTransparency = 1
-QueueHint.Text = "点一下即可排队对应灾难"
+QueueHint.Text = "点一下排队 | 按下变黑 | 仅VIP服有效"
 QueueHint.TextColor3 = T.Sub
 QueueHint.Font = Enum.Font.Gotham
 QueueHint.TextSize = 11
 QueueHint.TextXAlignment = Enum.TextXAlignment.Left
 QueueHint.Parent = PageQueue
-
-local queueY = 56
-for i, data in ipairs(DisasterList) do
-    local displayName, remoteName = data[1], data[2]
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -28, 0, 30)
-    btn.Position = UDim2.new(0, 14, 0, queueY)
-    btn.BackgroundColor3 = T.Off
-    btn.Text = displayName
-    btn.TextColor3 = T.Text
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.Parent = PageQueue
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
-    btn.MouseButton1Click:Connect(function()
-        btn.BackgroundColor3 = T.On
-        pcall(function()
-            local disasters = ReplicatedStorage:FindFirstChild("VIPServer")
-            if disasters then
-                disasters = disasters:FindFirstChild("Disasters")
-            end
-            if disasters then
-                local remote = disasters:FindFirstChild(remoteName)
-                if remote then
-                    remote:FireServer()
-                end
-            end
-            pcall(function()
-                ReplicatedStorage.DisasterMessage2:Fire("Classic")
-            end)
-            pcall(function()
-                local style = ReplicatedStorage:FindFirstChild("VIPServer")
-                if style then
-                    style = style:FindFirstChild("GameStyle")
-                    if style then
-                        local classic = style:FindFirstChild("Classic")
-                        if classic then classic:FireServer() end
-                    end
-                end
-            end)
-        end)
-        Notify("已排队: " .. displayName)
-        task.delay(0.6, function() if btn then btn.BackgroundColor3 = T.Off end end)
-    end)
-
-    queueY = queueY + 34
-end
-PageQueue.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
 
 -- Extra
 local PageExtra = createPage("Extra")
@@ -466,6 +431,7 @@ SpdDn.Text = "-4"
 SpdDn.TextColor3 = T.Text
 SpdDn.Font = Enum.Font.GothamBold
 SpdDn.TextSize = 13
+SpdDn.AutoButtonColor = false
 SpdDn.Parent = PageExtra
 Instance.new("UICorner", SpdDn).CornerRadius = UDim.new(0, 8)
 
@@ -477,6 +443,7 @@ SpdUp.Text = "+4"
 SpdUp.TextColor3 = T.Text
 SpdUp.Font = Enum.Font.GothamBold
 SpdUp.TextSize = 13
+SpdUp.AutoButtonColor = false
 SpdUp.Parent = PageExtra
 Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 8)
 
@@ -522,16 +489,6 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-local function Notify(msg)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "灾难警告 VIP",
-            Text = tostring(msg),
-            Duration = 3
-        })
-    end)
-end
-
 local function getHRP()
     local c = LocalPlayer.Character
     return c and c:FindFirstChild("HumanoidRootPart")
@@ -570,6 +527,15 @@ local function isDangerDisaster(name)
     local n = tostring(name):lower()
     for _, d in ipairs(DangerDisasterList) do
         if n:find(d:lower(), 1, true) then return true end
+    end
+    return false
+end
+
+local function isDustBowl(name)
+    if not name then return false end
+    local n = tostring(name):lower()
+    for _, v in ipairs(DustBowlNames) do
+        if n:find(v:lower(), 1, true) then return true end
     end
     return false
 end
@@ -687,6 +653,19 @@ local function findShelterInside()
     return nil, nil
 end
 
+local function findFlares()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local n = (obj.Name or ""):lower()
+        for _, k in ipairs(FlareKeywords) do
+            if n:find(k, 1, true) then
+                local part = bestPart(obj)
+                if part then return obj, part end
+            end
+        end
+    end
+    return nil, nil
+end
+
 local function tryGetCard()
     local hrp = getHRP()
     if not hrp then return false end
@@ -713,9 +692,58 @@ local function tryGetCard()
     return got
 end
 
+local function goToShelterDoorOnly()
+    local hrp = getHRP()
+    if not hrp then return false end
+    local doorObj, doorPart = findShelterDoor()
+    if doorPart then
+        hrp.CFrame = doorPart.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.2)
+        if doorObj then tryInteract(doorObj, hrp) end
+        local insideOffset = doorPart.CFrame.LookVector * -5 + Vector3.new(0, 2, 0)
+        hrp.CFrame = doorPart.CFrame + insideOffset
+        Notify("已到避难所门")
+        return true
+    end
+    Notify("未找到避难所门")
+    return false
+end
+
+local function dustBowlFlow()
+    local hrp = getHRP()
+    if not hrp then return end
+
+    Notify("沙尘暴！寻找 Flares...")
+    local flObj, flPart = findFlares()
+    if flPart then
+        hrp.CFrame = flPart.CFrame + Vector3.new(0, 3, 0)
+        if flObj then tryInteract(flObj, hrp) end
+        Notify("已到 Flares")
+        task.wait(0.5)
+    else
+        Notify("未找到 Flares，直接回避难所")
+    end
+
+    task.wait(0.3)
+    Notify("返回避难所门...")
+    goToShelterDoorOnly()
+end
+
 local function keyAndEnterShelter()
     local hrp = getHRP()
-    if not hrp then Notify("没有角色") return end
+    if not hrp then
+        Notify("没有角色")
+        return
+    end
+
+    updateDisasterFromValues()
+
+    if isDustBowl(currentDisaster) then
+        getKey()
+        task.wait(0.3)
+        dustBowlFlow()
+        return
+    end
 
     Notify("1. 拿钥匙...")
     getKey()
@@ -752,6 +780,89 @@ end
 local function autoFarmFlow()
     Notify("★ Auto Farm 启动")
     keyAndEnterShelter()
+end
+
+local function queueDisaster(displayName, remoteName)
+    local ok = false
+    local vip = ReplicatedStorage:FindFirstChild("VIPServer")
+    local disastersFolder = vip and vip:FindFirstChild("Disasters")
+
+    if disastersFolder then
+        local remote = disastersFolder:FindFirstChild(remoteName)
+        if remote then
+            local success = pcall(function() remote:FireServer() end)
+            if success then ok = true end
+        end
+        -- The End 多试几个名字
+        if not ok and remoteName == "TheEnd" then
+            for _, alt in ipairs({"TheEnd", "The_End", "End", "TheEndDisaster"}) do
+                local r = disastersFolder:FindFirstChild(alt)
+                if r then
+                    pcall(function() r:FireServer() end)
+                    ok = true
+                    break
+                end
+            end
+        end
+    end
+
+    pcall(function()
+        local msg = ReplicatedStorage:FindFirstChild("DisasterMessage2")
+        if msg then
+            if msg:IsA("BindableEvent") then
+                msg:Fire("Classic")
+            else
+                pcall(function() msg:FireServer("Classic") end)
+            end
+        end
+    end)
+
+    pcall(function()
+        local classic = ReplicatedStorage.VIPServer.GameStyle.Classic
+        if classic then classic:FireServer() end
+    end)
+
+    if ok then
+        Notify("已排队: " .. displayName)
+    else
+        Notify("排队失败（非VIP服或无此Remote）")
+    end
+    return ok
+end
+
+-- 生成 Queue 按钮
+do
+    local queueY = 56
+    for _, data in ipairs(DisasterList) do
+        local displayName, remoteName = data[1], data[2]
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -28, 0, 30)
+        btn.Position = UDim2.new(0, 14, 0, queueY)
+        btn.BackgroundColor3 = T.Off
+        btn.Text = displayName
+        btn.TextColor3 = T.Text
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 12
+        btn.AutoButtonColor = false
+        btn.Parent = PageQueue
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+        btn.MouseButton1Down:Connect(function()
+            btn.BackgroundColor3 = T.Black
+        end)
+
+        btn.MouseButton1Click:Connect(function()
+            btn.BackgroundColor3 = T.Black
+            local success = queueDisaster(displayName, remoteName)
+            btn.BackgroundColor3 = success and T.On or T.Red
+            task.delay(0.9, function()
+                if btn and btn.Parent then btn.BackgroundColor3 = T.Off end
+            end)
+        end)
+
+        queueY = queueY + 34
+    end
+    PageQueue.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
 end
 
 local function isMallText(text)
@@ -947,23 +1058,23 @@ DangerAutoBtn.MouseButton1Click:Connect(function()
 end)
 
 GetKeyBtn.MouseButton1Click:Connect(function()
-    GetKeyBtn.BackgroundColor3 = T.On
+    GetKeyBtn.BackgroundColor3 = T.Black
     keyAndEnterShelter()
-    task.delay(2, function() if GetKeyBtn then GetKeyBtn.BackgroundColor3 = T.Off end end)
+    task.delay(1.5, function() if GetKeyBtn then GetKeyBtn.BackgroundColor3 = T.Off end end)
 end)
 
 KeyOnlyBtn.MouseButton1Click:Connect(function()
-    KeyOnlyBtn.BackgroundColor3 = T.On
+    KeyOnlyBtn.BackgroundColor3 = T.Black
     getKey()
     Notify("已拿钥匙")
-    task.delay(0.8, function() if KeyOnlyBtn then KeyOnlyBtn.BackgroundColor3 = T.Off end end)
+    task.delay(0.7, function() if KeyOnlyBtn then KeyOnlyBtn.BackgroundColor3 = T.Off end end)
 end)
 
 FirstAidBtn.MouseButton1Click:Connect(function()
-    FirstAidBtn.BackgroundColor3 = T.On
+    FirstAidBtn.BackgroundColor3 = T.Black
     getFirstAid()
     Notify("已拿急救包")
-    task.delay(0.8, function() if FirstAidBtn then FirstAidBtn.BackgroundColor3 = T.Off end end)
+    task.delay(0.7, function() if FirstAidBtn then FirstAidBtn.BackgroundColor3 = T.Off end end)
 end)
 
 PointsBox.FocusLost:Connect(function()
@@ -978,9 +1089,9 @@ end)
 
 PointsBtn.MouseButton1Click:Connect(function()
     local n = tonumber(PointsBox.Text) or pointsAmount
-    PointsBtn.BackgroundColor3 = T.On
+    PointsBtn.BackgroundColor3 = T.Black
     addPoints(n)
-    task.delay(0.8, function() if PointsBtn then PointsBtn.BackgroundColor3 = T.Off end end)
+    task.delay(0.7, function() if PointsBtn then PointsBtn.BackgroundColor3 = T.Off end end)
 end)
 
 AutoCardBtn.MouseButton1Click:Connect(function()
@@ -990,13 +1101,13 @@ AutoCardBtn.MouseButton1Click:Connect(function()
 end)
 
 ClickCardBtn.MouseButton1Click:Connect(function()
-    ClickCardBtn.BackgroundColor3 = T.On
+    ClickCardBtn.BackgroundColor3 = T.Black
     if tryGetCard() then Notify("已点卡") else Notify("未找到卡") end
-    task.delay(1, function() if ClickCardBtn then ClickCardBtn.BackgroundColor3 = T.Off end end)
+    task.delay(0.8, function() if ClickCardBtn then ClickCardBtn.BackgroundColor3 = T.Off end end)
 end)
 
 StoreTPBtn.MouseButton1Click:Connect(function()
-    StoreTPBtn.BackgroundColor3 = T.On
+    StoreTPBtn.BackgroundColor3 = T.Black
     local hrp = getHRP()
     if hrp then
         for _, obj in ipairs(workspace:GetDescendants()) do
@@ -1010,7 +1121,7 @@ StoreTPBtn.MouseButton1Click:Connect(function()
             end
         end
     end
-    task.delay(1, function() if StoreTPBtn then StoreTPBtn.BackgroundColor3 = T.Off end end)
+    task.delay(0.8, function() if StoreTPBtn then StoreTPBtn.BackgroundColor3 = T.Off end end)
 end)
 
 CardESPBtn.MouseButton1Click:Connect(function()
@@ -1092,5 +1203,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP 已加载（含排队灾难）")
-print("Disaster Warning VIP - Queue Disaster + Values + custom points")
+Notify("灾难警告 VIP FULL 最终版已加载")
+print("Disaster Warning VIP FULL - Flares/DustBowl + Queue + Values + Points")
