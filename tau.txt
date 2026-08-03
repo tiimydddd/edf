@@ -1,5 +1,5 @@
--- tau only apple - Performance Fixed
--- 减轻卡顿 | Objective模式 | 进图后无碎片提示 | Tartarus需真模式 | 观战失败仅提示
+-- tau only apple - Extended Full
+-- ESP | 距离列表 | 多稀有 | 会话统计 | 大字下一模式 | 危险警报 | RightCtrl隐藏 | WalkSpeed
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -25,6 +25,14 @@ local Settings = {
     RejoinNoFrag = true,
     AutoSave = true,
     SaveName = "default",
+    ESP = true,
+    WalkSpeed = 16,
+    WalkSpeedOn = false,
+    -- 多稀有
+    LootKey = false,
+    LootExt = false,
+    LootBat = false,
+    LootOther = false,
 }
 
 local LOOT_TYPES = {
@@ -57,11 +65,13 @@ local collectedFragments = 0
 local glassesFound = false
 local knownFragments = {}
 local knownGlasses = {}
+local knownExtra = {} -- Key/Ext/Bat/Other
 local lastScan = 0
 local lastShelterTP = 0
 local isMinimized = false
+local isSpectating = false
+local guiVisible = true
 
--- ★ 性能：拉大间隔，减少卡顿
 local SCAN_INTERVAL = 0.45
 local SHELTER_TP_INTERVAL = 28
 local TRIED_COOLDOWN = 1.8
@@ -80,6 +90,7 @@ local doomsdayDetected = false
 local currentMode = "Unknown"
 local nextMode = "Unknown"
 local lastModeTime = 0
+local lastNextMode = ""
 local MODE_TIMEOUT = 16
 local mapLootCounts = {}
 
@@ -90,6 +101,8 @@ local TORNADO_INTERVAL = 0.35
 local lastFlyTick = 0
 local FLY_INTERVAL = 1.0
 local UI_REFRESH_INTERVAL = 0.12
+local lastEspUpdate = 0
+local ESP_INTERVAL = 0.5
 
 local firstRoundChecked = false
 local rejoinStatus = "等待进入地图..."
@@ -97,6 +110,13 @@ local isAlerting = false
 local enteredMap = false
 local mapEnterTime = 0
 local LOOT_SPAWN_WAIT = 8
+
+-- 会话统计
+local sessionStart = tick()
+local sessionFrags = 0
+local sessionGlasses = 0
+local sessionHops = 0
+local sessionDangerAlerts = 0
 
 local SOUND_CLICK = "rbxassetid://6895079853"
 local SOUND_NOTIFY = "rbxassetid://4590662766"
@@ -116,7 +136,7 @@ end
 
 local function playClick() playSound(SOUND_CLICK, 0.4) end
 local function playNotifySound() playSound(SOUND_NOTIFY, 0.5) end
-local function playAlertSound() playSound(SOUND_ALERT, 0.6) end
+local function playAlertSound() playSound(SOUND_ALERT, 0.7) end
 
 local function getSettingsFile()
     local name = (Settings.SaveName or "default"):gsub("[^%w_%-]", "")
@@ -132,6 +152,8 @@ local function saveSettings(force)
         tostring(Settings.FullAutoShelter), tostring(Settings.AntiAFK), tostring(Settings.TornadoPull),
         tostring(Settings.GodMode), tostring(Settings.FragmentFly), tostring(Settings.RejoinNoFrag),
         tostring(Settings.AutoSave), tostring(TORNADO_RANGE), tostring(Settings.SaveName or "default"),
+        tostring(Settings.ESP), tostring(Settings.WalkSpeedOn), tostring(Settings.WalkSpeed),
+        tostring(Settings.LootKey), tostring(Settings.LootExt), tostring(Settings.LootBat), tostring(Settings.LootOther),
     }, "\n")
     pcall(writefile, getSettingsFile(), data)
 end
@@ -160,6 +182,16 @@ local function loadSettings()
         if r then TORNADO_RANGE = math.clamp(r, MIN_RANGE, MAX_RANGE) end
     end
     if lines[12] then Settings.SaveName = lines[12] end
+    if lines[13] then Settings.ESP = lines[13] == "true" end
+    if lines[14] then Settings.WalkSpeedOn = lines[14] == "true" end
+    if lines[15] then
+        local w = tonumber(lines[15])
+        if w then Settings.WalkSpeed = math.clamp(w, 16, 80) end
+    end
+    if lines[16] then Settings.LootKey = lines[16] == "true" end
+    if lines[17] then Settings.LootExt = lines[17] == "true" end
+    if lines[18] then Settings.LootBat = lines[18] == "true" end
+    if lines[19] then Settings.LootOther = lines[19] == "true" end
 end
 
 local function getGuiParent()
@@ -186,9 +218,33 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = guiParent
 
+-- 大字下一模式 / 危险警报（全屏提示）
+local BigAlert = Instance.new("TextLabel")
+BigAlert.Size = UDim2.new(1, 0, 0, 60)
+BigAlert.Position = UDim2.new(0, 0, 0.12, 0)
+BigAlert.BackgroundTransparency = 0.35
+BigAlert.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+BigAlert.Text = ""
+BigAlert.TextColor3 = Color3.fromRGB(255, 220, 80)
+BigAlert.Font = Enum.Font.GothamBold
+BigAlert.TextSize = 28
+BigAlert.Visible = false
+BigAlert.ZIndex = 50
+BigAlert.Parent = ScreenGui
+Instance.new("UIStroke", BigAlert).Color = Color3.fromRGB(0, 0, 0)
+
+local DangerFlash = Instance.new("Frame")
+DangerFlash.Size = UDim2.new(1, 0, 1, 0)
+DangerFlash.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
+DangerFlash.BackgroundTransparency = 1
+DangerFlash.BorderSizePixel = 0
+DangerFlash.ZIndex = 40
+DangerFlash.Visible = false
+DangerFlash.Parent = ScreenGui
+
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 440, 0, 500)
-Main.Position = UDim2.new(0, 30, 0.04, 0)
+Main.Size = UDim2.new(0, 460, 0, 520)
+Main.Position = UDim2.new(0, 30, 0.03, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -252,12 +308,12 @@ Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
 
 local TabLayout = Instance.new("UIListLayout")
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.Padding = UDim.new(0, 4)
+TabLayout.Padding = UDim.new(0, 3)
 TabLayout.Parent = TabBar
 
 local function makeTopTab(text)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 68, 1, -6)
+    btn.Size = UDim2.new(0, 58, 1, -6)
     btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -273,7 +329,8 @@ local TabLoot = makeTopTab("Loot")
 local TabEff = makeTopTab("效率")
 local TabTP = makeTopTab("传送")
 local TabExtra = makeTopTab("Extra")
-local TabSave = makeTopTab("储存")
+local TabESP = makeTopTab("ESP")
+local TabHelp = makeTopTab("说明")
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -20, 1, -86)
@@ -282,14 +339,14 @@ Content.BackgroundTransparency = 1
 Content.Parent = Main
 
 local Pages = {}
-local function createPage(name)
+local function createPage(name, canvasH)
     local page = Instance.new("ScrollingFrame")
     page.Name = name
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 580)
+    page.CanvasSize = UDim2.new(0, 0, 0, canvasH or 620)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -323,7 +380,7 @@ end
 
 local function makeToggle(parent, text, y, defaultOn)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -16, 0, 30)
+    row.Size = UDim2.new(1, -16, 0, 28)
     row.Position = UDim2.new(0, 8, 0, y)
     row.BackgroundTransparency = 1
     row.Parent = parent
@@ -333,19 +390,19 @@ local function makeToggle(parent, text, y, defaultOn)
     label.Text = text
     label.TextColor3 = Color3.fromRGB(220, 220, 230)
     label.Font = Enum.Font.Gotham
-    label.TextSize = 13
+    label.TextSize = 12
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
     local track = Instance.new("TextButton")
-    track.Size = UDim2.new(0, 44, 0, 22)
-    track.Position = UDim2.new(1, -50, 0.5, -11)
+    track.Size = UDim2.new(0, 42, 0, 20)
+    track.Position = UDim2.new(1, -48, 0.5, -10)
     track.BackgroundColor3 = defaultOn and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
     track.Text = ""
     track.Parent = row
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
     local thumb = Instance.new("Frame")
-    thumb.Size = UDim2.new(0, 18, 0, 18)
-    thumb.Position = defaultOn and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    thumb.Size = UDim2.new(0, 16, 0, 16)
+    thumb.Position = defaultOn and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
     thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     thumb.Parent = track
     Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
@@ -354,12 +411,12 @@ end
 
 local function setToggleVisual(track, thumb, on)
     track.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
-    thumb.Position = on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    thumb.Position = on and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
 end
 
 local function makeActionBtn(parent, text, y, color)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -24, 0, 30)
+    btn.Size = UDim2.new(1, -24, 0, 28)
     btn.Position = UDim2.new(0, 12, 0, y)
     btn.BackgroundColor3 = color or Color3.fromRGB(45, 45, 58)
     btn.Text = text
@@ -371,36 +428,49 @@ local function makeActionBtn(parent, text, y, color)
     return btn
 end
 
-local PageInfo = createPage("Info")
-local infoCard = makeCard(PageInfo, 4, 420)
-local StatusLabel = makeLabel(infoCard, "状态: 关闭", 10)
-local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 30, Color3.fromRGB(140, 200, 255))
-makeLabel(infoCard, "── 稀有进度 ──", 56, Color3.fromRGB(120, 120, 140))
-local FragProgressLabel = makeLabel(infoCard, "血月碎片: 地图0 | 我0/5 → Tartarus", 78)
-local GlassesProgressLabel = makeLabel(infoCard, "神秘眼镜: 未找到 → Chad", 98)
-local TartarusLabel = makeLabel(infoCard, "Tartarus: 未解锁 (需全服5碎片)", 118)
-local ChadReadyLabel = makeLabel(infoCard, "Chad条件: 未满足", 138)
-makeLabel(infoCard, "── 模式 ──", 164, Color3.fromRGB(120, 120, 140))
-local ModeLabel = makeLabel(infoCard, "当前模式: Unknown", 186)
-local NextModeLabel = makeLabel(infoCard, "下一模式: Unknown", 206)
-local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 226)
-makeLabel(infoCard, "── 效率 ──", 252, Color3.fromRGB(120, 120, 140))
-local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待进入地图...", 274)
-local TipLabel = makeLabel(infoCard, "提示: 开 Full Auto + 碎片+眼镜", 294, Color3.fromRGB(160, 200, 160))
-local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 320, Color3.fromRGB(150, 150, 165))
-local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 348, Color3.fromRGB(55, 45, 45))
-local RescanBtn = makeActionBtn(infoCard, "重新扫描地图Loot", 382, Color3.fromRGB(40, 55, 70))
+-- ========== Info ==========
+local PageInfo = createPage("Info", 700)
+local infoCard = makeCard(PageInfo, 4, 480)
+local StatusLabel = makeLabel(infoCard, "状态: 关闭", 8)
+local GoalLabel = makeLabel(infoCard, "目标: 捡碎片+眼镜", 26, Color3.fromRGB(140, 200, 255))
+makeLabel(infoCard, "── 稀有进度 ──", 50, Color3.fromRGB(120, 120, 140))
+local FragProgressLabel = makeLabel(infoCard, "血月碎片: 地图0 | 我0/5", 70)
+local GlassesProgressLabel = makeLabel(infoCard, "神秘眼镜: 未找到", 88)
+local TartarusLabel = makeLabel(infoCard, "Tartarus: 未解锁", 106)
+local ChadReadyLabel = makeLabel(infoCard, "Chad条件: 未满足", 124)
+makeLabel(infoCard, "── 模式 ──", 148, Color3.fromRGB(120, 120, 140))
+local ModeLabel = makeLabel(infoCard, "当前模式: Unknown", 168)
+local NextModeLabel = makeLabel(infoCard, "下一模式: Unknown", 186)
+local DoomsdayLabel = makeLabel(infoCard, "Doomsday: 否", 204)
+makeLabel(infoCard, "── 效率 / 会话 ──", 228, Color3.fromRGB(120, 120, 140))
+local RejoinStatusLabel = makeLabel(infoCard, "重进提示: 等待进入地图...", 248)
+local SessionLabel = makeLabel(infoCard, "会话: 碎片0 眼镜0 换服0 时长0分", 266, Color3.fromRGB(160, 200, 160))
+local TipLabel = makeLabel(infoCard, "提示: RightCtrl 隐藏界面", 284, Color3.fromRGB(160, 200, 160))
+local MapLootLabel = makeLabel(infoCard, "地图: 钥匙0 灭火器0 球棒0 其他0", 308, Color3.fromRGB(150, 150, 165))
+makeLabel(infoCard, "── 碎片距离 ──", 332, Color3.fromRGB(120, 120, 140))
+local DistFrame = Instance.new("ScrollingFrame")
+DistFrame.Size = UDim2.new(1, -24, 0, 90)
+DistFrame.Position = UDim2.new(0, 12, 0, 352)
+DistFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+DistFrame.BorderSizePixel = 0
+DistFrame.ScrollBarThickness = 3
+DistFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+DistFrame.Parent = infoCard
+Instance.new("UICorner", DistFrame).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", DistFrame).Padding = UDim.new(0, 3)
+local ResetModeBtn = makeActionBtn(infoCard, "重置模式显示", 452, Color3.fromRGB(55, 45, 45))
 
-local PageLoot = createPage("Loot")
-local lootCard = makeCard(PageLoot, 4, 280)
+-- ========== Loot ==========
+local PageLoot = createPage("Loot", 520)
+local lootCard = makeCard(PageLoot, 4, 480)
 makeLabel(lootCard, "【自动捡取】", 8, Color3.fromRGB(140, 200, 255))
 local _, FullAutoTrack, FullAutoThumb = makeToggle(lootCard, "Full Auto", 28, false)
-local _, ShelterTrack, ShelterThumb = makeToggle(lootCard, "Full Auto 时传避难所", 58, true)
-local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 88, false)
-makeLabel(lootCard, "【捡取模式】", 122, Color3.fromRGB(140, 200, 255))
+local _, ShelterTrack, ShelterThumb = makeToggle(lootCard, "Full Auto 时传避难所", 56, true)
+local _, LootTrack, LootThumb = makeToggle(lootCard, "Auto Loot", 84, false)
+makeLabel(lootCard, "【主目标】", 116, Color3.fromRGB(140, 200, 255))
 local FragOnlyBtn = Instance.new("TextButton")
-FragOnlyBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragOnlyBtn.Position = UDim2.new(0, 10, 0, 148)
+FragOnlyBtn.Size = UDim2.new(0.48, -8, 0, 28)
+FragOnlyBtn.Position = UDim2.new(0, 10, 0, 138)
 FragOnlyBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
 FragOnlyBtn.Text = "只有碎片"
 FragOnlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -409,8 +479,8 @@ FragOnlyBtn.TextSize = 12
 FragOnlyBtn.Parent = lootCard
 Instance.new("UICorner", FragOnlyBtn).CornerRadius = UDim.new(0, 8)
 local FragGlassBtn = Instance.new("TextButton")
-FragGlassBtn.Size = UDim2.new(0.48, -8, 0, 32)
-FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 148)
+FragGlassBtn.Size = UDim2.new(0.48, -8, 0, 28)
+FragGlassBtn.Position = UDim2.new(0.52, 0, 0, 138)
 FragGlassBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 FragGlassBtn.Text = "碎片+眼镜"
 FragGlassBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
@@ -418,26 +488,33 @@ FragGlassBtn.Font = Enum.Font.GothamBold
 FragGlassBtn.TextSize = 12
 FragGlassBtn.Parent = lootCard
 Instance.new("UICorner", FragGlassBtn).CornerRadius = UDim.new(0, 8)
-makeLabel(lootCard, "碎片→Tartarus | 眼镜→Chad", 192, Color3.fromRGB(160, 160, 175))
-makeLabel(lootCard, "Full Auto = 自动捡 + 可选传避难所", 212, Color3.fromRGB(160, 160, 175))
+makeLabel(lootCard, "【多稀有开关】需开 Auto Loot / Full Auto", 176, Color3.fromRGB(140, 200, 255))
+local _, KeyTrack, KeyThumb = makeToggle(lootCard, "自动捡 避难所钥匙", 198, false)
+local _, ExtTrack, ExtThumb = makeToggle(lootCard, "自动捡 灭火器", 226, false)
+local _, BatTrack, BatThumb = makeToggle(lootCard, "自动捡 棒球棒", 254, false)
+local _, OtherTrack, OtherThumb = makeToggle(lootCard, "自动捡 其他稀有", 282, false)
+makeLabel(lootCard, "其他 = 鸭子/斧/剑/Illumina/Idol 等", 312, Color3.fromRGB(150, 150, 165))
+makeLabel(lootCard, "碎片→Tartarus | 眼镜→Chad", 332, Color3.fromRGB(160, 160, 175))
 
-local PageEff = createPage("Eff")
+-- ========== 效率 ==========
+local PageEff = createPage("Eff", 360)
 local effCard = makeCard(PageEff, 4, 300)
 makeLabel(effCard, "【提高出稀有效率】", 8, Color3.fromRGB(140, 200, 255))
 local _, RejoinTrack, RejoinThumb = makeToggle(effCard, "进图后无碎片 → 仅提示+声音", 32, true)
-makeLabel(effCard, "休息/投票不算；进图并刷完Loot后才检测", 64, Color3.fromRGB(150, 150, 165))
-local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 95, Color3.fromRGB(50, 90, 140))
-makeLabel(effCard, "建议: Full Auto + 碎片+眼镜（Tornado少开更不卡）", 140, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "有眼镜→等Chad | 全服集齐5碎片→等Tartarus", 160, Color3.fromRGB(160, 160, 175))
-makeLabel(effCard, "自动检测只提醒；想换服请点「立即换服」", 180, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "休息/投票不算；进图并刷完Loot后才检测", 62, Color3.fromRGB(150, 150, 165))
+local HopBtn = makeActionBtn(effCard, "立即换服 (Server Hop)", 92, Color3.fromRGB(50, 90, 140))
+local CopyJobBtn = makeActionBtn(effCard, "复制 JobId", 128, Color3.fromRGB(45, 70, 90))
+makeLabel(effCard, "建议: Full Auto + 碎片+眼镜；Tornado少开", 168, Color3.fromRGB(160, 160, 175))
+makeLabel(effCard, "RightCtrl = 隐藏/显示整个界面", 188, Color3.fromRGB(160, 160, 175))
 
-local PageTP = createPage("Teleport")
-local tpCard = makeCard(PageTP, 4, 300)
+-- ========== 传送 ==========
+local PageTP = createPage("Teleport", 360)
+local tpCard = makeCard(PageTP, 4, 320)
 local ShelterBtn = makeActionBtn(tpCard, "传送到避难所", 12, Color3.fromRGB(45, 45, 58))
-makeLabel(tpCard, "传送到玩家:", 52)
+makeLabel(tpCard, "传送到玩家:", 48)
 local PlayerListFrame = Instance.new("ScrollingFrame")
 PlayerListFrame.Size = UDim2.new(1, -20, 0, 160)
-PlayerListFrame.Position = UDim2.new(0, 10, 0, 78)
+PlayerListFrame.Position = UDim2.new(0, 10, 0, 68)
 PlayerListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 PlayerListFrame.BorderSizePixel = 0
 PlayerListFrame.ScrollBarThickness = 3
@@ -445,19 +522,52 @@ PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 PlayerListFrame.Parent = tpCard
 Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlayerListFrame).Padding = UDim.new(0, 4)
-local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 250, Color3.fromRGB(45, 45, 58))
+local RefreshBtn = makeActionBtn(tpCard, "刷新玩家列表", 240, Color3.fromRGB(45, 45, 58))
 
-local PageExtra = createPage("Extra")
-local extraCard = makeCard(PageExtra, 4, 380)
+-- ========== Extra ==========
+local PageExtra = createPage("Extra", 480)
+local extraCard = makeCard(PageExtra, 4, 440)
 makeLabel(extraCard, "【功能】", 8, Color3.fromRGB(140, 200, 255))
 local _, AFKTrack, AFKThumb = makeToggle(extraCard, "Anti-AFK", 28, true)
-local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 58, false)
-local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull (较吃性能)", 88, false)
-local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly (较吃性能)", 118, false)
-local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 152)
+local _, GodTrack, GodThumb = makeToggle(extraCard, "God Mode", 56, false)
+local _, TornadoTrack, TornadoThumb = makeToggle(extraCard, "Tornado Pull (较吃性能)", 84, false)
+local _, FlyTrack, FlyThumb = makeToggle(extraCard, "Fragment Fly (较吃性能)", 112, false)
+local _, SpeedTrack, SpeedThumb = makeToggle(extraCard, "WalkSpeed 加速", 140, false)
+local SpeedLabel = makeLabel(extraCard, "Speed: 16", 170)
+local SpeedDown = Instance.new("TextButton")
+SpeedDown.Size = UDim2.new(0, 90, 0, 26)
+SpeedDown.Position = UDim2.new(0, 12, 0, 192)
+SpeedDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+SpeedDown.Text = "Speed -4"
+SpeedDown.TextColor3 = Color3.fromRGB(240, 240, 245)
+SpeedDown.Font = Enum.Font.GothamBold
+SpeedDown.TextSize = 12
+SpeedDown.Parent = extraCard
+Instance.new("UICorner", SpeedDown).CornerRadius = UDim.new(0, 6)
+local SpeedUp = Instance.new("TextButton")
+SpeedUp.Size = UDim2.new(0, 90, 0, 26)
+SpeedUp.Position = UDim2.new(0, 112, 0, 192)
+SpeedUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+SpeedUp.Text = "Speed +4"
+SpeedUp.TextColor3 = Color3.fromRGB(240, 240, 245)
+SpeedUp.Font = Enum.Font.GothamBold
+SpeedUp.TextSize = 12
+SpeedUp.Parent = extraCard
+Instance.new("UICorner", SpeedUp).CornerRadius = UDim.new(0, 6)
+local SpeedReset = Instance.new("TextButton")
+SpeedReset.Size = UDim2.new(0, 100, 0, 26)
+SpeedReset.Position = UDim2.new(0, 212, 0, 192)
+SpeedReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+SpeedReset.Text = "Reset 16"
+SpeedReset.TextColor3 = Color3.fromRGB(240, 240, 245)
+SpeedReset.Font = Enum.Font.GothamBold
+SpeedReset.TextSize = 12
+SpeedReset.Parent = extraCard
+Instance.new("UICorner", SpeedReset).CornerRadius = UDim.new(0, 6)
+local RangeLabel = makeLabel(extraCard, "Pull Range: 80", 230)
 local RangeDown = Instance.new("TextButton")
-RangeDown.Size = UDim2.new(0, 90, 0, 28)
-RangeDown.Position = UDim2.new(0, 12, 0, 178)
+RangeDown.Size = UDim2.new(0, 90, 0, 26)
+RangeDown.Position = UDim2.new(0, 12, 0, 252)
 RangeDown.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeDown.Text = "Range -20"
 RangeDown.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -466,8 +576,8 @@ RangeDown.TextSize = 12
 RangeDown.Parent = extraCard
 Instance.new("UICorner", RangeDown).CornerRadius = UDim.new(0, 6)
 local RangeUp = Instance.new("TextButton")
-RangeUp.Size = UDim2.new(0, 90, 0, 28)
-RangeUp.Position = UDim2.new(0, 112, 0, 178)
+RangeUp.Size = UDim2.new(0, 90, 0, 26)
+RangeUp.Position = UDim2.new(0, 112, 0, 252)
 RangeUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
 RangeUp.Text = "Range +20"
 RangeUp.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -476,39 +586,46 @@ RangeUp.TextSize = 12
 RangeUp.Parent = extraCard
 Instance.new("UICorner", RangeUp).CornerRadius = UDim.new(0, 6)
 local RangeReset = Instance.new("TextButton")
-RangeReset.Size = UDim2.new(0, 100, 0, 28)
-RangeReset.Position = UDim2.new(0, 212, 0, 178)
+RangeReset.Size = UDim2.new(0, 100, 0, 26)
+RangeReset.Position = UDim2.new(0, 212, 0, 252)
 RangeReset.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-RangeReset.Text = "Reset (80)"
+RangeReset.Text = "Reset 80"
 RangeReset.TextColor3 = Color3.fromRGB(240, 240, 245)
 RangeReset.Font = Enum.Font.GothamBold
 RangeReset.TextSize = 12
 RangeReset.Parent = extraCard
 Instance.new("UICorner", RangeReset).CornerRadius = UDim.new(0, 6)
-local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 220, Color3.fromRGB(40, 90, 120))
-local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 258, Color3.fromRGB(120, 80, 40))
+local SpectateBtn = makeActionBtn(extraCard, "Open Spectate", 292, Color3.fromRGB(40, 90, 120))
+local ChadBtn = makeActionBtn(extraCard, "Try Chad Client", 328, Color3.fromRGB(120, 80, 40))
+local RescanBtn = makeActionBtn(extraCard, "重新扫描地图Loot", 364, Color3.fromRGB(40, 55, 70))
 
-local PageSave = createPage("Save")
-local saveCard = makeCard(PageSave, 4, 300)
-makeLabel(saveCard, "Save Name:", 12)
-local NameBox = Instance.new("TextBox")
-NameBox.Size = UDim2.new(1, -24, 0, 30)
-NameBox.Position = UDim2.new(0, 12, 0, 34)
-NameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-NameBox.Text = "default"
-NameBox.PlaceholderText = "Enter save name..."
-NameBox.TextColor3 = Color3.fromRGB(240, 240, 245)
-NameBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 140)
-NameBox.Font = Enum.Font.Gotham
-NameBox.TextSize = 13
-NameBox.ClearTextOnFocus = false
-NameBox.Parent = saveCard
-Instance.new("UICorner", NameBox).CornerRadius = UDim.new(0, 8)
-local _, AutoSaveTrack, AutoSaveThumb = makeToggle(saveCard, "Auto Save", 76, true)
-local SaveNowBtn = makeActionBtn(saveCard, "Save Settings Now", 118, Color3.fromRGB(50, 90, 160))
-local LoadBtn = makeActionBtn(saveCard, "Load Settings", 158, Color3.fromRGB(45, 45, 58))
-local ResetBtn = makeActionBtn(saveCard, "Reset to Default", 198, Color3.fromRGB(90, 50, 50))
-local SaveStatusLabel = makeLabel(saveCard, "Status: Ready", 242)
+-- ========== ESP ==========
+local PageESP = createPage("ESP", 280)
+local espCard = makeCard(PageESP, 4, 240)
+makeLabel(espCard, "【碎片 / 眼镜 ESP】", 8, Color3.fromRGB(140, 200, 255))
+local _, EspTrack, EspThumb = makeToggle(espCard, "开启 ESP（高亮+名字）", 32, true)
+makeLabel(espCard, "红色 = 血月碎片", 68, Color3.fromRGB(255, 100, 100))
+makeLabel(espCard, "青色 = 神秘眼镜", 88, Color3.fromRGB(100, 220, 220))
+makeLabel(espCard, "Info 页有距离列表，可点传送", 112, Color3.fromRGB(160, 160, 175))
+makeLabel(espCard, "ESP 每 0.5 秒刷新，影响较小", 132, Color3.fromRGB(160, 160, 175))
+
+-- ========== 说明 ==========
+local PageHelp = createPage("Help", 420)
+local helpCard = makeCard(PageHelp, 4, 400)
+makeLabel(helpCard, "【功能说明】", 8, Color3.fromRGB(140, 200, 255))
+makeLabel(helpCard, "• Full Auto: 自动捡 + 可选定期避难所", 32)
+makeLabel(helpCard, "• 多稀有: 钥匙/灭火器/棒球棒/其他单独开", 52)
+makeLabel(helpCard, "• 进图无碎片: 只提示+声音，不自动换服", 72)
+makeLabel(helpCard, "• 当前模式: 读 Objective 文本", 92)
+makeLabel(helpCard, "• 下一模式: 大字提醒在屏幕上方", 112)
+makeLabel(helpCard, "• 危险警报: Doomsday/Tartarus 红闪+声音", 132)
+makeLabel(helpCard, "• ESP: 碎片红、眼镜青，穿墙可见", 152)
+makeLabel(helpCard, "• 距离列表: Info 页显示最近碎片", 172)
+makeLabel(helpCard, "• RightCtrl: 隐藏/显示整个 GUI", 192)
+makeLabel(helpCard, "• WalkSpeed: Extra 页开关与调速", 212)
+makeLabel(helpCard, "• 观战: 再点一次退出", 232)
+makeLabel(helpCard, "• Tartarus 需全服共 5 碎片，个人计数仅参考", 252)
+makeLabel(helpCard, "• Tornado/Fly 较吃性能，需要时再开", 272)
 
 Pages["Info"].Visible = true
 TabInfo.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
@@ -517,11 +634,14 @@ TabInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
 local function switchTab(name)
     playClick()
     for n, page in pairs(Pages) do page.Visible = (n == name) end
-    for _, tab in pairs({TabInfo, TabLoot, TabEff, TabTP, TabExtra, TabSave}) do
+    for _, tab in pairs({TabInfo, TabLoot, TabEff, TabTP, TabExtra, TabESP, TabHelp}) do
         tab.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
         tab.TextColor3 = Color3.fromRGB(160, 160, 175)
     end
-    local map = {Info = TabInfo, Loot = TabLoot, Eff = TabEff, Teleport = TabTP, Extra = TabExtra, Save = TabSave}
+    local map = {
+        Info = TabInfo, Loot = TabLoot, Eff = TabEff, Teleport = TabTP,
+        Extra = TabExtra, ESP = TabESP, Help = TabHelp
+    }
     if map[name] then
         map[name].BackgroundColor3 = Color3.fromRGB(50, 50, 62)
         map[name].TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -533,7 +653,8 @@ TabLoot.MouseButton1Click:Connect(function() switchTab("Loot") end)
 TabEff.MouseButton1Click:Connect(function() switchTab("Eff") end)
 TabTP.MouseButton1Click:Connect(function() switchTab("Teleport") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
-TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
+TabESP.MouseButton1Click:Connect(function() switchTab("ESP") end)
+TabHelp.MouseButton1Click:Connect(function() switchTab("Help") end)
 
 MinBtn.MouseButton1Click:Connect(function()
     playClick()
@@ -544,10 +665,22 @@ MinBtn.MouseButton1Click:Connect(function()
         Content.Visible = false
         MinBtn.Text = "+"
     else
-        Main.Size = UDim2.new(0, 440, 0, 500)
+        Main.Size = UDim2.new(0, 460, 0, 520)
         TabBar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
+    end
+end)
+
+-- RightCtrl 隐藏 GUI
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        guiVisible = not guiVisible
+        Main.Visible = guiVisible
+        if not guiVisible then
+            Notify("界面已隐藏 (再按 RightCtrl 显示)")
+        end
     end
 end)
 
@@ -563,8 +696,36 @@ local function Notify(msg, isAlert)
     end)
 end
 
+local function showBigAlert(text, color, duration)
+    BigAlert.Text = text
+    BigAlert.TextColor3 = color or Color3.fromRGB(255, 220, 80)
+    BigAlert.Visible = true
+    task.delay(duration or 4, function()
+        if BigAlert.Text == text then BigAlert.Visible = false end
+    end)
+end
+
+local function flashDanger()
+    sessionDangerAlerts = sessionDangerAlerts + 1
+    DangerFlash.Visible = true
+    task.spawn(function()
+        for i = 1, 4 do
+            DangerFlash.BackgroundTransparency = 0.55
+            playAlertSound()
+            task.wait(0.25)
+            DangerFlash.BackgroundTransparency = 0.85
+            task.wait(0.2)
+        end
+        DangerFlash.Visible = false
+        DangerFlash.BackgroundTransparency = 1
+    end)
+end
+
 local function updateRangeLabel()
     RangeLabel.Text = "Pull Range: " .. TORNADO_RANGE
+end
+local function updateSpeedLabel()
+    SpeedLabel.Text = "Speed: " .. Settings.WalkSpeed
 end
 
 local function getHRP()
@@ -598,6 +759,16 @@ local function isShelter(obj)
     return nameInList(obj.Name, ShelterNames)
 end
 
+local function lootKeyOf(obj)
+    for _, t in ipairs(LOOT_TYPES) do
+        if nameInList(obj.Name, t.names) then
+            if obj.Parent and nameInList(obj.Parent.Name, t.names) then return nil end
+            return t.key
+        end
+    end
+    return nil
+end
+
 local function cleanCache(cache)
     for obj in pairs(cache) do
         if not obj or not obj.Parent then cache[obj] = nil end
@@ -626,8 +797,9 @@ local function scanMapLoot()
                 if obj.Parent and nameInList(obj.Parent.Name, t.names) then break end
                 counts[t.key] = counts[t.key] + 1
                 seen[id] = true
-                if t.key == "Fragment" then knownFragments[obj] = true end
-                if t.key == "Glasses" then knownGlasses[obj] = true end
+                if t.key == "Fragment" then knownFragments[obj] = true
+                elseif t.key == "Glasses" then knownGlasses[obj] = true
+                else knownExtra[obj] = t.key end
                 break
             end
         end
@@ -696,9 +868,11 @@ local function pickup(obj, typ)
         if not obj or not obj.Parent then
             if typ == "Fragment" then
                 collectedFragments = math.min(5, collectedFragments + 1)
-                Notify("碎片 " .. collectedFragments .. "/5（个人计数，全服需共5个）")
+                sessionFrags = sessionFrags + 1
+                Notify("碎片 " .. collectedFragments .. "/5（个人） 会话+" .. sessionFrags)
             elseif typ == "Glasses" then
                 glassesFound = true
+                sessionGlasses = sessionGlasses + 1
                 Notify("眼镜已找到！Chad条件满足")
             end
         end
@@ -758,8 +932,101 @@ local function refreshPlayerList()
     PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y + 8)
 end
 
+local function updateDistList()
+    for _, child in ipairs(DistFrame:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local hrp = getHRP()
+    local myPos = hrp and hrp.Position or Vector3.zero
+    local list = {}
+    for obj in pairs(knownFragments) do
+        if obj and obj.Parent then
+            local part = getBestPart(obj)
+            if part then
+                table.insert(list, {obj = obj, dist = (part.Position - myPos).Magnitude, part = part})
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.dist < b.dist end)
+    local y = 0
+    for i, data in ipairs(list) do
+        if i > 8 then break end
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -6, 0, 22)
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        btn.Text = string.format("#%d  %.0f studs  点击传送", i, data.dist)
+        btn.TextColor3 = Color3.fromRGB(255, 180, 180)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 11
+        btn.Parent = DistFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        btn.MouseButton1Click:Connect(function()
+            playClick()
+            local h = getHRP()
+            if h and data.part and data.part.Parent then
+                h.CFrame = data.part.CFrame + Vector3.new(0, 3, 0)
+                Notify(string.format("已传到碎片 (%.0f studs)", data.dist))
+            end
+        end)
+        y = y + 25
+    end
+    DistFrame.CanvasSize = UDim2.new(0, 0, 0, y + 4)
+end
+
+-- ESP
+local espFolder = Instance.new("Folder")
+espFolder.Name = "tau_esp"
+espFolder.Parent = ScreenGui
+
+local function clearESP()
+    for _, c in ipairs(espFolder:GetChildren()) do c:Destroy() end
+end
+
+local function addESP(obj, color, label)
+    local part = getBestPart(obj)
+    if not part then return end
+    local hl = Instance.new("Highlight")
+    hl.Adornee = obj:IsA("Model") and obj or part
+    hl.FillColor = color
+    hl.OutlineColor = color
+    hl.FillTransparency = 0.55
+    hl.OutlineTransparency = 0.2
+    hl.Parent = espFolder
+    local bb = Instance.new("BillboardGui")
+    bb.Size = UDim2.new(0, 120, 0, 24)
+    bb.AlwaysOnTop = true
+    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+    bb.Adornee = part
+    bb.Parent = espFolder
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(1, 0, 1, 0)
+    tl.BackgroundTransparency = 1
+    tl.Text = label
+    tl.TextColor3 = color
+    tl.Font = Enum.Font.GothamBold
+    tl.TextSize = 12
+    tl.TextStrokeTransparency = 0.4
+    tl.Parent = bb
+end
+
+local function refreshESP()
+    clearESP()
+    if not Settings.ESP then return end
+    for obj in pairs(knownFragments) do
+        if obj and obj.Parent then
+            addESP(obj, Color3.fromRGB(255, 70, 70), "Fragment")
+        end
+    end
+    for obj in pairs(knownGlasses) do
+        if obj and obj.Parent then
+            addESP(obj, Color3.fromRGB(80, 220, 220), "Glasses")
+        end
+    end
+end
+
 local function serverHop()
     playClick()
+    sessionHops = sessionHops + 1
     rejoinStatus = "正在换服..."
     Notify("正在换服，请稍候...", true)
     local placeId = game.PlaceId
@@ -871,7 +1138,6 @@ local function checkAlerts()
         end
     end
 
-    -- 只在还没识别到模式时扫 Notifications（轻量）
     if not bestCurrent then
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         local notifications = pg and pg:FindFirstChild("Notifications")
@@ -902,17 +1168,35 @@ local function checkAlerts()
         end
     end
 
-    if foundNext then nextMode = foundNext end
+    if foundNext and foundNext ~= lastNextMode then
+        nextMode = foundNext
+        lastNextMode = foundNext
+        showBigAlert("下一模式: " .. foundNext, Color3.fromRGB(120, 200, 255), 5)
+        Notify("下一模式: " .. foundNext)
+    elseif foundNext then
+        nextMode = foundNext
+    end
+
     if sawTartarusMode and not tartarusUnlocked then
         tartarusUnlocked = true
+        flashDanger()
+        showBigAlert("⚠ TARTARUS 已出现！", Color3.fromRGB(255, 60, 60), 6)
         Notify("Tartarus 模式已出现！", true)
     end
     if sawDoomsday and not doomsdayDetected then
         doomsdayDetected = true
+        flashDanger()
+        showBigAlert("⚠ DOOMSDAY！", Color3.fromRGB(255, 80, 40), 6)
         Notify("检测到 Doomsday！", true)
     end
 
     if bestCurrent then
+        if bestCurrent ~= currentMode then
+            if bestCurrent == "Doomsday" or bestCurrent == "Tartarus" or bestCurrent == "Deadnado" then
+                flashDanger()
+                showBigAlert("⚠ 危险模式: " .. bestCurrent, Color3.fromRGB(255, 70, 70), 5)
+            end
+        end
         currentMode = bestCurrent
         lastModeTime = tick()
         if bestCurrent == "Doomsday" then doomsdayDetected = true end
@@ -985,11 +1269,23 @@ local function startSpectate()
         if not signals then error("找不到 Signals") end
         local event = signals:FindFirstChild("Spectate")
         if not event then error("找不到 Spectate") end
-        firesignal(event.OnClientEvent, { A = true, reason = "EnterSpectate" })
+        if isSpectating then
+            pcall(function() firesignal(event.OnClientEvent, { A = false, reason = "ExitSpectate" }) end)
+            pcall(function() firesignal(event.OnClientEvent, { A = false, reason = "LeaveSpectate" }) end)
+            pcall(function() firesignal(event.OnClientEvent, { A = false }) end)
+            isSpectating = false
+            SpectateBtn.Text = "Open Spectate"
+            Notify("已退出观战（再点可再进）")
+        else
+            firesignal(event.OnClientEvent, { A = true, reason = "EnterSpectate" })
+            isSpectating = true
+            SpectateBtn.Text = "Exit Spectate"
+            Notify("已进入观战（再点可退出）")
+        end
     end)
-    if ok then
-        Notify("已进入观战")
-    else
+    if not ok then
+        isSpectating = false
+        SpectateBtn.Text = "Open Spectate"
         Notify("观战提示: " .. tostring(err) .. "（可手动点游戏观战）")
     end
 end
@@ -1007,7 +1303,7 @@ local function tryChadSignal()
     else Notify("Chad 提示: " .. tostring(err)) end
 end
 
-local godConnection, healthConnection, antiFlingConnection
+local godConnection, healthConnection, antiFlingConnection, speedConnection
 local function getHumanoid()
     local char = LocalPlayer.Character
     return char and char:FindFirstChildOfClass("Humanoid")
@@ -1055,11 +1351,24 @@ local function enableGodMode()
     end)
 end
 
+local function applyWalkSpeed()
+    local hum = getHumanoid()
+    if not hum then return end
+    if Settings.WalkSpeedOn then
+        hum.WalkSpeed = Settings.WalkSpeed
+    else
+        hum.WalkSpeed = 16
+    end
+end
+
 LocalPlayer.CharacterAdded:Connect(function()
     if Settings.GodMode then task.wait(0.8) enableGodMode() end
+    isSpectating = false
+    if SpectateBtn then SpectateBtn.Text = "Open Spectate" end
+    task.wait(0.5)
+    applyWalkSpeed()
 end)
 
--- ★ 用范围查询，不再全图 GetDescendants
 local function doTornadoPull()
     local hrp = getHRP()
     if not hrp then return end
@@ -1129,6 +1438,7 @@ LocalPlayer.Idled:Connect(function() if Settings.AntiAFK then doAntiAFK() end en
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         if Settings.AntiAFK then doAntiAFK() end
+        if Settings.WalkSpeedOn then applyWalkSpeed() end
         task.wait(35)
     end
 end)
@@ -1143,6 +1453,11 @@ workspace.DescendantAdded:Connect(function(obj)
             if (Settings.Enabled or Settings.FullAuto) and not Settings.OnlyFragments then
                 task.wait(0.12) pickup(obj, "Glasses")
             end
+        else
+            local k = lootKeyOf(obj)
+            if k and k ~= "Fragment" and k ~= "Glasses" then
+                knownExtra[obj] = k
+            end
         end
     end)
 end)
@@ -1150,6 +1465,7 @@ end)
 workspace.DescendantRemoving:Connect(function(obj)
     knownFragments[obj] = nil
     knownGlasses[obj] = nil
+    knownExtra[obj] = nil
 end)
 
 task.spawn(function()
@@ -1167,8 +1483,12 @@ local function applySettingsToUI()
     setToggleVisual(GodTrack, GodThumb, Settings.GodMode)
     setToggleVisual(TornadoTrack, TornadoThumb, Settings.TornadoPull)
     setToggleVisual(FlyTrack, FlyThumb, Settings.FragmentFly)
-    setToggleVisual(AutoSaveTrack, AutoSaveThumb, Settings.AutoSave)
-    NameBox.Text = Settings.SaveName or "default"
+    setToggleVisual(SpeedTrack, SpeedThumb, Settings.WalkSpeedOn)
+    setToggleVisual(EspTrack, EspThumb, Settings.ESP)
+    setToggleVisual(KeyTrack, KeyThumb, Settings.LootKey)
+    setToggleVisual(ExtTrack, ExtThumb, Settings.LootExt)
+    setToggleVisual(BatTrack, BatThumb, Settings.LootBat)
+    setToggleVisual(OtherTrack, OtherThumb, Settings.LootOther)
     if Settings.OnlyFragments then
         FragOnlyBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 80)
         FragOnlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1182,6 +1502,8 @@ local function applySettingsToUI()
     end
     if Settings.GodMode then enableGodMode() else disableGodMode() end
     updateRangeLabel()
+    updateSpeedLabel()
+    applyWalkSpeed()
 end
 
 task.spawn(function()
@@ -1194,7 +1516,7 @@ task.spawn(function()
             + (c.Idol or 0) + (c.CursedIdol or 0) + (c.AncientText or 0)
 
         if Settings.FullAuto then
-            StatusLabel.Text = "状态: Full Auto" .. (Settings.FullAutoShelter and " (含避难所)" or " (不含避难所)")
+            StatusLabel.Text = "状态: Full Auto" .. (Settings.FullAutoShelter and " (含避难所)" or "")
             StatusLabel.TextColor3 = Color3.fromRGB(100, 220, 140)
         elseif Settings.Enabled then
             StatusLabel.Text = "状态: 仅自动捡取"
@@ -1207,23 +1529,21 @@ task.spawn(function()
         if tartarusUnlocked then
             GoalLabel.Text = "目标: Tartarus 模式已出现"
         elseif collectedFragments >= 5 then
-            GoalLabel.Text = "目标: 个人已捡5个，等全服解锁/出模式"
+            GoalLabel.Text = "目标: 个人已捡5个，等全服解锁"
         elseif glassesFound then
-            GoalLabel.Text = "目标: 眼镜已有 → 等 Chad | 继续捡碎片"
+            GoalLabel.Text = "目标: 眼镜已有 → 等 Chad"
         else
-            GoalLabel.Text = "目标: 优先捡碎片+眼镜（需全服共5碎片）"
+            GoalLabel.Text = "目标: 优先捡碎片+眼镜（全服共5碎片）"
         end
 
-        FragProgressLabel.Text = string.format("血月碎片: 地图%d | 我%d/5 → Tartarus", frags, collectedFragments)
-        FragProgressLabel.TextColor3 = (collectedFragments >= 5 or tartarusUnlocked) and Color3.fromRGB(100, 255, 120) or Color3.fromRGB(180, 180, 195)
-
+        FragProgressLabel.Text = string.format("血月碎片: 地图%d | 我%d/5", frags, collectedFragments)
         if glassesFound or (c.Glasses or 0) > 0 then
             GlassesProgressLabel.Text = "神秘眼镜: 已找到 → Chad可出"
             GlassesProgressLabel.TextColor3 = Color3.fromRGB(100, 255, 120)
-            ChadReadyLabel.Text = "Chad条件: 已满足（等抽到）"
+            ChadReadyLabel.Text = "Chad条件: 已满足"
             ChadReadyLabel.TextColor3 = Color3.fromRGB(100, 255, 120)
         else
-            GlassesProgressLabel.Text = "神秘眼镜: 未找到 → 需捡眼镜"
+            GlassesProgressLabel.Text = "神秘眼镜: 未找到"
             GlassesProgressLabel.TextColor3 = Color3.fromRGB(255, 160, 100)
             ChadReadyLabel.Text = "Chad条件: 未满足"
             ChadReadyLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
@@ -1251,32 +1571,37 @@ task.spawn(function()
         end
 
         RejoinStatusLabel.Text = "重进提示: " .. rejoinStatus
+        local mins = math.floor((tick() - sessionStart) / 60)
+        SessionLabel.Text = string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d 时长%d分", sessionFrags, sessionGlasses, sessionHops, sessionDangerAlerts, mins)
         MapLootLabel.Text = string.format("地图: 钥匙%d 灭火器%d 球棒%d 其他%d", c.Key or 0, c.Ext or 0, c.Bat or 0, modeLoot)
 
         if not Settings.Enabled and not Settings.FullAuto then
-            TipLabel.Text = "提示: 去 Loot 页开 Full Auto 或 Auto Loot"
-        elseif Settings.RejoinNoFrag and not firstRoundChecked then
-            TipLabel.Text = "提示: 等进图后再检测碎片..."
-        elseif glassesFound and collectedFragments < 5 then
-            TipLabel.Text = "提示: 眼镜有了，继续捡碎片（全服共需5个）"
-        elseif tartarusUnlocked then
-            TipLabel.Text = "提示: Tartarus 已可出，注意存活"
+            TipLabel.Text = "提示: RightCtrl隐藏 | 去Loot开Full Auto"
         else
-            TipLabel.Text = "提示: Tornado/Fly 少开更不卡"
+            TipLabel.Text = "提示: RightCtrl 隐藏界面 | Tornado少开更不卡"
         end
 
         if now - lastHeavyScan >= HEAVY_SCAN_INTERVAL then
             lastHeavyScan = now
             checkAlerts()
             scanMapLoot()
+            updateDistList()
+        end
+
+        if now - lastEspUpdate >= ESP_INTERVAL then
+            lastEspUpdate = now
+            refreshESP()
         end
 
         if (Settings.Enabled or Settings.FullAuto) and (now - lastScan) >= SCAN_INTERVAL then
             lastScan = now
             cleanCache(knownFragments)
             cleanCache(knownGlasses)
-            local fragList, hrp = {}, getHRP()
+            cleanCache(knownExtra)
+            local hrp = getHRP()
             local myPos = hrp and hrp.Position or Vector3.zero
+
+            local fragList = {}
             for obj in pairs(knownFragments) do
                 if obj and obj.Parent then
                     local part = getBestPart(obj)
@@ -1288,10 +1613,25 @@ task.spawn(function()
                 pickup(data.obj, "Fragment")
                 task.wait(0.1)
             end
+
             if not Settings.OnlyFragments then
                 for obj in pairs(knownGlasses) do
                     if obj and obj.Parent then
                         pickup(obj, "Glasses")
+                        task.wait(0.1)
+                    end
+                end
+            end
+
+            -- 多稀有
+            for obj, k in pairs(knownExtra) do
+                if obj and obj.Parent then
+                    local want = (k == "Key" and Settings.LootKey)
+                        or (k == "Ext" and Settings.LootExt)
+                        or (k == "Bat" and Settings.LootBat)
+                        or (Settings.LootOther and k ~= "Key" and k ~= "Ext" and k ~= "Bat")
+                    if want then
+                        pickup(obj, k)
                         task.wait(0.1)
                     end
                 end
@@ -1316,17 +1656,15 @@ task.spawn(function()
     end
 end)
 
+-- 按钮绑定
 FullAutoTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.FullAuto = not Settings.FullAuto
     if Settings.FullAuto then
         Settings.Enabled = true
         Settings.OnlyFragments = false
-        if Settings.FullAutoShelter then
-            forceToShelter(false)
-            lastShelterTP = tick()
-        end
-        Notify("Full Auto ON" .. (Settings.FullAutoShelter and " (含避难所)" or " (不含避难所)"))
+        if Settings.FullAutoShelter then forceToShelter(false) lastShelterTP = tick() end
+        Notify("Full Auto ON")
     else
         Settings.Enabled = false
         Notify("Full Auto OFF")
@@ -1340,7 +1678,6 @@ ShelterTrack.MouseButton1Click:Connect(function()
     Settings.FullAutoShelter = not Settings.FullAutoShelter
     applySettingsToUI()
     saveSettings()
-    Notify(Settings.FullAutoShelter and "Full Auto 会传避难所" or "Full Auto 不传避难所")
 end)
 
 LootTrack.MouseButton1Click:Connect(function()
@@ -1356,13 +1693,25 @@ FragOnlyBtn.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings()
 end)
-
 FragGlassBtn.MouseButton1Click:Connect(function()
     playClick()
     Settings.OnlyFragments = false
     applySettingsToUI()
     saveSettings()
 end)
+
+local function bindLootToggle(track, key)
+    track.MouseButton1Click:Connect(function()
+        playClick()
+        Settings[key] = not Settings[key]
+        applySettingsToUI()
+        saveSettings()
+    end)
+end
+bindLootToggle(KeyTrack, "LootKey")
+bindLootToggle(ExtTrack, "LootExt")
+bindLootToggle(BatTrack, "LootBat")
+bindLootToggle(OtherTrack, "LootOther")
 
 RejoinTrack.MouseButton1Click:Connect(function()
     playClick()
@@ -1383,6 +1732,16 @@ RejoinTrack.MouseButton1Click:Connect(function()
 end)
 
 HopBtn.MouseButton1Click:Connect(serverHop)
+CopyJobBtn.MouseButton1Click:Connect(function()
+    playClick()
+    local id = tostring(game.JobId)
+    if setclipboard then
+        pcall(setclipboard, id)
+        Notify("JobId 已复制: " .. id)
+    else
+        Notify("JobId: " .. id)
+    end
+end)
 
 AFKTrack.MouseButton1Click:Connect(function()
     playClick()
@@ -1390,7 +1749,6 @@ AFKTrack.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings()
 end)
-
 GodTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.GodMode = not Settings.GodMode
@@ -1398,90 +1756,53 @@ GodTrack.MouseButton1Click:Connect(function()
     applySettingsToUI()
     saveSettings()
 end)
-
 TornadoTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.TornadoPull = not Settings.TornadoPull
     applySettingsToUI()
     saveSettings()
-    if Settings.TornadoPull then Notify("Tornado 已开（可能轻微卡）") end
 end)
-
 FlyTrack.MouseButton1Click:Connect(function()
     playClick()
     Settings.FragmentFly = not Settings.FragmentFly
     applySettingsToUI()
     saveSettings()
 end)
-
-AutoSaveTrack.MouseButton1Click:Connect(function()
+SpeedTrack.MouseButton1Click:Connect(function()
     playClick()
-    Settings.AutoSave = not Settings.AutoSave
+    Settings.WalkSpeedOn = not Settings.WalkSpeedOn
+    applyWalkSpeed()
     applySettingsToUI()
-    saveSettings(true)
+    saveSettings()
 end)
-
-SpectateBtn.MouseButton1Click:Connect(startSpectate)
-ChadBtn.MouseButton1Click:Connect(tryChadSignal)
-
-RescanBtn.MouseButton1Click:Connect(function()
+EspTrack.MouseButton1Click:Connect(function()
     playClick()
-    local c = scanMapLoot()
-    Notify("扫描完成: 碎片" .. (c.Fragment or 0) .. " 眼镜" .. (c.Glasses or 0))
-end)
-
-NameBox.FocusLost:Connect(function()
-    local t = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
-    if t == "" then t = "default" end
-    Settings.SaveName = t
-    NameBox.Text = t
-    saveSettings(true)
-end)
-
-SaveNowBtn.MouseButton1Click:Connect(function()
-    playClick()
-    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
-    saveSettings(true)
-    SaveStatusLabel.Text = "Status: Saved [" .. Settings.SaveName .. "]"
-    Notify("已保存")
-end)
-
-LoadBtn.MouseButton1Click:Connect(function()
-    playClick()
-    Settings.SaveName = NameBox.Text ~= "" and NameBox.Text or "default"
-    loadSettings()
+    Settings.ESP = not Settings.ESP
+    if not Settings.ESP then clearESP() end
     applySettingsToUI()
-    SaveStatusLabel.Text = "Status: Loaded [" .. Settings.SaveName .. "]"
-    Notify("已加载")
+    saveSettings()
 end)
 
-ResetBtn.MouseButton1Click:Connect(function()
+SpeedDown.MouseButton1Click:Connect(function()
     playClick()
-    Settings.Enabled = false
-    Settings.OnlyFragments = true
-    Settings.FullAuto = false
-    Settings.FullAutoShelter = true
-    Settings.AntiAFK = true
-    Settings.TornadoPull = false
-    Settings.GodMode = false
-    Settings.FragmentFly = false
-    Settings.RejoinNoFrag = true
-    Settings.AutoSave = true
-    TORNADO_RANGE = 80
-    applySettingsToUI()
-    saveSettings(true)
-    SaveStatusLabel.Text = "Status: Reset"
-    Notify("已重置为默认")
+    Settings.WalkSpeed = math.max(16, Settings.WalkSpeed - 4)
+    updateSpeedLabel()
+    applyWalkSpeed()
+    saveSettings()
 end)
-
-ResetModeBtn.MouseButton1Click:Connect(function()
+SpeedUp.MouseButton1Click:Connect(function()
     playClick()
-    currentMode = "Unknown"
-    nextMode = "Unknown"
-    lastModeTime = 0
-    doomsdayDetected = false
-    tartarusUnlocked = false
-    Notify("模式显示已重置")
+    Settings.WalkSpeed = math.min(80, Settings.WalkSpeed + 4)
+    updateSpeedLabel()
+    applyWalkSpeed()
+    saveSettings()
+end)
+SpeedReset.MouseButton1Click:Connect(function()
+    playClick()
+    Settings.WalkSpeed = 16
+    updateSpeedLabel()
+    applyWalkSpeed()
+    saveSettings()
 end)
 
 RangeDown.MouseButton1Click:Connect(function()
@@ -1503,6 +1824,26 @@ RangeReset.MouseButton1Click:Connect(function()
     saveSettings()
 end)
 
+SpectateBtn.MouseButton1Click:Connect(startSpectate)
+ChadBtn.MouseButton1Click:Connect(tryChadSignal)
+RescanBtn.MouseButton1Click:Connect(function()
+    playClick()
+    local c = scanMapLoot()
+    updateDistList()
+    refreshESP()
+    Notify("扫描完成: 碎片" .. (c.Fragment or 0) .. " 眼镜" .. (c.Glasses or 0))
+end)
+ResetModeBtn.MouseButton1Click:Connect(function()
+    playClick()
+    currentMode = "Unknown"
+    nextMode = "Unknown"
+    lastNextMode = ""
+    lastModeTime = 0
+    doomsdayDetected = false
+    tartarusUnlocked = false
+    Notify("模式显示已重置")
+end)
+
 ShelterBtn.MouseButton1Click:Connect(function()
     playClick()
     forceToShelter(false)
@@ -1516,6 +1857,7 @@ end)
 CloseBtn.MouseButton1Click:Connect(function()
     playClick()
     saveSettings(true)
+    clearESP()
     ScreenGui:Destroy()
 end)
 
@@ -1541,5 +1883,5 @@ end)
 
 loadSettings()
 applySettingsToUI()
-Notify("已加载 | 性能优化版 | Tornado少开更流畅")
-print("tau only apple | performance fixed")
+Notify("已加载 | RightCtrl隐藏 | ESP/距离/多稀有/统计/警报")
+print("tau only apple extended")
