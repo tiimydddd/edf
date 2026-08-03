@@ -1,4 +1,5 @@
--- tau only apple MEDIUM | 存文件再执行
+-- tau only apple MEDIUM (无 Doomsday / 无当前&下一模式)
+-- 存文件 tau.lua → 执行器用「打开文件」执行
 local Players=game:GetService("Players")
 local LP=Players.LocalPlayer
 local SG=game:GetService("StarterGui")
@@ -23,12 +24,11 @@ local kF,kG,kE={},{},{}
 local tScan,tShel,tHeavy,tTorn,tFly,tEsp=0,0,0,0,0,0
 local isMin,isSpec=false,false
 local TRANGE=80
-local tart,doom=false,false
-local curM,nextM,lastN,lastMT="Unknown","Unknown","",0
+local tart=false
 local mapC={Fragment=0,Glasses=0,Key=0,Ext=0,Bat=0}
 local firstChk,rejSt,alerting,entered,enterT=false,"等待进入地图...",false,false,0
-local sF,sG,sH,sD=0,0,0,0
-local tried,hist={},{}
+local sF,sG,sH=0,0,0
+local tried={}
 
 local function snd(id,v)
 	pcall(function()
@@ -56,12 +56,8 @@ Big.BackgroundTransparency=0.3;Big.BackgroundColor3=Color3.fromRGB(15,15,25)
 Big.Text="";Big.TextColor3=Color3.fromRGB(255,220,80);Big.Font=Enum.Font.GothamBold
 Big.TextSize=24;Big.Visible=false;Big.ZIndex=50;Big.Parent=Gui
 
-local Flash=Instance.new("Frame")
-Flash.Size=UDim2.new(1,0,1,0);Flash.BackgroundColor3=Color3.fromRGB(180,20,20)
-Flash.BackgroundTransparency=1;Flash.BorderSizePixel=0;Flash.ZIndex=40;Flash.Visible=false;Flash.Parent=Gui
-
 local Main=Instance.new("Frame")
-Main.Size=UDim2.new(0,420,0,480);Main.Position=UDim2.new(0,30,0,40)
+Main.Size=UDim2.new(0,420,0,460);Main.Position=UDim2.new(0,30,0,40)
 Main.BackgroundColor3=Color3.fromRGB(22,22,28);Main.BorderSizePixel=0;Main.Visible=true;Main.Parent=Gui
 Instance.new("UICorner",Main).CornerRadius=UDim.new(0,12)
 local sk=Instance.new("UIStroke");sk.Color=Color3.fromRGB(80,80,100);sk.Thickness=2;sk.Parent=Main
@@ -105,7 +101,7 @@ local Pages={}
 local function mkPage(n,h)
 	local p=Instance.new("ScrollingFrame")
 	p.Name=n;p.Size=UDim2.new(1,0,1,0);p.BackgroundTransparency=1;p.BorderSizePixel=0
-	p.ScrollBarThickness=3;p.CanvasSize=UDim2.new(0,0,0,h or 520);p.Visible=false;p.Parent=Content
+	p.ScrollBarThickness=3;p.CanvasSize=UDim2.new(0,0,0,h or 480);p.Visible=false;p.Parent=Content
 	Pages[n]=p;return p
 end
 local function mkCard(par,y,h)
@@ -143,8 +139,8 @@ local function mkB(par,tx,y,col)
 	b.Font=Enum.Font.GothamBold;b.TextSize=12;b.Parent=par;Instance.new("UICorner",b).CornerRadius=UDim.new(0,8);return b
 end
 
-local P1=mkPage("Info",560)
-local ic=mkCard(P1,4,420)
+local P1=mkPage("Info",480)
+local ic=mkCard(P1,4,360)
 local StatusL=mkL(ic,"状态: 关闭",6)
 mkL(ic,"── 进度 ──",26,Color3.fromRGB(120,120,140))
 local FragL=mkL(ic,"血月碎片: 地图0 | 我0/5",44)
@@ -152,27 +148,20 @@ local FragFullL=mkL(ic,"个人碎片: 未满",62)
 local GlassL=mkL(ic,"神秘眼镜: 未找到",80)
 local TartL=mkL(ic,"Tartarus: 未解锁",98)
 local ChadL=mkL(ic,"Chad条件: 未满足",116)
-mkL(ic,"── 模式 ──",138,Color3.fromRGB(120,120,140))
-local ModeL=mkL(ic,"当前模式: Unknown",156)
-local NextL=mkL(ic,"下一模式: Unknown",174)
-local DoomL=mkL(ic,"Doomsday: 否",192)
-mkL(ic,"── 会话 ──",214,Color3.fromRGB(120,120,140))
-local RejL=mkL(ic,"重进提示: 等待进入地图...",232)
-local SessL=mkL(ic,"会话: 0/0/0",250,Color3.fromRGB(160,200,160))
-local HistL=mkL(ic,"最近模式: 暂无",268,Color3.fromRGB(160,160,175))
-HistL.Size=UDim2.new(1,-20,0,32);HistL.TextWrapped=true;HistL.TextYAlignment=Enum.TextYAlignment.Top
-local MapL=mkL(ic,"地图: 钥匙0 灭火器0 球棒0",306,Color3.fromRGB(150,150,165))
-mkL(ic,"── 碎片距离 ──",328,Color3.fromRGB(120,120,140))
+mkL(ic,"── 会话 ──",140,Color3.fromRGB(120,120,140))
+local RejL=mkL(ic,"重进提示: 等待进入地图...",158)
+local SessL=mkL(ic,"会话: 碎片0 眼镜0 换服0",176,Color3.fromRGB(160,200,160))
+local MapL=mkL(ic,"地图: 钥匙0 灭火器0 球棒0",194,Color3.fromRGB(150,150,165))
+mkL(ic,"── 碎片距离 ──",218,Color3.fromRGB(120,120,140))
 local DistF=Instance.new("ScrollingFrame")
-DistF.Size=UDim2.new(1,-20,0,55);DistF.Position=UDim2.new(0,10,0,346)
+DistF.Size=UDim2.new(1,-20,0,90);DistF.Position=UDim2.new(0,10,0,236)
 DistF.BackgroundColor3=Color3.fromRGB(25,25,32);DistF.BorderSizePixel=0;DistF.ScrollBarThickness=3
 DistF.CanvasSize=UDim2.new(0,0,0,0);DistF.Parent=ic
 Instance.new("UICorner",DistF).CornerRadius=UDim.new(0,6)
 Instance.new("UIListLayout",DistF).Padding=UDim.new(0,2)
-local ResetB=mkB(ic,"重置模式",408,Color3.fromRGB(55,45,45))
 
-local P2=mkPage("Loot",360)
-local lc=mkCard(P2,4,340)
+local P2=mkPage("Loot",340)
+local lc=mkCard(P2,4,320)
 mkL(lc,"【自动捡取】",6,Color3.fromRGB(140,200,255))
 local FA_tr,FA_th=mkTog(lc,"Full Auto",26,false)
 local SH_tr,SH_th=mkTog(lc,"Full Auto 传避难所",52,true)
@@ -189,27 +178,27 @@ local Key_tr,Key_th=mkTog(lc,"钥匙",184,false)
 local Ext_tr,Ext_th=mkTog(lc,"灭火器",210,false)
 local Bat_tr,Bat_th=mkTog(lc,"棒球棒",236,false)
 
-local P3=mkPage("Eff",220)
-local ec=mkCard(P3,4,190)
+local P3=mkPage("Eff",200)
+local ec=mkCard(P3,4,170)
 mkL(ec,"【效率】",6,Color3.fromRGB(140,200,255))
 local RJ_tr,RJ_th=mkTog(ec,"进图无碎片仅提示",26,true)
 local HopB=mkB(ec,"立即换服",60,Color3.fromRGB(50,90,140))
 local JobB=mkB(ec,"复制 JobId",94,Color3.fromRGB(45,70,90))
 
-local P4=mkPage("Teleport",260)
-local tc=mkCard(P4,4,230)
+local P4=mkPage("Teleport",250)
+local tc=mkCard(P4,4,220)
 local ShelB=mkB(tc,"传送到避难所",10,Color3.fromRGB(45,45,58))
 mkL(tc,"传送到玩家:",42)
 local PlF=Instance.new("ScrollingFrame")
-PlF.Size=UDim2.new(1,-16,0,110);PlF.Position=UDim2.new(0,8,0,60)
+PlF.Size=UDim2.new(1,-16,0,100);PlF.Position=UDim2.new(0,8,0,60)
 PlF.BackgroundColor3=Color3.fromRGB(25,25,32);PlF.BorderSizePixel=0;PlF.ScrollBarThickness=3
 PlF.CanvasSize=UDim2.new(0,0,0,0);PlF.Parent=tc
 Instance.new("UICorner",PlF).CornerRadius=UDim.new(0,8)
 Instance.new("UIListLayout",PlF).Padding=UDim.new(0,3)
-local RefB=mkB(tc,"刷新玩家",180,Color3.fromRGB(45,45,58))
+local RefB=mkB(tc,"刷新玩家",170,Color3.fromRGB(45,45,58))
 
-local P5=mkPage("Extra",360)
-local xc=mkCard(P5,4,340)
+local P5=mkPage("Extra",340)
+local xc=mkCard(P5,4,320)
 mkL(xc,"【功能】",6,Color3.fromRGB(140,200,255))
 local AFK_tr,AFK_th=mkTog(xc,"Anti-AFK",26,true)
 local God_tr,God_th=mkTog(xc,"God Mode",52,false)
@@ -233,32 +222,21 @@ RngUp.Font=Enum.Font.GothamBold;RngUp.TextSize=11;RngUp.Parent=xc;Instance.new("
 local SpecB=mkB(xc,"Open Spectate",268,Color3.fromRGB(40,90,120))
 local ChadB=mkB(xc,"Try Chad",302,Color3.fromRGB(120,80,40))
 
-local P6=mkPage("ESP",140)
-local esc=mkCard(P6,4,110)
+local P6=mkPage("ESP",130)
+local esc=mkCard(P6,4,100)
 mkL(esc,"【ESP】",6,Color3.fromRGB(140,200,255))
 local ESP_tr,ESP_th=mkTog(esc,"碎片/眼镜 ESP",26,true)
 mkL(esc,"红=碎片 青=眼镜",58,Color3.fromRGB(160,160,175))
 
 Pages.Info.Visible=true
 T1.BackgroundColor3=Color3.fromRGB(50,50,62);T1.TextColor3=Color3.new(1,1,1)
-N("界面已加载 MEDIUM");print("[tau] UI OK")
+N("界面已加载");print("[tau] UI OK")
 
 local function showBig(tx,col,dur)
 	Big.Text=tx;Big.TextColor3=col or Color3.fromRGB(255,220,80);Big.Visible=true
 	task.delay(dur or 5,function() if Big.Text==tx then Big.Visible=false end end)
 end
-local function flashD()
-	sD=sD+1;Flash.Visible=true
-	task.spawn(function()
-		for i=1,4 do Flash.BackgroundTransparency=0.55;alrt();task.wait(0.25);Flash.BackgroundTransparency=0.85;task.wait(0.2) end
-		Flash.Visible=false;Flash.BackgroundTransparency=1
-	end)
-end
-local function pushH(name)
-	if not name or name=="" or name=="Unknown" then return end
-	if hist[1]==name then return end
-	table.insert(hist,1,name);while #hist>10 do table.remove(hist) end
-end
+
 local function swTab(n)
 	click()
 	for k,p in pairs(Pages) do p.Visible=(k==n) end
@@ -275,7 +253,7 @@ T6.MouseButton1Click:Connect(function() swTab("ESP") end)
 MinB.MouseButton1Click:Connect(function()
 	click();isMin=not isMin
 	if isMin then Main.Size=UDim2.new(0,180,0,34);TabBar.Visible=false;Content.Visible=false;MinB.Text="+"
-	else Main.Size=UDim2.new(0,420,0,480);TabBar.Visible=true;Content.Visible=true;MinB.Text="–" end
+	else Main.Size=UDim2.new(0,420,0,460);TabBar.Visible=true;Content.Visible=true;MinB.Text="–" end
 end)
 
 local function inL(name,list)
@@ -450,13 +428,6 @@ local function alertNo()
 	alerting=false;rejSt="无碎片（已提示）"
 end
 
-local RULES={
-	{p="tartarus has been summoned",m="Tartarus"},{p="tartarus is occurring",m="Tartarus"},
-	{p="survive the end of the world",m="Doomsday"},{p="doomsday is occurring",m="Doomsday"},
-	{p="toastnado is occurring",m="ToastNado"},{p="deadnado is occurring",m="Deadnado"},
-	{p="double trouble",m="Double Trouble"},{p="triple threat",m="Triple Threat"},
-	{p="normal survival",m="Normal Survival"},{p="there is an ef",m="Normal Survival"},
-}
 local function getObj()
 	local g=LP:FindFirstChild("PlayerGui");if not g then return nil end
 	local ok,t=pcall(function()
@@ -468,67 +439,26 @@ local function getObj()
 	end)
 	return ok and t or nil
 end
-local function matchM(raw)
-	if not raw or #raw<3 then return nil end
-	local t=string.lower(raw);if t:find("unlikely the world will end") then return nil end
-	local best,bl=nil,0
-	for _,r in ipairs(RULES) do if t:find(r.p,1,true) and #r.p>bl then bl=#r.p;best=r.m end end
-	return best
-end
+
 local function markEnter()
 	if entered then return end;entered=true;enterT=tick();rejSt="已进图，等待Loot..."
 end
-local function onNext(name)
-	if not name or name=="" or name==lastN then return end
-	lastN=name;nextM=name;pushH("→"..name)
-	alrt();showBig("下一模式: "..name,Color3.fromRGB(100,200,255),6);N("下一模式: "..name,true)
-	local low=string.lower(name)
-	if low:find("doomsday") or low:find("tartarus") or low:find("deadnado") then
-		flashD();showBig("⚠ 危险: "..name,Color3.fromRGB(255,70,70),7)
-	end
-end
 
-local function checkA()
-	local ot=getObj();local best=matchM(ot);local fn=nil;local sd,st=false,false
+-- 仅用于进图检测（不读模式名、不读 Doomsday）
+local function checkEnter()
+	local ot=getObj()
 	if ot and #ot>=5 then
 		local lo=string.lower(ot)
-		if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then markEnter() end
-		if lo:find("doomsday") or lo:find("survive the end") then sd=true end
-		if lo:find("tartarus") then st=true end
-	end
-	local g=LP:FindFirstChild("PlayerGui")
-	local n=g and g:FindFirstChild("Notifications")
-	if n then
-		for _,x in ipairs(n:GetDescendants()) do
-			if x:IsA("TextLabel") or x:IsA("TextButton") then
-				local raw=x.Text or ""
-				if #raw>=5 and #raw<=220 then
-					local t=string.lower(raw)
-					local a,b=t:find("this round's gamemode is",1,true)
-					if a then
-						local after=raw:sub(b+1):gsub("^[%s:]+",""):gsub("%s+$",""):gsub("%.$","")
-						if #after>1 and #after<40 then fn=after end
-					end
-					if not best then local m=matchM(raw);if m then best=m end end
-					if t:find("doomsday") then sd=true end
-					if t:find("tartarus") then st=true end
-				end
-			end
+		if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then
+			markEnter()
+		end
+		if lo:find("tartarus") and not tart then
+			tart=true
+			alrt()
+			showBig("Tartarus 已出现",Color3.fromRGB(255,120,80),5)
+			N("Tartarus!",true)
 		end
 	end
-	if fn then onNext(fn) end
-	if st and not tart then tart=true;flashD();showBig("⚠ TARTARUS",Color3.fromRGB(255,60,60),6);N("Tartarus!",true) end
-	if sd and not doom then doom=true;flashD();showBig("⚠ DOOMSDAY",Color3.fromRGB(255,80,40),6);N("Doomsday!",true) end
-	if best then
-		if best~=curM then
-			pushH(best)
-			if best=="Doomsday" or best=="Tartarus" or best=="Deadnado" then flashD();showBig("⚠ "..best,Color3.fromRGB(255,70,70),5) end
-		end
-		curM=best;lastMT=tick()
-		if best=="Doomsday" then doom=true end
-		if best=="Tartarus" then tart=true end
-		markEnter()
-	elseif tick()-lastMT>16 then curM="Unknown" end
 end
 
 local function checkFirst()
@@ -661,7 +591,7 @@ local function applyUI()
 end
 
 task.spawn(function() task.wait(1);pcall(scan);pcall(refPl);pcall(updDist);pcall(refESP) end)
-task.spawn(function() while Gui and Gui.Parent do pcall(checkA);task.wait(0.8) end end)
+task.spawn(function() while Gui and Gui.Parent do pcall(checkEnter);task.wait(1) end end)
 
 task.spawn(function()
 	while Gui and Gui.Parent do
@@ -676,12 +606,8 @@ task.spawn(function()
 			if gotG or (c.Glasses or 0)>0 then GlassL.Text="神秘眼镜: 已找到";GlassL.TextColor3=Color3.fromRGB(100,255,120);ChadL.Text="Chad条件: 已满足"
 			else GlassL.Text="神秘眼镜: 未找到";GlassL.TextColor3=Color3.fromRGB(255,160,100);ChadL.Text="Chad条件: 未满足" end
 			TartL.Text=tart and "Tartarus: 已出现" or "Tartarus: 未解锁"
-			ModeL.Text="当前模式: "..curM;NextL.Text="下一模式: "..nextM
-			DoomL.Text=(doom or curM=="Doomsday") and "Doomsday: 是！" or "Doomsday: 否"
 			RejL.Text="重进提示: "..rejSt
-			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d 警报%d",sF,sG,sH,sD)
-			if #hist==0 then HistL.Text="最近模式: 暂无"
-			else local p={} for i=1,math.min(5,#hist) do table.insert(p,hist[i]) end HistL.Text="最近: "..table.concat(p," → ") end
+			SessL.Text=string.format("会话: 碎片%d 眼镜%d 换服%d",sF,sG,sH)
 			MapL.Text=string.format("地图: 钥匙%d 灭火器%d 球棒%d",c.Key or 0,c.Ext or 0,c.Bat or 0)
 			if now-tHeavy>=2.5 then tHeavy=now;scan();updDist() end
 			if now-tEsp>=0.5 then tEsp=now;refESP() end
@@ -743,9 +669,6 @@ RngDn.MouseButton1Click:Connect(function() click();TRANGE=math.max(20,TRANGE-20)
 RngUp.MouseButton1Click:Connect(function() click();TRANGE=math.min(200,TRANGE+20);RngL.Text="Pull Range: "..TRANGE end)
 SpecB.MouseButton1Click:Connect(startSpec)
 ChadB.MouseButton1Click:Connect(tryChad)
-ResetB.MouseButton1Click:Connect(function()
-	click();curM="Unknown";nextM="Unknown";lastN="";lastMT=0;doom=false;tart=false;N("模式已重置")
-end)
 ShelB.MouseButton1Click:Connect(function() click();toShel(false) end)
 RefB.MouseButton1Click:Connect(function() click();refPl() end)
 ClB.MouseButton1Click:Connect(function() click();clrESP();Gui:Destroy() end)
@@ -765,4 +688,4 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] ready MEDIUM")
+print("[tau] ready (no mode/doomsday)")
