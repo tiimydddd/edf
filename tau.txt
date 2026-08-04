@@ -25,7 +25,7 @@ local NAMES = {
     Glass = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"},
     Key = {"Shelter Key", "ShelterKey", "避难所钥匙"},
     Ext = {"Fire Extinguisher", "Extinguisher", "灭火器"},
-    Bat = {"Baseball Bat", "BaseballBat", "棒球棒"},
+    Bat = {"Bat", "BaseballBat", "棒球棒"},
     Shel = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlRoom", "Control Room"},
 }
 
