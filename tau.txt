@@ -1053,7 +1053,7 @@ local function doFly()
             pcall(function()
                 if nearAnyPlayer(p.Position, 12) then return end
                 p.Anchored = false
-                p.CanCollide = false
+                p.CanCollide = true
                 local up = 160 + math.random() * 90
                 local sx = (math.random() - 0.5) * 28
                 local sz = (math.random() - 0.5) * 28
