@@ -1,5 +1,5 @@
 -- TORNADO ALLEY ULTIMATE (register-safe)
--- UI/S tables | BlackHole toggle | Debris/Boat high launch
+-- FULL | Cannon | Music save | No-frag only after map spawn
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -17,7 +17,7 @@ local C = {
     En = false, OnlyF = true, FA = false, FAShel = true, AFK = true,
     God = false, Fly = false, Rej = true, ESP = true,
     SpdOn = false, Spd = 16, Key = false, Ext = false, Bat = false,
-    NoInjury = false, BoatFly = false, BlackHole = false
+    NoInjury = false, BoatFly = false, BlackHole = false, Cannon = false
 }
 
 local NAMES = {
@@ -33,7 +33,7 @@ local S = {
     myF = 0, gotG = false,
     kF = {}, kG = {}, kE = {},
     mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0},
-    tScan = 0, tShel = 0, tHeavy = 0, tFly = 0, tEsp = 0, tBoat = 0, tInjuryGui = 0, tBH = 0, tBoatScan = 0,
+    tScan = 0, tShel = 0, tHeavy = 0, tFly = 0, tEsp = 0, tBoat = 0, tInjuryGui = 0, tBH = 0, tBoatScan = 0, tCannon = 0,
     isMin = false, isSpec = false, tart = false, tartarusActive = false,
     currentMode = "Unknown",
     firstChk = false, rejSt = "Waiting for map...", alerting = false, entered = false, enterT = 0,
@@ -41,8 +41,12 @@ local S = {
     tried = {}, originalIds = {},
     injuryConn = nil, musicHistory = {}, boatCache = {},
     debrisCursor = 1, MAX_HISTORY = 30, MAX_PICK = 3,
-    FLY_MAX = 35, FLY_INTERVAL = 1.5, BH_RANGE = 140, BH_MAX = 45, BH_TICK = 0.15,
+    FLY_MAX = 40, FLY_INTERVAL = 1.2, BH_RANGE = 140, BH_MAX = 45, BH_TICK = 0.15,
+    CANNON_RANGE = 90, CANNON_MAX = 12, CANNON_POWER = 140, CANNON_TICK = 0.2,
+    LOOT_SPAWN_WAIT = 8,
 }
+local MUSIC_SAVE = "tau_music_history.json"
+
 
 local UI = {}
 local gC, hC, fC
@@ -425,9 +429,9 @@ do
     UI.RefB = mkB(tc, "Refresh players", 170, Color3.fromRGB(45, 45, 58))
 
     -- Extra
-    local P5 = mkPage(Content, "Extra", 800)
+    local P5 = mkPage(Content, "Extra", 860)
     UI.Pages.Extra = P5
-    local xc = mkCard(P5, 4, 780)
+    local xc = mkCard(P5, 4, 820)
     mkL(xc, "【Features】", 6, Color3.fromRGB(140, 200, 255))
     UI.AFK_tr, UI.AFK_th = mkTog(xc, "Anti-AFK", 26, true)
     UI.God_tr, UI.God_th = mkTog(xc, "God Mode", 52, false)
@@ -435,11 +439,12 @@ do
     UI.Fly_tr, UI.Fly_th = mkTog(xc, "Debris Fly (high launch)", 104, false)
     UI.Boat_tr, UI.Boat_th = mkTog(xc, "Boat / Yacht Fly", 130, false)
     UI.BH_tr, UI.BH_th = mkTog(xc, "Black Hole (toggle)", 156, false)
-    UI.Spd_tr, UI.Spd_th = mkTog(xc, "WalkSpeed", 182, false)
-    UI.SpdL = mkL(xc, "Speed: 16", 210)
+    UI.Can_tr, UI.Can_th = mkTog(xc, "Debris Cannon", 182, false)
+    UI.Spd_tr, UI.Spd_th = mkTog(xc, "WalkSpeed", 208, false)
+    UI.SpdL = mkL(xc, "Speed: 16", 236)
     local SpdDn = Instance.new("TextButton")
     SpdDn.Size = UDim2.new(0, 80, 0, 24)
-    SpdDn.Position = UDim2.new(0, 10, 0, 230)
+    SpdDn.Position = UDim2.new(0, 10, 0, 256)
     SpdDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
     SpdDn.Text = "Speed-4"
     SpdDn.TextColor3 = Color3.new(1, 1, 1)
@@ -450,7 +455,7 @@ do
     UI.SpdDn = SpdDn
     local SpdUp = Instance.new("TextButton")
     SpdUp.Size = UDim2.new(0, 80, 0, 24)
-    SpdUp.Position = UDim2.new(0, 100, 0, 230)
+    SpdUp.Position = UDim2.new(0, 100, 0, 256)
     SpdUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
     SpdUp.Text = "Speed+4"
     SpdUp.TextColor3 = Color3.new(1, 1, 1)
@@ -459,11 +464,11 @@ do
     SpdUp.Parent = xc
     Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
     UI.SpdUp = SpdUp
-    UI.SpecB = mkB(xc, "Spectate", 268, Color3.fromRGB(40, 90, 120))
-    mkL(xc, "【Music (max 30)】", 308, Color3.fromRGB(140, 200, 255))
+    UI.SpecB = mkB(xc, "Spectate", 290, Color3.fromRGB(40, 90, 120))
+    mkL(xc, "【Music (max 30)】", 330, Color3.fromRGB(140, 200, 255))
     local MusicIdBox = Instance.new("TextBox")
     MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
-    MusicIdBox.Position = UDim2.new(0, 10, 0, 328)
+    MusicIdBox.Position = UDim2.new(0, 10, 0, 350)
     MusicIdBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
     MusicIdBox.PlaceholderText = "Sound ID"
     MusicIdBox.Text = ""
@@ -477,7 +482,7 @@ do
     UI.MusicIdBox = MusicIdBox
     local MusicNameBox = Instance.new("TextBox")
     MusicNameBox.Size = UDim2.new(1, -20, 0, 24)
-    MusicNameBox.Position = UDim2.new(0, 10, 0, 356)
+    MusicNameBox.Position = UDim2.new(0, 10, 0, 378)
     MusicNameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
     MusicNameBox.PlaceholderText = "Name"
     MusicNameBox.Text = ""
@@ -489,11 +494,11 @@ do
     MusicNameBox.Parent = xc
     Instance.new("UICorner", MusicNameBox).CornerRadius = UDim.new(0, 6)
     UI.MusicNameBox = MusicNameBox
-    UI.AddMusicB = mkB(xc, "Add & play", 386, Color3.fromRGB(50, 120, 80))
-    UI.RestoreMusicB = mkB(xc, "Restore music", 416, Color3.fromRGB(90, 70, 50))
+    UI.AddMusicB = mkB(xc, "Add & play", 408, Color3.fromRGB(50, 120, 80))
+    UI.RestoreMusicB = mkB(xc, "Restore music", 438, Color3.fromRGB(90, 70, 50))
     local MusicListFrame = Instance.new("ScrollingFrame")
     MusicListFrame.Size = UDim2.new(1, -20, 0, 220)
-    MusicListFrame.Position = UDim2.new(0, 10, 0, 452)
+    MusicListFrame.Position = UDim2.new(0, 10, 0, 474)
     MusicListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
     MusicListFrame.BorderSizePixel = 0
     MusicListFrame.ScrollBarThickness = 4
@@ -883,9 +888,19 @@ local function doBlackHoleContinuous()
 end
 
 local function doFly()
+    local hrp = HRP()
+    local origin = hrp and hrp.Position or Vector3.zero
     local list = {}
-    for _, p in ipairs(workspace:GetDescendants()) do
-        if p:IsA("BasePart") and isDebrisPart(p) then table.insert(list, p) end
+    local parts
+    pcall(function() parts = workspace:GetPartBoundsInRadius(origin, 120) end)
+    if parts then
+        for _, p in ipairs(parts) do
+            if isDebrisPart(p) then table.insert(list, p) end
+        end
+    else
+        for _, p in ipairs(workspace:GetDescendants()) do
+            if p:IsA("BasePart") and isDebrisPart(p) then table.insert(list, p) end
+        end
     end
     local total = #list
     if total == 0 then return end
@@ -896,18 +911,38 @@ local function doFly()
         if p and p.Parent then
             pcall(function()
                 p.Anchored = false
-                local up = 140 + math.random() * 80
-                local sx = (math.random() - 0.5) * 40
-                local sz = (math.random() - 0.5) * 40
+                local up = 160 + math.random() * 90
+                local sx = (math.random() - 0.5) * 28
+                local sz = (math.random() - 0.5) * 28
                 p.AssemblyLinearVelocity = Vector3.new(sx, up, sz)
+                p.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*20, (math.random()-0.5)*20, (math.random()-0.5)*20)
                 local old = p:FindFirstChild("DebrisFly")
                 if old then old:Destroy() end
                 local bv = Instance.new("BodyVelocity")
                 bv.Name = "DebrisFly"
-                bv.MaxForce = Vector3.new(4e5, 4e5, 4e5)
-                bv.Velocity = Vector3.new(sx * 0.5, up, sz * 0.5)
+                bv.MaxForce = Vector3.new(5e5, 5e5, 5e5)
+                bv.Velocity = Vector3.new(sx * 0.4, up, sz * 0.4)
                 bv.Parent = p
-                task.delay(0.45, function() if bv and bv.Parent then bv:Destroy() end end)
+                task.delay(0.35 + math.random() * 0.25, function()
+                    if not p or not p.Parent then return end
+                    pcall(function()
+                        local oldBv = p:FindFirstChild("DebrisFly")
+                        if oldBv then oldBv:Destroy() end
+                        local dir = Vector3.new(math.random()-0.5, math.random()-0.2, math.random()-0.5)
+                        if dir.Magnitude < 0.1 then dir = Vector3.new(1, 0.5, 0) end
+                        dir = dir.Unit
+                        local power = 70 + math.random() * 90
+                        p.AssemblyLinearVelocity = dir * power + Vector3.new(0, 20 + math.random() * 40, 0)
+                        p.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*35, (math.random()-0.5)*35, (math.random()-0.5)*35)
+                        local boom = Instance.new("BodyVelocity")
+                        boom.Name = "DebrisBoom"
+                        boom.MaxForce = Vector3.new(3e5, 3e5, 3e5)
+                        boom.Velocity = dir * (power * 0.7)
+                        boom.Parent = p
+                        task.delay(0.4, function() if boom and boom.Parent then boom:Destroy() end end)
+                    end)
+                end)
+                task.delay(0.5, function() if bv and bv.Parent then bv:Destroy() end end)
             end)
             n = n + 1
         end
@@ -916,6 +951,42 @@ local function doFly()
         if i == S.debrisCursor and n > 0 then break end
     end
     S.debrisCursor = i
+end
+
+local function doCannon()
+    local hrp = HRP()
+    if not hrp then return end
+    local look = hrp.CFrame.LookVector
+    local cam = workspace.CurrentCamera
+    if cam then look = cam.CFrame.LookVector end
+    local parts
+    pcall(function() parts = workspace:GetPartBoundsInRadius(hrp.Position, S.CANNON_RANGE) end)
+    if not parts then return end
+    local n = 0
+    for _, p in ipairs(parts) do
+        if n >= S.CANNON_MAX then break end
+        if isDebrisPart(p) then
+            pcall(function()
+                p.Anchored = false
+                local spread = Vector3.new((math.random()-0.5)*0.25, (math.random()-0.5)*0.15, (math.random()-0.5)*0.25)
+                local dir = look + spread
+                if dir.Magnitude < 0.1 then dir = look end
+                dir = dir.Unit
+                local spd = S.CANNON_POWER + math.random() * 40
+                p.AssemblyLinearVelocity = dir * spd + Vector3.new(0, 25, 0)
+                p.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*30, (math.random()-0.5)*30, (math.random()-0.5)*30)
+                local old = p:FindFirstChild("DebrisCannon")
+                if old then old:Destroy() end
+                local bv = Instance.new("BodyVelocity")
+                bv.Name = "DebrisCannon"
+                bv.MaxForce = Vector3.new(4e5, 4e5, 4e5)
+                bv.Velocity = dir * (spd * 0.85)
+                bv.Parent = p
+                task.delay(0.35, function() if bv and bv.Parent then bv:Destroy() end end)
+            end)
+            n = n + 1
+        end
+    end
 end
 
 local function refreshBoatCache()
@@ -968,6 +1039,37 @@ local function doBoatFly()
             S.boatCache[model] = nil
         end
     end
+end
+
+
+local function saveMusicHistory()
+    pcall(function()
+        if not writefile then return end
+        local lines = {}
+        for _, item in ipairs(S.musicHistory) do
+            local name = tostring(item.name or "Track"):gsub("|", "/")
+            local id = tostring(item.id or "")
+            if id ~= "" then table.insert(lines, name .. "|" .. id) end
+        end
+        writefile(MUSIC_SAVE, table.concat(lines, "\n"))
+    end)
+end
+
+local function loadMusicHistory()
+    pcall(function()
+        if not (isfile and readfile) then return end
+        if not isfile(MUSIC_SAVE) then return end
+        local raw = readfile(MUSIC_SAVE)
+        if not raw or raw == "" then return end
+        S.musicHistory = {}
+        for line in string.gmatch(raw, "[^\r\n]+") do
+            local name, id = line:match("^(.-)|(.+)$")
+            if id and id ~= "" then
+                table.insert(S.musicHistory, {name = (name and name ~= "" and name) or "Track", id = id})
+            end
+        end
+        while #S.musicHistory > S.MAX_HISTORY do table.remove(S.musicHistory) end
+    end)
 end
 
 local function changeGameMusic(id)
@@ -1046,6 +1148,7 @@ local function refreshMusicList()
             click()
             table.remove(S.musicHistory, i)
             refreshMusicList()
+            saveMusicHistory()
         end)
         y = y + 30
     end
@@ -1066,6 +1169,7 @@ local function addToHistory(name, id)
     table.insert(S.musicHistory, 1, {name = name, id = id})
     while #S.musicHistory > S.MAX_HISTORY do table.remove(S.musicHistory) end
     refreshMusicList()
+    saveMusicHistory()
 end
 
 local function enableNoInjury()
@@ -1202,20 +1306,44 @@ local function getObj()
     return ok and t or nil
 end
 
+local function isLobbyText(t)
+    if not t or #t < 3 then return true end
+    local lo = string.lower(t)
+    return lo:find("intermission") ~= nil
+        or lo:find("voting") ~= nil
+        or lo:find("vote") ~= nil
+        or lo:find("waiting for") ~= nil
+        or lo:find("waiting players") ~= nil
+end
+
 local function markEnter()
     if S.entered then return end
     S.entered = true
     S.enterT = tick()
-    S.rejSt = "In map, checking loot..."
+    S.firstChk = false
+    S.rejSt = "Map loaded, waiting for loot spawn..."
 end
 
 local function checkEnter()
     local ot = getObj()
-    if not ot or #ot < 3 then return end
-    local lo = string.lower(ot)
-    if not lo:find("intermission") and not lo:find("voting") and not lo:find("vote") then
-        markEnter()
+    if not ot then
+        S.rejSt = "Waiting for vote / map..."
+        return
     end
+    local lo = string.lower(ot)
+    -- Still in intermission or map vote: do NOT start no-frag logic
+    if isLobbyText(ot) then
+        if S.entered then
+            -- Round ended / back to lobby
+            S.entered = false
+            S.firstChk = false
+            S.alerting = false
+        end
+        S.rejSt = "Waiting for vote / map..."
+        return
+    end
+    -- In-round objective text → map is up
+    markEnter()
     if lo:find("tartarus") then
         if not S.tart then
             S.tart = true
@@ -1237,11 +1365,21 @@ local function checkEnter()
 end
 
 local function checkFirst()
-    if not C.Rej then S.rejSt = "Off" return end
+    if not C.Rej then
+        S.rejSt = "Off"
+        return
+    end
     if S.firstChk or S.alerting then return end
-    if not S.entered then S.rejSt = "Waiting for map..." return end
-    local left = math.ceil(8 - (tick() - S.enterT))
-    if left > 0 then S.rejSt = "Check in " .. left .. "s" return end
+    if not S.entered then
+        S.rejSt = "Waiting for vote / map..."
+        return
+    end
+    local wait = S.LOOT_SPAWN_WAIT or 8
+    local left = math.ceil(wait - (tick() - S.enterT))
+    if left > 0 then
+        S.rejSt = "Map ready, loot check in " .. left .. "s"
+        return
+    end
     S.firstChk = true
     scan()
     local fr = S.mapC.Fragment or cntF()
@@ -1381,6 +1519,7 @@ local function applyUI()
     setTog(UI.Fly_tr, UI.Fly_th, C.Fly)
     setTog(UI.Boat_tr, UI.Boat_th, C.BoatFly)
     setTog(UI.BH_tr, UI.BH_th, C.BlackHole)
+    setTog(UI.Can_tr, UI.Can_th, C.Cannon)
     setTog(UI.Spd_tr, UI.Spd_th, C.SpdOn)
     setTog(UI.ESP_tr, UI.ESP_th, C.ESP)
     setTog(UI.Key_tr, UI.Key_th, C.Key)
@@ -1513,6 +1652,10 @@ task.spawn(function()
                 S.tBH = now
                 doBlackHoleContinuous()
             end
+            if C.Cannon and now - S.tCannon >= S.CANNON_TICK then
+                S.tCannon = now
+                doCannon()
+            end
             if C.Fly and now - S.tFly >= S.FLY_INTERVAL then
                 S.tFly = now
                 doFly()
@@ -1557,7 +1700,7 @@ UI.RJ_tr.MouseButton1Click:Connect(function()
         S.entered = false
         S.enterT = 0
         S.alerting = false
-        S.rejSt = "Waiting for map..."
+        S.rejSt = "Waiting for vote / map..."
     else
         S.rejSt = "Off"
     end
@@ -1595,6 +1738,12 @@ UI.BH_tr.MouseButton1Click:Connect(function()
     C.BlackHole = not C.BlackHole
     setTog(UI.BH_tr, UI.BH_th, C.BlackHole)
     N(C.BlackHole and "Black hole on" or "Black hole off")
+end)
+UI.Can_tr.MouseButton1Click:Connect(function()
+    click()
+    C.Cannon = not C.Cannon
+    setTog(UI.Can_tr, UI.Can_th, C.Cannon)
+    N(C.Cannon and "Cannon on" or "Cannon off")
 end)
 UI.Spd_tr.MouseButton1Click:Connect(function() click() C.SpdOn = not C.SpdOn applySpd() applyUI() end)
 UI.ESP_tr.MouseButton1Click:Connect(function()
@@ -1656,5 +1805,8 @@ do
     end)
 end
 
+loadMusicHistory()
+refreshMusicList()
 applyUI()
-print("[TAU] ready (register-safe)")
+print("[TAU] ready FULL (cannon + music + map-safe rej)")
+
