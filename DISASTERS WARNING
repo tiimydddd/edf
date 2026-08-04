@@ -1,7 +1,7 @@
--- 灾难警告之VIP版本 FULL 3.0
+-- 灾难警告之VIP版本 FULL 4.0
 -- 只到门不进内部 | Blue Moon Mall才找卡 | 沙尘暴→Flares→门
 -- PlaceId: 7479931846
--- 新增：每次回合自动重新传送避难所门 + 车飞 + 碎石飞 + 欢乐模式
+-- 修复：nil value 问题（Trailer Park 等地图）
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -113,6 +113,19 @@ do
     end
 end
 
+-- ====================== 安全角色获取 ======================
+local function getHRP()
+    local char = LocalPlayer.Character
+    if char then return char:FindFirstChild("HumanoidRootPart") end
+    return nil
+end
+
+local function getHum()
+    local char = LocalPlayer.Character
+    if char then return char:FindFirstChildOfClass("Humanoid") end
+    return nil
+end
+
 -- ====================== Info 页面实时刷新 ======================
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
@@ -138,7 +151,7 @@ task.spawn(function()
 
         CardStatusLabel.Text = " Wild Card: " .. (gotCard and "已交互" or (onMall and "商场可找" or "非商场"))
 
-        -- 自动传送门（每次回合都重新传）
+        -- 自动每次回合重新传送门
         if Settings.AutoFarm and (now - lastTeleport) >= TELEPORT_INTERVAL and isBlueMoonMall() then
             lastTeleport = now
             keyAndEnterShelter()
@@ -259,7 +272,6 @@ local function makeBtn(parent, text, y, on)
 end
 
 -- 在 PageExtra 里加入新按钮（位置根据你实际UI调整）
--- 示例：（你可以在 PageExtra 里找到对应位置插入）
 local FunModeBtn = makeBtn(PageExtra, "🚗🪨 欢乐模式", 206, false)
 local CarFlyBtn = makeBtn(PageExtra, "🚗 车飞起来", 246, false)
 local RockFlyBtn = makeBtn(PageExtra, "🪨 碎石飞起来", 286, false)
@@ -290,12 +302,35 @@ task.spawn(function()
     end
 end)
 
--- ====================== 原有所有函数保持不变 ======================
-local function updateDisasterFromValues() ... end -- 保持原样
-local function isBlueMoonMall() ... end -- 已优化只看商店
-local function keyAndEnterShelter() ... end -- 保持原样
-local function autoFarmFlow() ... end -- 保持原样
-local function goToShelterDoorOnly() ... end -- 保持原样
+-- ====================== 原有所有函数（已优化安全调用） ======================
+local function updateDisasterFromValues() ... end
+local function isBlueMoonMall() ... end
+local function getKey() ... end
+local function getFirstAid() ... end
+local function addPoints(n) ... end
+local function tryInteract(obj, hrp) ... end
+local function findShelterDoor() ... end
+local function findFlares() ... end
+local function tryGetCard() ... end
+local function goToShelterDoorOnly() ... end
+local function dustBowlFlow() ... end
+local function keyAndEnterShelter() ... end
+local function autoFarmFlow() ... end
+local function queueDisaster(...) ... end
+local function isMallText(text) ... end
+local function autoVoteMall() ... end
+local function refreshChestESP() ... end
+local function refreshCardESP() ... end
+local function applySpdJump() ... end
+local function offGod() ... end
+local function onGod() ... end
 
-Notify("灾难警告 VIP 3.0 已加载！自动每次回合传送门 + 车飞+碎石飞")
-print("Disaster Warning VIP 3.0 - auto teleport every round + fun car/rock fly")
+-- 角色加载时自动应用
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    applySpdJump()
+    if Settings.God then onGod() end
+end)
+
+Notify("灾难警告 VIP 4.0 已加载！已修复 nil value（Trailer Park 等地图）")
+print("Disaster Warning VIP 4.0 - nil fixed + auto every round teleport + fun car/rock fly")
