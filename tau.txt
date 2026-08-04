@@ -17,7 +17,7 @@ local C = {
     En = false, OnlyF = true, FA = false, FAShel = true, AFK = true,
     God = false, Fly = false, Rej = true, ESP = true,
     SpdOn = false, Spd = 16, Key = false, Ext = false, Bat = false,
-    NoInjury = false, BoatFly = false, BlackHole = false, Cannon = false
+    NoInjury = false, BoatFly = false, BlackHole = false, Cannon = false, BreakWin = false, WinAll = false
 }
 
 local NAMES = {
@@ -27,13 +27,14 @@ local NAMES = {
     Ext = {"Fire Extinguisher", "Extinguisher", "灭火器"},
     Bat = {"Bat", "BaseballBat", "棒球棒"},
     Shel = {"Shelter", "Bunker", "Underground", "ShelterEntrance", "ShelterDoor", "Entrance", "避难所", "ControlRoom", "Control Room"},
+    Window = {"Window", "Glass", "Pane", "WindowPane", "WindowGlass", "GlassPane", "Shatter", "窗户", "玻璃", "窗", "窗框"},
 }
 
 local S = {
     myF = 0, gotG = false,
     kF = {}, kG = {}, kE = {},
     mapC = {Fragment = 0, Glasses = 0, Key = 0, Ext = 0, Bat = 0},
-    tScan = 0, tShel = 0, tHeavy = 0, tFly = 0, tEsp = 0, tBoat = 0, tInjuryGui = 0, tBH = 0, tBoatScan = 0, tCannon = 0,
+    tScan = 0, tShel = 0, tHeavy = 0, tFly = 0, tEsp = 0, tBoat = 0, tInjuryGui = 0, tBH = 0, tBoatScan = 0, tCannon = 0, tWin = 0,
     isMin = false, isSpec = false, tart = false, tartarusActive = false,
     currentMode = "Unknown",
     firstChk = false, rejSt = "Waiting for map...", alerting = false, entered = false, enterT = 0,
@@ -46,6 +47,7 @@ local S = {
     LOOT_SPAWN_WAIT = 8,
 }
 local MUSIC_SAVE = "tau_music_history.json"
+local lockedMusicId = nil
 
 
 local UI = {}
@@ -429,9 +431,9 @@ do
     UI.RefB = mkB(tc, "Refresh players", 170, Color3.fromRGB(45, 45, 58))
 
     -- Extra
-    local P5 = mkPage(Content, "Extra", 860)
+    local P5 = mkPage(Content, "Extra", 980)
     UI.Pages.Extra = P5
-    local xc = mkCard(P5, 4, 820)
+    local xc = mkCard(P5, 4, 940)
     mkL(xc, "【Features】", 6, Color3.fromRGB(140, 200, 255))
     UI.AFK_tr, UI.AFK_th = mkTog(xc, "Anti-AFK", 26, true)
     UI.God_tr, UI.God_th = mkTog(xc, "God Mode", 52, false)
@@ -440,11 +442,14 @@ do
     UI.Boat_tr, UI.Boat_th = mkTog(xc, "Boat / Yacht Fly", 130, false)
     UI.BH_tr, UI.BH_th = mkTog(xc, "Black Hole (toggle)", 156, false)
     UI.Can_tr, UI.Can_th = mkTog(xc, "Debris Cannon", 182, false)
-    UI.Spd_tr, UI.Spd_th = mkTog(xc, "WalkSpeed", 208, false)
-    UI.SpdL = mkL(xc, "Speed: 16", 236)
+    UI.WinB = mkB(xc, "破窗 OFF (需棒)", 208, Color3.fromRGB(45, 45, 58))
+    UI.WinAllB = mkB(xc, "范围: 仅附近", 240, Color3.fromRGB(45, 45, 58))
+    UI.SkyBoomB = mkB(xc, "Sky Boom (点一次)", 272, Color3.fromRGB(120, 60, 40))
+    UI.Spd_tr, UI.Spd_th = mkTog(xc, "WalkSpeed", 294, false)
+    UI.SpdL = mkL(xc, "Speed: 16", 322)
     local SpdDn = Instance.new("TextButton")
     SpdDn.Size = UDim2.new(0, 80, 0, 24)
-    SpdDn.Position = UDim2.new(0, 10, 0, 256)
+    SpdDn.Position = UDim2.new(0, 10, 0, 342)
     SpdDn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
     SpdDn.Text = "Speed-4"
     SpdDn.TextColor3 = Color3.new(1, 1, 1)
@@ -455,7 +460,7 @@ do
     UI.SpdDn = SpdDn
     local SpdUp = Instance.new("TextButton")
     SpdUp.Size = UDim2.new(0, 80, 0, 24)
-    SpdUp.Position = UDim2.new(0, 100, 0, 256)
+    SpdUp.Position = UDim2.new(0, 100, 0, 342)
     SpdUp.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
     SpdUp.Text = "Speed+4"
     SpdUp.TextColor3 = Color3.new(1, 1, 1)
@@ -464,11 +469,11 @@ do
     SpdUp.Parent = xc
     Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 6)
     UI.SpdUp = SpdUp
-    UI.SpecB = mkB(xc, "Spectate", 290, Color3.fromRGB(40, 90, 120))
-    mkL(xc, "【Music (max 30)】", 330, Color3.fromRGB(140, 200, 255))
+    UI.SpecB = mkB(xc, "Spectate", 376, Color3.fromRGB(40, 90, 120))
+    mkL(xc, "【Music (max 30)】", 410, Color3.fromRGB(140, 200, 255))
     local MusicIdBox = Instance.new("TextBox")
     MusicIdBox.Size = UDim2.new(1, -20, 0, 24)
-    MusicIdBox.Position = UDim2.new(0, 10, 0, 350)
+    MusicIdBox.Position = UDim2.new(0, 10, 0, 430)
     MusicIdBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
     MusicIdBox.PlaceholderText = "Sound ID"
     MusicIdBox.Text = ""
@@ -482,7 +487,7 @@ do
     UI.MusicIdBox = MusicIdBox
     local MusicNameBox = Instance.new("TextBox")
     MusicNameBox.Size = UDim2.new(1, -20, 0, 24)
-    MusicNameBox.Position = UDim2.new(0, 10, 0, 378)
+    MusicNameBox.Position = UDim2.new(0, 10, 0, 458)
     MusicNameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
     MusicNameBox.PlaceholderText = "Name"
     MusicNameBox.Text = ""
@@ -494,11 +499,11 @@ do
     MusicNameBox.Parent = xc
     Instance.new("UICorner", MusicNameBox).CornerRadius = UDim.new(0, 6)
     UI.MusicNameBox = MusicNameBox
-    UI.AddMusicB = mkB(xc, "Add & play", 408, Color3.fromRGB(50, 120, 80))
-    UI.RestoreMusicB = mkB(xc, "Restore music", 438, Color3.fromRGB(90, 70, 50))
+    UI.AddMusicB = mkB(xc, "Add & play", 488, Color3.fromRGB(50, 120, 80))
+    UI.RestoreMusicB = mkB(xc, "Restore music", 518, Color3.fromRGB(90, 70, 50))
     local MusicListFrame = Instance.new("ScrollingFrame")
     MusicListFrame.Size = UDim2.new(1, -20, 0, 220)
-    MusicListFrame.Position = UDim2.new(0, 10, 0, 474)
+    MusicListFrame.Position = UDim2.new(0, 10, 0, 554)
     MusicListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
     MusicListFrame.BorderSizePixel = 0
     MusicListFrame.ScrollBarThickness = 4
@@ -620,15 +625,148 @@ local function cntF()
     return n
 end
 
+local function isPlayerRelated(p)
+    if not p then return true end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ch = plr.Character
+        if ch and (p == ch or p:IsDescendantOf(ch)) then return true end
+    end
+    local mod = p:FindFirstAncestorOfClass("Model")
+    while mod do
+        if Players:FindFirstChild(mod.Name) then return true end
+        if mod:FindFirstChildOfClass("Humanoid") then return true end
+        local n = mod.Name:lower()
+        if n:find("character") or n:find("dummy") or n:find("npc") or n:find("rig") then return true end
+        mod = mod.Parent and mod.Parent:FindFirstAncestorOfClass("Model")
+    end
+    if p:IsA("BasePart") then
+        if p:FindFirstAncestorOfClass("Tool") then return true end
+        if p:FindFirstAncestorOfClass("Accessory") then return true end
+        if p.Name == "HumanoidRootPart" or p.Name == "Torso" or p.Name == "UpperTorso"
+            or p.Name == "Head" or p.Name:find("Arm") or p.Name:find("Leg")
+            or p.Name:find("Hand") or p.Name:find("Foot") then
+            return true
+        end
+    end
+    return false
+end
+
+local function nearAnyPlayer(pos, minDist)
+    minDist = minDist or 14
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ch = plr.Character
+        local h = ch and ch:FindFirstChild("HumanoidRootPart")
+        if h and (h.Position - pos).Magnitude < minDist then
+            return true
+        end
+    end
+    return false
+end
+
 local function isDebrisPart(p)
     if not p or not p:IsA("BasePart") then return false end
     if p.Anchored then return false end
     if p.AssemblyMass < 0.5 then return false end
-    local char = LP.Character
-    if char and p:IsDescendantOf(char) then return false end
+    if p.AssemblyMass > 800 then return false end -- 太重易把人撞飞
+    if isPlayerRelated(p) then return false end
     if isF(p) or (p.Parent and isF(p.Parent)) then return false end
     if isG(p) or (p.Parent and isG(p.Parent)) then return false end
+    -- 离任何人太近的散件不处理（避免碰撞把人弹飞）
+    if nearAnyPlayer(p.Position, 12) then return false end
     return true
+end
+
+local function safeLaunchPart(p, velocity)
+    if not isDebrisPart(p) then return end
+    pcall(function()
+        p.Anchored = false
+        p.CanCollide = false -- 关键后不撞人
+        p.AssemblyLinearVelocity = velocity
+        task.delay(1.2, function()
+            if p and p.Parent then
+                pcall(function() p.CanCollide = true end)
+            end
+        end)
+    end)
+end
+
+
+local function hasBat()
+    local function check(parent)
+        if not parent then return false end
+        for _, o in ipairs(parent:GetChildren()) do
+            if o:IsA("Tool") and inL(o.Name, NAMES.Bat) then return true end
+        end
+        return false
+    end
+    return check(LP.Character) or check(LP:FindFirstChild("Backpack"))
+end
+
+local function smashPart(o)
+    if not o or not o:IsA("BasePart") then return false end
+    if isPlayerRelated(o) then return false end
+    pcall(function()
+        o.Anchored = false
+        o.CanCollide = false
+        o.CanQuery = false
+        o.AssemblyLinearVelocity = Vector3.new(
+            (math.random() - 0.5) * 60,
+            30 + math.random() * 40,
+            (math.random() - 0.5) * 60
+        )
+        o.AssemblyAngularVelocity = Vector3.new(
+            (math.random() - 0.5) * 25,
+            (math.random() - 0.5) * 25,
+            (math.random() - 0.5) * 25
+        )
+        -- 常见碎裂表现
+        if o.Transparency < 0.5 then
+            -- keep visible while flying
+        end
+        for _, d in ipairs(o:GetDescendants()) do
+            if d:IsA("Weld") or d:IsA("WeldConstraint") or d:IsA("Motor6D") then
+                pcall(function() d:Destroy() end)
+            end
+        end
+    end)
+    return true
+end
+
+local function isWindowObj(o)
+    if not o then return false end
+    if inL(o.Name, NAMES.Window) then return true end
+    -- 父级叫 Window 的子玻璃
+    if o.Parent and inL(o.Parent.Name, NAMES.Window) then return true end
+    local mod = o:FindFirstAncestorOfClass("Model")
+    if mod and inL(mod.Name, NAMES.Window) then return true end
+    return false
+end
+
+local function breakWindows()
+    if not C.BreakWin then return end
+    if not hasBat() then return end
+    local hrp = HRP()
+    local origin = hrp and hrp.Position or Vector3.zero
+    local n = 0
+    local MAX = C.WinAll and 200 or 60
+    local RANGE = C.WinAll and 1e9 or 90  -- 附近 90 / 全图
+    for _, o in ipairs(workspace:GetDescendants()) do
+        if n >= MAX then break end
+        if o:IsA("BasePart") and isWindowObj(o) then
+            local dist = (o.Position - origin).Magnitude
+            if dist <= RANGE then
+                if smashPart(o) then n = n + 1 end
+            end
+        elseif o:IsA("Model") and inL(o.Name, NAMES.Window) then
+            for _, p in ipairs(o:GetDescendants()) do
+                if n >= MAX then break end
+                if p:IsA("BasePart") then
+                    local dist = (p.Position - origin).Magnitude
+                    if dist <= RANGE and smashPart(p) then n = n + 1 end
+                end
+            end
+        end
+    end
 end
 
 local function scan()
@@ -870,17 +1008,20 @@ local function doBlackHoleContinuous()
         if n >= S.BH_MAX then break end
         if isDebrisPart(p) then
             pcall(function()
+                if nearAnyPlayer(p.Position, 14) then return end
                 p.Anchored = false
+                p.CanCollide = false
                 local offset = p.Position - center
                 local dist = math.max(offset.Magnitude, 2)
+                if dist < 16 then return end -- 太近不吸，避免把自己卷起来
                 local inward = -offset.Unit
                 local tangent = Vector3.new(-offset.Z, 0, offset.X)
                 if tangent.Magnitude > 0.1 then tangent = tangent.Unit else tangent = Vector3.new(1, 0, 0) end
-                local pull = math.clamp(100 / dist, 10, 60)
-                local spin = math.clamp(45 / math.sqrt(dist), 8, 40)
-                local up = (dist < 20) and 28 or 8
+                local pull = math.clamp(70 / dist, 8, 40)
+                local spin = math.clamp(30 / math.sqrt(dist), 5, 28)
+                local up = 10
                 p.AssemblyLinearVelocity = inward * pull + tangent * spin + Vector3.new(0, up, 0)
-                p.AssemblyAngularVelocity = Vector3.new((math.random() - 0.5) * 10, (math.random() - 0.5) * 14, (math.random() - 0.5) * 10)
+                p.AssemblyAngularVelocity = Vector3.new((math.random() - 0.5) * 8, (math.random() - 0.5) * 10, (math.random() - 0.5) * 8)
             end)
             n = n + 1
         end
@@ -910,7 +1051,9 @@ local function doFly()
         local p = list[i]
         if p and p.Parent then
             pcall(function()
+                if nearAnyPlayer(p.Position, 12) then return end
                 p.Anchored = false
+                p.CanCollide = false
                 local up = 160 + math.random() * 90
                 local sx = (math.random() - 0.5) * 28
                 local sz = (math.random() - 0.5) * 28
@@ -953,6 +1096,46 @@ local function doFly()
     S.debrisCursor = i
 end
 
+
+local function doSkyBoom()
+    local hrp = HRP()
+    local origin = hrp and hrp.Position or Vector3.zero
+    local list = {}
+    local parts
+    pcall(function() parts = workspace:GetPartBoundsInRadius(origin, 150) end)
+    if parts then
+        for _, p in ipairs(parts) do
+            if isDebrisPart(p) then table.insert(list, p) end
+        end
+    end
+    local n = 0
+    for _, p in ipairs(list) do
+        if n >= 55 then break end
+        if nearAnyPlayer(p.Position, 12) then
+        else
+            pcall(function()
+                p.Anchored = false
+                p.CanCollide = false
+                local up = 180 + math.random() * 100
+                local sx = (math.random() - 0.5) * 30
+                local sz = (math.random() - 0.5) * 30
+                p.AssemblyLinearVelocity = Vector3.new(sx, up, sz)
+                task.delay(0.4 + math.random() * 0.2, function()
+                    if not p or not p.Parent then return end
+                    local dir = Vector3.new(math.random()-0.5, math.random()-0.15, math.random()-0.5)
+                    if dir.Magnitude < 0.1 then dir = Vector3.new(1, 0.4, 0) end
+                    dir = dir.Unit
+                    local power = 90 + math.random() * 100
+                    p.AssemblyLinearVelocity = dir * power + Vector3.new(0, 30, 0)
+                    p.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*40, (math.random()-0.5)*40, (math.random()-0.5)*40)
+                end)
+            end)
+            n = n + 1
+        end
+    end
+    N("Sky Boom x" .. n)
+end
+
 local function doCannon()
     local hrp = HRP()
     if not hrp then return end
@@ -967,7 +1150,9 @@ local function doCannon()
         if n >= S.CANNON_MAX then break end
         if isDebrisPart(p) then
             pcall(function()
+                if nearAnyPlayer(p.Position, 12) then return end
                 p.Anchored = false
+                p.CanCollide = false
                 local spread = Vector3.new((math.random()-0.5)*0.25, (math.random()-0.5)*0.15, (math.random()-0.5)*0.25)
                 local dir = look + spread
                 if dir.Magnitude < 0.1 then dir = look end
@@ -1046,6 +1231,7 @@ local function saveMusicHistory()
     pcall(function()
         if not writefile then return end
         local lines = {}
+        table.insert(lines, "LOCK|" .. tostring(lockedMusicId or ""))
         for _, item in ipairs(S.musicHistory) do
             local name = tostring(item.name or "Track"):gsub("|", "/")
             local id = tostring(item.id or "")
@@ -1062,13 +1248,47 @@ local function loadMusicHistory()
         local raw = readfile(MUSIC_SAVE)
         if not raw or raw == "" then return end
         S.musicHistory = {}
+        lockedMusicId = nil
+        local first = true
         for line in string.gmatch(raw, "[^\r\n]+") do
-            local name, id = line:match("^(.-)|(.+)$")
-            if id and id ~= "" then
-                table.insert(S.musicHistory, {name = (name and name ~= "" and name) or "Track", id = id})
+            if first and line:sub(1, 5) == "LOCK|" then
+                local lockId = line:sub(6)
+                if lockId ~= "" and lockId ~= "nil" then lockedMusicId = lockId end
+                first = false
+            else
+                first = false
+                local name, id = line:match("^(.-)|(.+)$")
+                if id and id ~= "" and name ~= "LOCK" then
+                    table.insert(S.musicHistory, {name = (name and name ~= "" and name) or "Track", id = id})
+                end
             end
         end
         while #S.musicHistory > S.MAX_HISTORY do table.remove(S.musicHistory) end
+    end)
+end
+
+local function collectMusicSounds()
+    -- 只处理游戏自带的这两个，不新建、不扫全库
+    local targets = {}
+    local musicFolder = SS:FindFirstChild("Music")
+    if not musicFolder then return targets end
+    local gamemode = musicFolder:FindFirstChild("Gamemode")
+    local bonus = musicFolder:FindFirstChild("BonusDisaster")
+    if gamemode and gamemode:IsA("Sound") then table.insert(targets, gamemode) end
+    if bonus and bonus:IsA("Sound") then table.insert(targets, bonus) end
+    return targets
+end
+
+local function applyLockedMusic()
+    if not lockedMusicId then return end
+    pcall(function()
+        for _, s in ipairs(collectMusicSounds()) do
+            if not S.originalIds[s] then S.originalIds[s] = s.SoundId end
+            if s.SoundId ~= lockedMusicId then
+                s.SoundId = lockedMusicId
+            end
+            -- 不 Play：只改 ID，让游戏自己播
+        end
     end)
 end
 
@@ -1078,31 +1298,30 @@ local function changeGameMusic(id)
         id = tostring(id or "")
         if id == "" or id == "0" then return end
         if not string.find(id, "rbxassetid://") then id = "rbxassetid://" .. id end
-        local targets = {}
-        local musicFolder = SS:FindFirstChild("Music")
-        if musicFolder then
-            local gamemode = musicFolder:FindFirstChild("Gamemode")
-            local bonus = musicFolder:FindFirstChild("BonusDisaster")
-            if gamemode and gamemode:IsA("Sound") then table.insert(targets, gamemode) end
-            if bonus and bonus:IsA("Sound") then table.insert(targets, bonus) end
+        lockedMusicId = id
+        local targets = collectMusicSounds()
+        if #targets == 0 then
+            N("Gamemode/BonusDisaster not found")
+            return
         end
-        if #targets == 0 then return end
         for _, s in ipairs(targets) do
             if not S.originalIds[s] then S.originalIds[s] = s.SoundId end
             s.SoundId = id
         end
-        N("Music updated")
+        N("Music locked (Gamemode/Bonus)")
         success = true
+        saveMusicHistory()
     end)
     return success
 end
 
 local function restoreGameMusic()
     pcall(function()
+        lockedMusicId = nil
         for s, oldId in pairs(S.originalIds) do
             if s and s.Parent then s.SoundId = oldId end
         end
-        N("Music restored")
+        N("Music restored (unlocked)")
     end)
 end
 
@@ -1520,6 +1739,14 @@ local function applyUI()
     setTog(UI.Boat_tr, UI.Boat_th, C.BoatFly)
     setTog(UI.BH_tr, UI.BH_th, C.BlackHole)
     setTog(UI.Can_tr, UI.Can_th, C.Cannon)
+    if UI.WinB then
+        UI.WinB.Text = C.BreakWin and "破窗 ON (需棒)" or "破窗 OFF (需棒)"
+        UI.WinB.BackgroundColor3 = C.BreakWin and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(45, 45, 58)
+    end
+    if UI.WinAllB then
+        UI.WinAllB.Text = C.WinAll and "范围: 全图" or "范围: 仅附近"
+        UI.WinAllB.BackgroundColor3 = C.WinAll and Color3.fromRGB(50, 120, 80) or Color3.fromRGB(45, 45, 58)
+    end
     setTog(UI.Spd_tr, UI.Spd_th, C.SpdOn)
     setTog(UI.ESP_tr, UI.ESP_th, C.ESP)
     setTog(UI.Key_tr, UI.Key_th, C.Key)
@@ -1656,6 +1883,10 @@ task.spawn(function()
                 S.tCannon = now
                 doCannon()
             end
+            if C.BreakWin and now - S.tWin >= 1.2 then
+                S.tWin = now
+                breakWindows()
+            end
             if C.Fly and now - S.tFly >= S.FLY_INTERVAL then
                 S.tFly = now
                 doFly()
@@ -1745,6 +1976,28 @@ UI.Can_tr.MouseButton1Click:Connect(function()
     setTog(UI.Can_tr, UI.Can_th, C.Cannon)
     N(C.Cannon and "Cannon on" or "Cannon off")
 end)
+UI.WinB.MouseButton1Click:Connect(function()
+    click()
+    C.BreakWin = not C.BreakWin
+    if UI.WinB then
+        UI.WinB.Text = C.BreakWin and "破窗 ON (需棒)" or "破窗 OFF (需棒)"
+        UI.WinB.BackgroundColor3 = C.BreakWin and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(45, 45, 58)
+    end
+    N(C.BreakWin and "破窗 ON（需要棒）" or "破窗 OFF")
+end)
+UI.WinAllB.MouseButton1Click:Connect(function()
+    click()
+    C.WinAll = not C.WinAll
+    if UI.WinAllB then
+        UI.WinAllB.Text = C.WinAll and "范围: 全图" or "范围: 仅附近"
+        UI.WinAllB.BackgroundColor3 = C.WinAll and Color3.fromRGB(50, 120, 80) or Color3.fromRGB(45, 45, 58)
+    end
+    N(C.WinAll and "破窗范围: 全图" or "破窗范围: 仅附近")
+end)
+UI.SkyBoomB.MouseButton1Click:Connect(function()
+    click()
+    doSkyBoom()
+end)
 UI.Spd_tr.MouseButton1Click:Connect(function() click() C.SpdOn = not C.SpdOn applySpd() applyUI() end)
 UI.ESP_tr.MouseButton1Click:Connect(function()
     click()
@@ -1807,6 +2060,19 @@ end
 
 loadMusicHistory()
 refreshMusicList()
+if lockedMusicId then
+    task.defer(function()
+        changeGameMusic(lockedMusicId)
+    end)
+end
+task.spawn(function()
+    while UI.Gui and UI.Gui.Parent do
+        if lockedMusicId then
+            applyLockedMusic()
+        end
+        task.wait(0.6)
+    end
+end)
 applyUI()
-print("[TAU] ready FULL (cannon + music + map-safe rej)")
+print("[TAU] ready FULL (win click fixed)")
 
