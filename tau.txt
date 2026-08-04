@@ -1,5 +1,6 @@
 -- TORNADO ALLEY ULTIMATE (register-safe)
 -- FULL | Cannon | Music save | No-frag only after map spawn
+-- Sky Boom fixed: CanCollide always TRUE (no fall into void)
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -680,7 +681,7 @@ local function safeLaunchPart(p, velocity)
     if not isDebrisPart(p) then return end
     pcall(function()
         p.Anchored = false
-        p.CanCollide = false -- 关键后不撞人
+        p.CanCollide = false -- 发射后不撞人
         p.AssemblyLinearVelocity = velocity
         task.delay(1.2, function()
             if p and p.Parent then
@@ -1111,23 +1112,34 @@ local function doSkyBoom()
     local n = 0
     for _, p in ipairs(list) do
         if n >= 55 then break end
-        if nearAnyPlayer(p.Position, 12) then
+        if nearAnyPlayer(p.Position, 14) then
+            -- 离人太近直接跳过
         else
             pcall(function()
                 p.Anchored = false
-                p.CanCollide = false
-                local up = 180 + math.random() * 100
-                local sx = (math.random() - 0.5) * 30
-                local sz = (math.random() - 0.5) * 30
+                p.CanCollide = true          -- 全程保持 TRUE，不关碰撞
+                local up = 140 + math.random() * 60
+                local sx = (math.random() - 0.5) * 18
+                local sz = (math.random() - 0.5) * 18
                 p.AssemblyLinearVelocity = Vector3.new(sx, up, sz)
-                task.delay(0.4 + math.random() * 0.2, function()
+                p.AssemblyAngularVelocity = Vector3.new(
+                    (math.random()-0.5)*20,
+                    (math.random()-0.5)*20,
+                    (math.random()-0.5)*20
+                )
+
+                task.delay(0.45 + math.random() * 0.15, function()
                     if not p or not p.Parent then return end
-                    local dir = Vector3.new(math.random()-0.5, math.random()-0.15, math.random()-0.5)
-                    if dir.Magnitude < 0.1 then dir = Vector3.new(1, 0.4, 0) end
+                    local dir = Vector3.new(math.random()-0.5, 0.35 + math.random()*0.4, math.random()-0.5)
+                    if dir.Magnitude < 0.1 then dir = Vector3.new(1, 0.5, 0) end
                     dir = dir.Unit
-                    local power = 90 + math.random() * 100
-                    p.AssemblyLinearVelocity = dir * power + Vector3.new(0, 30, 0)
-                    p.AssemblyAngularVelocity = Vector3.new((math.random()-0.5)*40, (math.random()-0.5)*40, (math.random()-0.5)*40)
+                    local power = 55 + math.random() * 45
+                    p.AssemblyLinearVelocity = dir * power + Vector3.new(0, 45 + math.random()*25, 0)
+                    p.AssemblyAngularVelocity = Vector3.new(
+                        (math.random()-0.5)*28,
+                        (math.random()-0.5)*28,
+                        (math.random()-0.5)*28
+                    )
                 end)
             end)
             n = n + 1
@@ -2074,5 +2086,4 @@ task.spawn(function()
     end
 end)
 applyUI()
-print("[TAU] ready FULL (win click fixed)")
-
+print("[TAU] ready FULL (Sky Boom CanCollide = TRUE)")
