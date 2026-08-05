@@ -45,7 +45,7 @@ local S = {
     debrisCursor = 1, MAX_HISTORY = 30, MAX_PICK = 3,
     FLY_MAX = 40, FLY_INTERVAL = 1.2, BH_RANGE = 140, BH_MAX = 45, BH_TICK = 0.15,
     CANNON_RANGE = 90, CANNON_MAX = 12, CANNON_POWER = 140, CANNON_TICK = 0.2,
-    LOOT_SPAWN_WAIT = 67,
+    LOOT_SPAWN_WAIT = 63,
 }
 local MUSIC_SAVE = "tau_music_history.json"
 local lockedMusicId = nil
