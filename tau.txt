@@ -1809,7 +1809,7 @@ task.spawn(function()
                 UI.StatusL.Text = "Status: Off"
                 UI.StatusL.TextColor3 = Color3.fromRGB(255, 100, 100)
             end
-            UI.FragL.Text = string.format("Fragments: map %d | me %d/5", fr, S.myF)
+            UI.FragL.Text = string.format("地圖血月碎片數量 %d | me %d/5", fr, S.myF)
             if S.myF >= 5 then
                 UI.FragFullL.Text = "Personal: 5/5 done"
                 UI.FragFullL.TextColor3 = Color3.fromRGB(100, 255, 120)
