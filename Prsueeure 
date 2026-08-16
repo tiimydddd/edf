@@ -1,0 +1,339 @@
+-- Pressure 大量修改器刷钱 UI（适配注入器）
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ==================== 配置区域 ====================
+local baseModifiers = {
+	"NightLightOff",
+	"DoorStuck",
+	"SquiddlePlus",
+	"Sitcom",
+	"NoodleLegs",
+	-- 继续加你想刷的修改器
+}
+
+local DEFAULT_REPEAT = 2000          -- 默认每个重复 2000 次（可自行改大）
+local LOBBY_ACCESS = "Friends"       -- 建议先 Friends 测试
+local LOBBY_SIZE = 1
+-- ==================================================
+
+-- 创建界面
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PressureFarmUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 440, 0, 560)
+mainFrame.Position = UDim2.new(0.5, -220, 0.5, -280)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(70, 70, 95)
+mainStroke.Thickness = 1.5
+mainStroke.Parent = mainFrame
+
+-- 标题
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 48)
+titleBar.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 12)
+titleCorner.Parent = titleBar
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 1, 0)
+title.BackgroundTransparency = 1
+title.Text = "Pressure 大量修改器刷钱"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 36, 0, 36)
+closeBtn.Position = UDim2.new(1, -42, 0, 6)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.Parent = titleBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+end)
+
+-- 修改器列表
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -30, 0, 280)
+scroll.Position = UDim2.new(0, 15, 0, 60)
+scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 6
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.Parent = mainFrame
+
+local scrollCorner = Instance.new("UICorner")
+scrollCorner.CornerRadius = UDim.new(0, 8)
+scrollCorner.Parent = scroll
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 6)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scroll
+
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 8)
+listPadding.PaddingLeft = UDim.new(0, 8)
+listPadding.PaddingRight = UDim.new(0, 8)
+listPadding.Parent = scroll
+
+local selected = {}
+for _, name in ipairs(baseModifiers) do
+	selected[name] = true
+end
+
+local function createRow(modName)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -16, 0, 36)
+	row.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+	row.BorderSizePixel = 0
+	row.Parent = scroll
+
+	local rowCorner = Instance.new("UICorner")
+	rowCorner.CornerRadius = UDim.new(0, 6)
+	rowCorner.Parent = row
+
+	local check = Instance.new("TextButton")
+	check.Size = UDim2.new(0, 28, 0, 28)
+	check.Position = UDim2.new(0, 6, 0.5, -14)
+	check.BackgroundColor3 = selected[modName] and Color3.fromRGB(50, 170, 80) or Color3.fromRGB(70, 70, 85)
+	check.Text = selected[modName] and "✓" or ""
+	check.TextColor3 = Color3.new(1, 1, 1)
+	check.Font = Enum.Font.GothamBold
+	check.TextSize = 16
+	check.Parent = row
+
+	local checkCorner = Instance.new("UICorner")
+	checkCorner.CornerRadius = UDim.new(0, 6)
+	checkCorner.Parent = check
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -50, 1, 0)
+	label.Position = UDim2.new(0, 42, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = modName
+	label.TextColor3 = Color3.fromRGB(230, 230, 240)
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 15
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
+
+	check.MouseButton1Click:Connect(function()
+		selected[modName] = not selected[modName]
+		check.BackgroundColor3 = selected[modName] and Color3.fromRGB(50, 170, 80) or Color3.fromRGB(70, 70, 85)
+		check.Text = selected[modName] and "✓" or ""
+		updateTotal()
+	end)
+end
+
+for _, name in ipairs(baseModifiers) do
+	createRow(name)
+end
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 16)
+end)
+
+-- 重复次数
+local repeatLabel = Instance.new("TextLabel")
+repeatLabel.Size = UDim2.new(0, 180, 0, 28)
+repeatLabel.Position = UDim2.new(0, 15, 0, 355)
+repeatLabel.BackgroundTransparency = 1
+repeatLabel.Text = "每个修改器重复次数："
+repeatLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+repeatLabel.Font = Enum.Font.Gotham
+repeatLabel.TextSize = 14
+repeatLabel.TextXAlignment = Enum.TextXAlignment.Left
+repeatLabel.Parent = mainFrame
+
+local repeatBox = Instance.new("TextBox")
+repeatBox.Size = UDim2.new(0, 110, 0, 32)
+repeatBox.Position = UDim2.new(0, 200, 0, 352)
+repeatBox.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+repeatBox.Text = tostring(DEFAULT_REPEAT)
+repeatBox.TextColor3 = Color3.new(1, 1, 1)
+repeatBox.Font = Enum.Font.Gotham
+repeatBox.TextSize = 16
+repeatBox.ClearTextOnFocus = false
+repeatBox.Parent = mainFrame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 6)
+boxCorner.Parent = repeatBox
+
+-- 总数
+local totalLabel = Instance.new("TextLabel")
+totalLabel.Size = UDim2.new(1, -30, 0, 28)
+totalLabel.Position = UDim2.new(0, 15, 0, 400)
+totalLabel.BackgroundTransparency = 1
+totalLabel.Text = "预计总修改器数量: 0"
+totalLabel.TextColor3 = Color3.fromRGB(100, 210, 255)
+totalLabel.Font = Enum.Font.GothamBold
+totalLabel.TextSize = 16
+totalLabel.TextXAlignment = Enum.TextXAlignment.Left
+totalLabel.Parent = mainFrame
+
+-- 状态
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -30, 0, 24)
+statusLabel.Position = UDim2.new(0, 15, 0, 435)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = ""
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 13
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = mainFrame
+
+-- 创建按钮
+local createBtn = Instance.new("TextButton")
+createBtn.Size = UDim2.new(1, -30, 0, 52)
+createBtn.Position = UDim2.new(0, 15, 1, -65)
+createBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 255)
+createBtn.Text = "创建大量修改器房间 (刷钱)"
+createBtn.TextColor3 = Color3.new(1, 1, 1)
+createBtn.Font = Enum.Font.GothamBold
+createBtn.TextSize = 18
+createBtn.Parent = mainFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 8)
+btnCorner.Parent = createBtn
+
+function updateTotal()
+	local count = 0
+	local repeatNum = tonumber(repeatBox.Text) or 0
+	for _, isOn in pairs(selected) do
+		if isOn then count += 1 end
+	end
+	totalLabel.Text = string.format("预计总修改器数量: %d", count * repeatNum)
+end
+
+repeatBox:GetPropertyChangedSignal("Text"):Connect(updateTotal)
+updateTotal()
+
+createBtn.MouseButton1Click:Connect(function()
+	local repeatNum = tonumber(repeatBox.Text)
+	if not repeatNum or repeatNum < 1 then
+		statusLabel.Text = "请输入有效的重复次数"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+		return
+	end
+
+	local selectedList = {}
+	for name, isOn in pairs(selected) do
+		if isOn then
+			table.insert(selectedList, name)
+		end
+	end
+
+	if #selectedList == 0 then
+		statusLabel.Text = "请至少勾选一个修改器"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+		return
+	end
+
+	local finalModifiers = {}
+	for i = 1, repeatNum do
+		for _, modName in ipairs(selectedList) do
+			table.insert(finalModifiers, modName)
+		end
+	end
+
+	statusLabel.Text = "正在发送大量修改器请求..."
+	statusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+
+	local events = ReplicatedStorage:FindFirstChild("Events")
+	if not events then
+		statusLabel.Text = "找不到 Events"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		return
+	end
+
+	local createLobbyEvent = events:FindFirstChild("CreateLobby")
+	if not createLobbyEvent then
+		statusLabel.Text = "找不到 CreateLobby"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		return
+	end
+
+	local args = {
+		{
+			LobbyAccess = LOBBY_ACCESS,
+			LobbySize = LOBBY_SIZE,
+			Gamemode = "Modifiers",
+			Modifiers = finalModifiers,
+		}
+	}
+
+	local success, result = pcall(function()
+		return createLobbyEvent:InvokeServer(unpack(args))
+	end)
+
+	if success then
+		statusLabel.Text = string.format("已发送！总修改器: %d", #finalModifiers)
+		statusLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+		print("[刷钱UI] 成功发送，总数量:", #finalModifiers)
+	else
+		statusLabel.Text = "发送失败: " .. tostring(result)
+		statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		warn("[刷钱UI] 失败:", result)
+	end
+end)
+
+-- 拖动
+local dragging = false
+local dragStart, startPos
+
+titleBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+	end
+end)
+
+titleBar.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+print("[Pressure 刷钱UI] 已加载，可设置大量重复次数")
