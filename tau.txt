@@ -436,8 +436,8 @@ Instance.new("UICorner", PlF).CornerRadius = UDim.new(0, 8)
 Instance.new("UIListLayout", PlF).Padding = UDim.new(0, 3)
 local RefB = mkB(tc, "刷新玩家", 170, Color3.fromRGB(45, 45, 58))
 
-local P5 = mkPage("Extra", 820)
-local xc = mkCard(P5, 4, 800)
+local P5 = mkPage("Extra", 920)
+local xc = mkCard(P5, 4, 900)
 mkL(xc, "【功能】", 6, Color3.fromRGB(140, 200, 255))
 local AFK_tr, AFK_th = mkTog(xc, "Anti-AFK", 26, true)
 local God_tr, God_th = mkTog(xc, "God Mode", 52, false)
@@ -520,9 +520,13 @@ MusicNameBox.Parent = xc
 Instance.new("UICorner", MusicNameBox).CornerRadius = UDim.new(0, 6)
 local AddMusicB = mkB(xc, "添加并更换", 464, Color3.fromRGB(50, 120, 80))
 local RestoreMusicB = mkB(xc, "恢复原来音乐", 494, Color3.fromRGB(90, 70, 50))
+mkL(xc, "【储存】", 530, Color3.fromRGB(140, 200, 255))
+local SaveB = mkB(xc, "保存设置 / 队列 / 音乐", 550, Color3.fromRGB(50, 100, 140))
+local LoadB = mkB(xc, "读取储存", 580, Color3.fromRGB(45, 70, 100))
+local SaveStatusL = mkL(xc, "储存: 未操作", 612, Color3.fromRGB(150, 150, 165))
 MusicListFrame = Instance.new("ScrollingFrame")
-MusicListFrame.Size = UDim2.new(1, -20, 0, 200)
-MusicListFrame.Position = UDim2.new(0, 10, 0, 530)
+MusicListFrame.Size = UDim2.new(1, -20, 0, 160)
+MusicListFrame.Position = UDim2.new(0, 10, 0, 636)
 MusicListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 MusicListFrame.BorderSizePixel = 0
 MusicListFrame.ScrollBarThickness = 4
@@ -1711,6 +1715,110 @@ local function startSpec()
     end
 end
 
+local SAVE_FILE = "tau_only_apple_save.json"
+local HS = game:GetService("HttpService")
+
+local function buildSaveData()
+    local q = {}
+    for id, v in pairs(modeQueue) do
+        if v then table.insert(q, id) end
+    end
+    return {
+        C = {
+            En = C.En, OnlyF = C.OnlyF, FA = C.FA, FAShel = C.FAShel, AFK = C.AFK,
+            Torn = C.Torn, God = C.God, Fly = C.Fly, Rej = C.Rej, ESP = C.ESP,
+            SpdOn = C.SpdOn, Spd = C.Spd, Key = C.Key, Ext = C.Ext, Bat = C.Bat,
+            NoInjury = C.NoInjury, BoatFly = C.BoatFly, Noclip = C.Noclip,
+            ModeQ = C.ModeQ, ModeHop = C.ModeHop,
+        },
+        TRANGE = TRANGE,
+        modeQueue = q,
+        musicHistory = musicHistory,
+    }
+end
+
+local function saveConfig()
+    local ok, err = pcall(function()
+        local data = buildSaveData()
+        local json = HS:JSONEncode(data)
+        if typeof(writefile) == "function" then
+            writefile(SAVE_FILE, json)
+        else
+            error("无 writefile（执行器不支持）")
+        end
+    end)
+    if ok then
+        if SaveStatusL then
+            SaveStatusL.Text = "储存: 已保存 " .. os.date("%H:%M:%S")
+            SaveStatusL.TextColor3 = Color3.fromRGB(100, 220, 140)
+        end
+        N("设置已保存")
+        return true
+    else
+        if SaveStatusL then
+            SaveStatusL.Text = "储存失败: " .. tostring(err)
+            SaveStatusL.TextColor3 = Color3.fromRGB(255, 120, 100)
+        end
+        N("保存失败: " .. tostring(err))
+        return false
+    end
+end
+
+local function loadConfig(silent)
+    local ok, err = pcall(function()
+        if typeof(readfile) ~= "function" then
+            error("无 readfile（执行器不支持）")
+        end
+        if typeof(isfile) == "function" and not isfile(SAVE_FILE) then
+            error("无存档文件")
+        end
+        local raw = readfile(SAVE_FILE)
+        if not raw or #raw < 2 then error("文件空") end
+        local data = HS:JSONDecode(raw)
+        if typeof(data) ~= "table" then error("格式错误") end
+        if typeof(data.C) == "table" then
+            for k, v in pairs(data.C) do
+                if C[k] ~= nil then C[k] = v end
+            end
+        end
+        if typeof(data.TRANGE) == "number" then
+            TRANGE = math.clamp(data.TRANGE, 20, 200)
+        end
+        modeQueue = {}
+        if typeof(data.modeQueue) == "table" then
+            for _, id in ipairs(data.modeQueue) do
+                if typeof(id) == "string" then modeQueue[id] = true end
+            end
+        end
+        if typeof(data.musicHistory) == "table" then
+            musicHistory = {}
+            for _, item in ipairs(data.musicHistory) do
+                if typeof(item) == "table" and item.id then
+                    table.insert(musicHistory, {
+                        name = tostring(item.name or "未命名"),
+                        id = tostring(item.id)
+                    })
+                end
+            end
+        end
+    end)
+    if ok then
+        if SaveStatusL then
+            SaveStatusL.Text = "储存: 已读取 " .. os.date("%H:%M:%S")
+            SaveStatusL.TextColor3 = Color3.fromRGB(100, 200, 255)
+        end
+        if not silent then N("已读取储存") end
+        return true
+    else
+        if SaveStatusL then
+            SaveStatusL.Text = "读取失败/无存档: " .. tostring(err)
+            SaveStatusL.TextColor3 = Color3.fromRGB(255, 160, 100)
+        end
+        if not silent then N("读取失败: " .. tostring(err)) end
+        return false
+    end
+end
+
 local function applyUI()
     setTog(FA_tr, FA_th, C.FA)
     setTog(SH_tr, SH_th, C.FAShel)
@@ -2034,6 +2142,19 @@ RestoreMusicB.MouseButton1Click:Connect(function()
     click()
     restoreGameMusic()
 end)
+SaveB.MouseButton1Click:Connect(function()
+    click()
+    saveConfig()
+end)
+LoadB.MouseButton1Click:Connect(function()
+    click()
+    if loadConfig(false) then
+        applyUI()
+        pcall(refreshMusicList)
+        pcall(updModeVIP)
+        pcall(refreshModeQStatus)
+    end
+end)
 ClB.MouseButton1Click:Connect(function()
     click()
     clrESP()
@@ -2061,4 +2182,17 @@ UIS.InputChanged:Connect(function(i)
 end)
 
 applyUI()
-print("[tau] FULL ready - Bones防骨折 + 加强模式检测 + Boat Fly")
+-- 启动时自动读档
+task.spawn(function()
+    task.wait(0.3)
+    if loadConfig(true) then
+        applyUI()
+        pcall(refreshMusicList)
+        pcall(updModeVIP)
+        pcall(refreshModeQStatus)
+        print("[tau] 已自动读取储存")
+    else
+        print("[tau] 无存档或读取失败（可手动保存）")
+    end
+end)
+print("[tau] FULL ready - 储存 + Queue + Bones防骨折 + 模式检测")
