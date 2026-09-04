@@ -127,10 +127,14 @@ Gui.IgnoreGuiInset = true
 Gui.Enabled = true
 
 pcall(function()
-    if syn and syn.protect_gui then syn.protect_gui(Gui) end
+    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+        syn.protect_gui(Gui)
+    end
 end)
 pcall(function()
-    if protect_gui then protect_gui(Gui) end
+    if typeof(protect_gui) == "function" then
+        protect_gui(Gui)
+    end
 end)
 
 do
@@ -793,7 +797,7 @@ end
 local function fireP(pr)
     if not pr then return end
     pcall(function()
-        if fireproximityprompt then
+        if typeof(fireproximityprompt) == "function" then
             fireproximityprompt(pr)
             task.wait(0.02)
             fireproximityprompt(pr, 1)
@@ -845,7 +849,7 @@ local function pickup(o, typ)
         end
         for _, bp in ipairs(parts) do
             pcall(function()
-                if firetouchinterest then
+                if typeof(firetouchinterest) == "function" then
                     firetouchinterest(h, bp, 0)
                     task.wait(0.015)
                     firetouchinterest(h, bp, 1)
@@ -853,7 +857,9 @@ local function pickup(o, typ)
             end)
         end
         local cd2 = o:FindFirstChildWhichIsA("ClickDetector", true)
-        if cd2 then pcall(fireclickdetector, cd2) end
+        if cd2 and typeof(fireclickdetector) == "function" then
+            pcall(fireclickdetector, cd2)
+        end
         task.wait(0.02)
     end
     task.delay(0.5, function()
@@ -2195,7 +2201,7 @@ HopB.MouseButton1Click:Connect(hop)
 JobB.MouseButton1Click:Connect(function()
     click()
     local id = tostring(game.JobId)
-    if setclipboard then
+    if typeof(setclipboard) == "function" then
         pcall(setclipboard, id)
         N("JobId已复制")
     else
@@ -2332,12 +2338,22 @@ UIS.InputChanged:Connect(function(i)
     end
 end)
 
-applyUI()
+do
+    local ok, err = pcall(applyUI)
+    if not ok then
+        warn("[tau] applyUI error:", err)
+        pcall(function()
+            SG:SetCore("SendNotification", {Title = "tau error", Text = tostring(err), Duration = 8})
+        end)
+    end
+end
 -- 启动时自动读档
 task.spawn(function()
     task.wait(0.3)
-    if loadConfig(true) then
-        applyUI()
+    local okLoad = false
+    pcall(function() okLoad = loadConfig(true) end)
+    if okLoad then
+        pcall(applyUI)
         pcall(refreshMusicList)
         pcall(updModeVIP)
         pcall(refreshModeQStatus)
@@ -2346,4 +2362,4 @@ task.spawn(function()
         print("[tau] 无存档或读取失败（可手动保存）")
     end
 end)
-print("[tau] FULL ready - 储存 + Queue + Bones防骨折 + 模式检测")
+print("[tau] FULL ready - nil-call fixed + 储存 + Queue")
