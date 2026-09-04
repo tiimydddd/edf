@@ -139,8 +139,15 @@ local function safeTime()
 end
 
 local function getUIParent()
-    -- 按兼容性顺序尝试
+    -- Arceus X / 手机：优先 PlayerGui（CoreGui 经常被拦或无效）
     local candidates = {}
+    pcall(function()
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then
+            pg = LP:WaitForChild("PlayerGui", 10)
+        end
+        if pg then table.insert(candidates, pg) end
+    end)
     pcall(function()
         if typeof(gethui) == "function" then
             local h = gethui()
@@ -149,10 +156,6 @@ local function getUIParent()
     end)
     pcall(function()
         if CoreGui then table.insert(candidates, CoreGui) end
-    end)
-    pcall(function()
-        local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
-        if pg then table.insert(candidates, pg) end
     end)
     return candidates
 end
