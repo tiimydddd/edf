@@ -21,7 +21,8 @@ local C = {
     NoInjury = false, BoatFly = false, Noclip = false,
     ModeQ = false, ModeHop = false
 }
-local modeQueue = {} -- 勾选的目标模式 id -> true
+-- 模式队列（有序排列，1 = 最高优先）
+local modeQueue = {} -- { "Tartarus", "Doomsday", ... }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
@@ -77,51 +78,101 @@ end
 
 -- 清理旧 UI
 pcall(function()
-    for _, root in ipairs({CoreGui, LP:FindFirstChild("PlayerGui")}) do
-        if root then
-            local o = root:FindFirstChild("tau_only_apple")
-            if o then o:Destroy() end
-        end
-    end
+    local roots = {CoreGui, LP:FindFirstChild("PlayerGui")}
     if typeof(gethui) == "function" then
-        local h = gethui()
-        if h then
-            local o = h:FindFirstChild("tau_only_apple")
-            if o then o:Destroy() end
+        local s, h = pcall(gethui)
+        if s and h then table.insert(roots, h) end
+    end
+    for _, root in ipairs(roots) do
+        if root then
+            for _, name in ipairs({"tau_only_apple", "tau_test"}) do
+                local o = root:FindFirstChild(name)
+                if o then pcall(function() o:Destroy() end) end
+            end
         end
     end
 end)
+
+local function safeTime()
+    local ok, t = pcall(function() return os.date("%H:%M:%S") end)
+    if ok and t then return t end
+    return string.format("%.0f", tick() % 100000)
+end
 
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "tau_only_apple"
 Gui.ResetOnSpawn = false
 Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Gui.DisplayOrder = 999999
+Gui.DisplayOrder = 2147483647
 Gui.IgnoreGuiInset = true
+Gui.Enabled = true
 pcall(function()
     if syn and syn.protect_gui then syn.protect_gui(Gui) end
 end)
+pcall(function()
+    if gethui and syn and syn.protect_gui then end
+end)
 
 do
+    local function tryParent(parent)
+        if not parent then return false end
+        local ok = pcall(function() Gui.Parent = parent end)
+        return ok and Gui.Parent ~= nil
+    end
     local ok = false
+    -- 1) gethui
     if typeof(gethui) == "function" then
         local s, hui = pcall(gethui)
-        if s and hui then
-            ok = pcall(function() Gui.Parent = hui end) and Gui.Parent ~= nil
+        if s and hui then ok = tryParent(hui) end
+    end
+    -- 2) CoreGui
+    if not ok then ok = tryParent(CoreGui) end
+    -- 3) PlayerGui
+    if not ok then
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then
+            pcall(function() pg = LP:WaitForChild("PlayerGui", 8) end)
         end
+        ok = tryParent(pg)
     end
-    if not ok then
-        ok = pcall(function() Gui.Parent = CoreGui end) and Gui.Parent ~= nil
-    end
-    if not ok then
-        local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
-        if pg then pcall(function() Gui.Parent = pg end) end
+    -- 4) 再试一次 CoreGui / gethui
+    if not ok then ok = tryParent(CoreGui) end
+    if not ok and typeof(gethui) == "function" then
+        local s, hui = pcall(gethui)
+        if s then ok = tryParent(hui) end
     end
     if not Gui.Parent then
-        warn("[tau] UI mount failed")
+        warn("[tau] UI mount failed - 通知仍可用")
+        pcall(function()
+            SG:SetCore("SendNotification", {
+                Title = "tau only apple",
+                Text = "UI挂载失败，请换执行器或重试",
+                Duration = 8
+            })
+        end)
+        -- 不 return，继续跑逻辑；但没有 Main 会在后面报错，所以仍 return
         return
     end
     print("[tau] UI Parent =", tostring(Gui.Parent))
+end
+
+-- 立刻放一个可见测试条，确认挂载成功
+do
+    local boot = Instance.new("TextLabel")
+    boot.Name = "tau_boot"
+    boot.Size = UDim2.new(0, 280, 0, 28)
+    boot.Position = UDim2.new(0, 20, 0, 8)
+    boot.BackgroundColor3 = Color3.fromRGB(30, 120, 60)
+    boot.Text = "tau UI loading..."
+    boot.TextColor3 = Color3.new(1, 1, 1)
+    boot.Font = Enum.Font.GothamBold
+    boot.TextSize = 12
+    boot.ZIndex = 100
+    boot.Parent = Gui
+    Instance.new("UICorner", boot).CornerRadius = UDim.new(0, 6)
+    task.delay(4, function()
+        if boot and boot.Parent then boot:Destroy() end
+    end)
 end
 
 local Big = Instance.new("TextLabel")
@@ -911,16 +962,42 @@ local modeVIPList = {
     {id = "Weeping Angel", name = "Weeping Angel 哭泣天使", cat = "特殊", col = Color3.fromRGB(180, 200, 255)},
 }
 
-local function refreshModeQStatus()
-    local names = {}
-    for _, m in ipairs(modeVIPList) do
-        if modeQueue[m.id] then table.insert(names, m.id) end
+local function queueIndex(id)
+    for i, v in ipairs(modeQueue) do
+        if v == id then return i end
     end
-    if #names == 0 then
-        ModeQStatus.Text = "队列: (空)  点击上方模式加入"
+    return nil
+end
+
+local function queueAdd(id)
+    if queueIndex(id) then return end
+    table.insert(modeQueue, id) -- 加到队尾
+end
+
+local function queueRemove(id)
+    local i = queueIndex(id)
+    if i then table.remove(modeQueue, i) end
+end
+
+local function queueMove(id, dir)
+    -- dir: -1 上移(更优先), +1 下移
+    local i = queueIndex(id)
+    if not i then return end
+    local j = i + dir
+    if j < 1 or j > #modeQueue then return end
+    modeQueue[i], modeQueue[j] = modeQueue[j], modeQueue[i]
+end
+
+local function refreshModeQStatus()
+    if #modeQueue == 0 then
+        ModeQStatus.Text = "队列: (空)  点模式加入 | 再点移除"
         ModeQStatus.TextColor3 = Color3.fromRGB(180, 180, 195)
     else
-        ModeQStatus.Text = "队列: " .. table.concat(names, " | ")
+        local parts = {}
+        for i, id in ipairs(modeQueue) do
+            table.insert(parts, i .. "." .. id)
+        end
+        ModeQStatus.Text = "排列: " .. table.concat(parts, " → ")
         ModeQStatus.TextColor3 = Color3.fromRGB(100, 220, 140)
     end
 end
@@ -928,12 +1005,16 @@ end
 local function isModeInQueue(mode)
     if not mode then return false end
     local lo = tostring(mode):lower()
-    for id in pairs(modeQueue) do
+    for _, id in ipairs(modeQueue) do
         if lo == id:lower() or lo:find(id:lower(), 1, true) then
             return true
         end
     end
     return false
+end
+
+local function getQueueRank(id)
+    return queueIndex(id) -- 1 = 最优先
 end
 
 local function updModeVIP()
@@ -966,9 +1047,10 @@ local function updModeVIP()
             y = y + 20
             for _, m in ipairs(arr) do
                 local isCur = (cur == m.id) or (cur:lower():find(m.id:lower(), 1, true) ~= nil)
-                local inQ = modeQueue[m.id] == true
-                local row = Instance.new("TextButton")
-                row.Size = UDim2.new(1, -6, 0, 22)
+                local rank = getQueueRank(m.id)
+                local inQ = rank ~= nil
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, -6, 0, 24)
                 if isCur then
                     row.BackgroundColor3 = Color3.fromRGB(55, 45, 30)
                 elseif inQ then
@@ -976,30 +1058,76 @@ local function updModeVIP()
                 else
                     row.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
                 end
-                local tag = ""
-                if isCur then tag = tag .. " [当前]" end
-                if inQ then tag = tag .. " [队列]" end
-                row.Text = (isCur and "  ► " or (inQ and "  ★ " or "    ")) .. m.name .. tag
-                row.TextColor3 = isCur and Color3.fromRGB(255, 220, 100) or (inQ and Color3.fromRGB(120, 255, 160) or m.col)
-                row.Font = (isCur or inQ) and Enum.Font.GothamBold or Enum.Font.Gotham
-                row.TextSize = 11
-                row.TextXAlignment = Enum.TextXAlignment.Left
                 row.Parent = ModeVIPF
                 Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+
+                local tag = ""
+                if isCur then tag = tag .. " [当前]" end
+                if inQ then tag = tag .. " [#" .. rank .. "]" end
+
+                local nameBtn = Instance.new("TextButton")
+                nameBtn.Size = UDim2.new(1, (inQ and -56 or -4), 1, 0)
+                nameBtn.Position = UDim2.new(0, 0, 0, 0)
+                nameBtn.BackgroundTransparency = 1
+                nameBtn.Text = (isCur and "  ► " or (inQ and ("  #" .. rank .. " ") or "    ")) .. m.name .. tag
+                nameBtn.TextColor3 = isCur and Color3.fromRGB(255, 220, 100) or (inQ and Color3.fromRGB(120, 255, 160) or m.col)
+                nameBtn.Font = (isCur or inQ) and Enum.Font.GothamBold or Enum.Font.Gotham
+                nameBtn.TextSize = 11
+                nameBtn.TextXAlignment = Enum.TextXAlignment.Left
+                nameBtn.Parent = row
+
                 local mid = m.id
-                row.MouseButton1Click:Connect(function()
+                nameBtn.MouseButton1Click:Connect(function()
                     click()
-                    if modeQueue[mid] then
-                        modeQueue[mid] = nil
+                    if queueIndex(mid) then
+                        queueRemove(mid)
                         N("队列移除: " .. mid)
                     else
-                        modeQueue[mid] = true
-                        N("队列加入: " .. mid)
+                        queueAdd(mid)
+                        N("队列加入 #" .. #modeQueue .. ": " .. mid)
                     end
                     refreshModeQStatus()
                     updModeVIP()
                 end)
-                y = y + 24
+
+                if inQ then
+                    local up = Instance.new("TextButton")
+                    up.Size = UDim2.new(0, 24, 0, 20)
+                    up.Position = UDim2.new(1, -52, 0.5, -10)
+                    up.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
+                    up.Text = "↑"
+                    up.TextColor3 = Color3.new(1, 1, 1)
+                    up.Font = Enum.Font.GothamBold
+                    up.TextSize = 12
+                    up.Parent = row
+                    Instance.new("UICorner", up).CornerRadius = UDim.new(0, 4)
+                    up.MouseButton1Click:Connect(function()
+                        click()
+                        queueMove(mid, -1)
+                        refreshModeQStatus()
+                        updModeVIP()
+                        N("上移: " .. mid)
+                    end)
+
+                    local dn = Instance.new("TextButton")
+                    dn.Size = UDim2.new(0, 24, 0, 20)
+                    dn.Position = UDim2.new(1, -26, 0.5, -10)
+                    dn.BackgroundColor3 = Color3.fromRGB(70, 50, 50)
+                    dn.Text = "↓"
+                    dn.TextColor3 = Color3.new(1, 1, 1)
+                    dn.Font = Enum.Font.GothamBold
+                    dn.TextSize = 12
+                    dn.Parent = row
+                    Instance.new("UICorner", dn).CornerRadius = UDim.new(0, 4)
+                    dn.MouseButton1Click:Connect(function()
+                        click()
+                        queueMove(mid, 1)
+                        refreshModeQStatus()
+                        updModeVIP()
+                        N("下移: " .. mid)
+                    end)
+                end
+                y = y + 26
             end
             y = y + 2
         end
@@ -1023,8 +1151,7 @@ local tModeHop = 0
 local function checkModeQueue()
     if not C.ModeQ then return end
     local hasAny = false
-    for _ in pairs(modeQueue) do hasAny = true break end
-    if not hasAny then return end
+    if #modeQueue == 0 then return end
     local cur = tostring(currentMode or "Unknown")
     -- 中场不算“打中”
     if cur == "Intermission" or cur == "Unknown" then return end
@@ -1720,8 +1847,8 @@ local HS = game:GetService("HttpService")
 
 local function buildSaveData()
     local q = {}
-    for id, v in pairs(modeQueue) do
-        if v then table.insert(q, id) end
+    for _, id in ipairs(modeQueue) do
+        table.insert(q, id)
     end
     return {
         C = {
@@ -1732,7 +1859,7 @@ local function buildSaveData()
             ModeQ = C.ModeQ, ModeHop = C.ModeHop,
         },
         TRANGE = TRANGE,
-        modeQueue = q,
+        modeQueue = q, -- 有序：1 = 最高优先
         musicHistory = musicHistory,
     }
 end
@@ -1749,7 +1876,7 @@ local function saveConfig()
     end)
     if ok then
         if SaveStatusL then
-            SaveStatusL.Text = "储存: 已保存 " .. os.date("%H:%M:%S")
+            SaveStatusL.Text = "储存: 已保存 " .. safeTime()
             SaveStatusL.TextColor3 = Color3.fromRGB(100, 220, 140)
         end
         N("设置已保存")
@@ -1787,7 +1914,9 @@ local function loadConfig(silent)
         modeQueue = {}
         if typeof(data.modeQueue) == "table" then
             for _, id in ipairs(data.modeQueue) do
-                if typeof(id) == "string" then modeQueue[id] = true end
+                if typeof(id) == "string" and not queueIndex(id) then
+                    table.insert(modeQueue, id)
+                end
             end
         end
         if typeof(data.musicHistory) == "table" then
@@ -1804,7 +1933,7 @@ local function loadConfig(silent)
     end)
     if ok then
         if SaveStatusL then
-            SaveStatusL.Text = "储存: 已读取 " .. os.date("%H:%M:%S")
+            SaveStatusL.Text = "储存: 已读取 " .. safeTime()
             SaveStatusL.TextColor3 = Color3.fromRGB(100, 200, 255)
         end
         if not silent then N("已读取储存") end
