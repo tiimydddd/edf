@@ -566,49 +566,66 @@ local function addESP(o, col)
     end)
 end
 
-local function scan()
-    for o in pairs(kF) do kF[o] = nil end
-    for o in pairs(kG) do kG[o] = nil end
+-- 全图扫描节流（很耗，少做）
+local lastFullScan = 0
+local function countKnown()
     local fc, gc = 0, 0
-    for _, o in ipairs(workspace:GetDescendants()) do
-        if isF(o) then kF[o] = true; fc = fc + 1
-        elseif isG(o) then kG[o] = true; gc = gc + 1 end
+    for o in pairs(kF) do
+        if o and o.Parent then fc = fc + 1 else kF[o] = nil end
+    end
+    for o in pairs(kG) do
+        if o and o.Parent then gc = gc + 1 else kG[o] = nil end
     end
     return fc, gc
+end
+
+local function fullScan()
+    -- 清理失效
+    for o in pairs(kF) do if not o or not o.Parent then kF[o] = nil end end
+    for o in pairs(kG) do if not o or not o.Parent then kG[o] = nil end end
+    for _, o in ipairs(workspace:GetDescendants()) do
+        if isF(o) then kF[o] = true
+        elseif isG(o) then kG[o] = true end
+    end
+    lastFullScan = tick()
+    return countKnown()
+end
+
+local function scan()
+    -- 多数时候只数已记录的，每 3 秒才全图扫一次
+    if tick() - lastFullScan >= 3 then
+        return fullScan()
+    end
+    return countKnown()
 end
 
 local function pickup(o, typ)
     if not o or not o.Parent then return end
     local key = tostring(o)
-    if tried[key] and tick() - tried[key] < 0.55 then return end
+    if tried[key] and tick() - tried[key] < 0.8 then return end
     tried[key] = tick()
     local h = HRP()
     if not h then return end
     local part = best(o)
     if not part then return end
-    local offs = {
-        Vector3.new(0, 2, 0), Vector3.new(0, 1.5, 1.5), Vector3.new(0, 1.5, -1.5),
-        Vector3.new(1.5, 1.5, 0), Vector3.new(-1.5, 1.5, 0),
-    }
+    -- 只试 2 个位置，减少卡顿
+    local offs = { Vector3.new(0, 2, 0), Vector3.new(0, 1.5, 2) }
     for _, off in ipairs(offs) do
         if not o.Parent then break end
         pcall(function() h.CFrame = part.CFrame + off end)
-        task.wait(0.03)
         local pr = o:FindFirstChildWhichIsA("ProximityPrompt", true)
         if pr and typeof(fireproximityprompt) == "function" then
             pcall(fireproximityprompt, pr)
-            pcall(fireproximityprompt, pr, 1)
         end
         if typeof(firetouchinterest) == "function" then
             pcall(function()
                 firetouchinterest(h, part, 0)
-                task.wait(0.02)
                 firetouchinterest(h, part, 1)
             end)
         end
-        task.wait(0.02)
+        task.wait(0.04)
     end
-    task.delay(0.5, function()
+    task.delay(0.4, function()
         if not o or not o.Parent then
             if typ == "Fragment" then
                 myF = math.min(5, myF + 1)
@@ -686,7 +703,10 @@ local function refPlrList()
     end
 end
 
+local lastItemRef = 0
 local function refItemList()
+    if tick() - lastItemRef < 0.8 then return end -- 防连点
+    lastItemRef = tick()
     for _, ch in ipairs(ItemF:GetChildren()) do
         if ch:IsA("TextButton") then ch:Destroy() end
     end
@@ -694,21 +714,29 @@ local function refItemList()
     local pos = h and h.Position or Vector3.zero
     local rows = {}
     local seen = {}
-    for _, o in ipairs(workspace:GetDescendants()) do
+    -- 优先用已缓存碎片/眼镜，再轻量扫名字匹配
+    local function addObj(o)
         local typ, col = itemType(o)
-        if typ then
-            local part = best(o)
-            if part and not seen[part] then
-                seen[part] = true
-                local d = (part.Position - pos).Magnitude
-                table.insert(rows, {o = o, part = part, typ = typ, col = col, d = d, name = o.Name})
-            end
+        if not typ then return end
+        local part = best(o)
+        if not part or seen[part] then return end
+        seen[part] = true
+        table.insert(rows, {part = part, typ = typ, col = col, d = (part.Position - pos).Magnitude, name = o.Name})
+    end
+    for o in pairs(kF) do if o and o.Parent then addObj(o) end end
+    for o in pairs(kG) do if o and o.Parent then addObj(o) end end
+    -- 补充钥匙等（限制遍历，不每帧）
+    for _, o in ipairs(workspace:GetDescendants()) do
+        if #rows >= 30 then break end
+        local n = o.Name
+        if inL(n, KeyN) or inL(n, ExtN) or inL(n, BatN) or inL(n, ShelN) then
+            addObj(o)
         end
     end
     table.sort(rows, function(a, b) return a.d < b.d end)
     local y = 0
     for i, r in ipairs(rows) do
-        if i > 40 then break end -- 防太多卡顿
+        if i > 25 then break end
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, -4, 0, 22)
         b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
@@ -807,10 +835,9 @@ workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
         if isF(o) then
             kF[o] = true
-            if C.Auto then task.wait(0.1) pickup(o, "Fragment") end
+            -- 不在这里立刻 pickup，交给主循环限速捡，避免卡顿
         elseif isG(o) then
             kG[o] = true
-            if C.Auto and not C.OnlyFrag then task.wait(0.1) pickup(o, "Glasses") end
         end
     end)
 end)
@@ -819,68 +846,88 @@ workspace.DescendantRemoving:Connect(function(o)
     kG[o] = nil
 end)
 
-local tScan, tShel, tEsp, tAfk, tMode = 0, 0, 0, 0, 0
+local tScan, tShel, tEsp, tAfk, tMode, tLoot = 0, 0, 0, 0, 0, 0
+local lastEspKey = ""
 task.spawn(function()
+    -- 启动时扫一次
+    pcall(fullScan)
     while Gui and Gui.Parent do
         pcall(function()
             local now = tick()
-            if now - tScan >= 0.5 then
+            -- UI 数字：1 秒更新
+            if now - tScan >= 1 then
                 tScan = now
                 local fc, gc = scan()
                 FragL.Text = string.format("碎片: 地图%d | 我%d/5", fc, myF)
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
-                if C.Auto then
-                    local h = HRP()
-                    local pos = h and h.Position or Vector3.zero
-                    local list = {}
-                    for o in pairs(kF) do
+            end
+            -- Auto 捡：每 0.9 秒最多捡 3 个最近的（不双遍）
+            if C.Auto and now - tLoot >= 0.9 then
+                tLoot = now
+                local h = HRP()
+                local pos = h and h.Position or Vector3.zero
+                local list = {}
+                for o in pairs(kF) do
+                    if o and o.Parent then
+                        local p = best(o)
+                        if p then table.insert(list, {o = o, d = (p.Position - pos).Magnitude}) end
+                    end
+                end
+                table.sort(list, function(a, b) return a.d < b.d end)
+                local n = 0
+                for _, d in ipairs(list) do
+                    if n >= 3 then break end
+                    pickup(d.o, "Fragment")
+                    n = n + 1
+                    task.wait(0.05)
+                end
+                if not C.OnlyFrag then
+                    for o in pairs(kG) do
                         if o and o.Parent then
-                            local p = best(o)
-                            if p then table.insert(list, {o = o, d = (p.Position - pos).Magnitude}) end
-                        end
-                    end
-                    table.sort(list, function(a, b) return a.d < b.d end)
-                    for _, d in ipairs(list) do
-                        pickup(d.o, "Fragment")
-                        task.wait(0.07)
-                    end
-                    for o in pairs(kF) do
-                        if o and o.Parent then
-                            tried[tostring(o)] = 0
-                            pickup(o, "Fragment")
-                            task.wait(0.05)
-                        end
-                    end
-                    if not C.OnlyFrag then
-                        for o in pairs(kG) do
-                            if o and o.Parent then
-                                pickup(o, "Glasses")
-                                task.wait(0.07)
-                            end
+                            pickup(o, "Glasses")
+                            break -- 眼镜一次一个
                         end
                     end
                 end
             end
-            if C.ESP and now - tEsp >= 1 then
+            -- ESP：2 秒刷新，数量不变则跳过重建
+            if C.ESP and now - tEsp >= 2 then
                 tEsp = now
-                clrESP()
-                for o in pairs(kF) do if o and o.Parent then addESP(o, Color3.fromRGB(255, 70, 70)) end end
-                for o in pairs(kG) do if o and o.Parent then addESP(o, Color3.fromRGB(80, 220, 220)) end end
+                local fc, gc = countKnown()
+                local key = fc .. ":" .. gc
+                if key ~= lastEspKey then
+                    lastEspKey = key
+                    clrESP()
+                    local n = 0
+                    for o in pairs(kF) do
+                        if o and o.Parent and n < 15 then
+                            addESP(o, Color3.fromRGB(255, 70, 70))
+                            n = n + 1
+                        end
+                    end
+                    for o in pairs(kG) do
+                        if o and o.Parent then
+                            addESP(o, Color3.fromRGB(80, 220, 220))
+                        end
+                    end
+                end
+            elseif not C.ESP then
+                lastEspKey = ""
             end
             if C.ShelAuto and now - tShel >= 30 then
                 tShel = now
                 toShel()
             end
-            if C.AFK and now - tAfk >= 30 then
+            if C.AFK and now - tAfk >= 45 then
                 tAfk = now
                 afk()
             end
-            if now - tMode >= 1.2 then
+            if now - tMode >= 2.5 then
                 tMode = now
                 detectMode()
             end
         end)
-        task.wait(0.15)
+        task.wait(0.25)
     end
 end)
 
@@ -890,4 +937,4 @@ task.spawn(function()
 end)
 
 print("[tau] TAB ready - 主页/传送/音乐/储存")
-N("已就绪 - 玩家/物品传送")
+N("已优化卡顿")
