@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -304,13 +304,14 @@ local StatusL = mkLabel(P1, 0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
 local FragL = mkLabel(P1, 18, "碎片: 地图0 | 我0/5")
 local GlassL = mkLabel(P1, 34, "眼镜: 未找到")
 local ModeL = mkLabel(P1, 50, "模式: Unknown")
-local Auto_tr, Auto_th = mkTog(P1, 74, "Auto Loot", false)
+local Auto_tr, Auto_th = mkTog(P1, 74, "Auto(仅碎片/眼镜)", false)
 local Only_tr, Only_th = mkTog(P1, 100, "只有碎片", true)
 local ESP_tr, ESP_th = mkTog(P1, 126, "ESP", true)
 local AFK_tr, AFK_th = mkTog(P1, 152, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(P1, 178, "定时去避难所", false)
-local ShelB = mkBtn(P1, 210, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(P1, 242, "换服", Color3.fromRGB(50, 90, 140))
+local Rej_tr, Rej_th = mkTog(P1, 204, "被踢/断线自动重进", true)
+local ShelB = mkBtn(P1, 234, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(P1, 266, "换服", Color3.fromRGB(50, 90, 140))
 
 
 local P2 = mkPage("传送")
@@ -327,7 +328,7 @@ Instance.new("UICorner", PlrF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", PlrF).Padding = UDim.new(0, 2)
 local RefPlrB = mkBtn(P2, 132, "刷新玩家列表", Color3.fromRGB(45, 45, 58))
 
-mkLabel(P2, 164, "物品检测 (点击传送)", Color3.fromRGB(200, 180, 100))
+mkLabel(P2, 164, "物品(点传送) 仅碎片/眼镜会自动捡", Color3.fromRGB(200, 180, 100))
 local ItemF = Instance.new("ScrollingFrame")
 ItemF.Size = UDim2.new(1, -4, 0, 90)
 ItemF.Position = UDim2.new(0, 2, 0, 182)
@@ -503,6 +504,7 @@ local function applyToggles()
     setTog(ESP_tr, ESP_th, C.ESP)
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
+    setTog(Rej_tr, Rej_th, C.Rejoin)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -714,33 +716,52 @@ local function refItemList()
     local pos = h and h.Position or Vector3.zero
     local rows = {}
     local seen = {}
-    -- 优先用已缓存碎片/眼镜，再轻量扫名字匹配
-    local function addObj(o)
-        local typ, col = itemType(o)
+    local function addObj(o, forceTyp, forceCol)
+        if not o or not o.Parent then return end
+        local typ, col = forceTyp, forceCol
+        if not typ then
+            typ, col = itemType(o)
+        end
         if not typ then return end
         local part = best(o)
         if not part or seen[part] then return end
         seen[part] = true
-        table.insert(rows, {part = part, typ = typ, col = col, d = (part.Position - pos).Magnitude, name = o.Name})
+        local tag = ""
+        if typ == "碎片" or typ == "眼镜" then
+            tag = " [可自动捡]"
+        else
+            tag = " [仅传送]"
+        end
+        table.insert(rows, {
+            part = part,
+            typ = typ,
+            col = col,
+            d = (part.Position - pos).Magnitude,
+            name = o.Name,
+            tag = tag,
+        })
     end
+    -- 碎片 / 眼镜（可自动捡，列表也能点传送）
     for o in pairs(kF) do if o and o.Parent then addObj(o) end end
     for o in pairs(kG) do if o and o.Parent then addObj(o) end end
-    -- 补充钥匙等（限制遍历，不每帧）
+    -- 其他道具：只显示 + 点击传送，绝不自动捡
     for _, o in ipairs(workspace:GetDescendants()) do
-        if #rows >= 30 then break end
-        local n = o.Name
-        if inL(n, KeyN) or inL(n, ExtN) or inL(n, BatN) or inL(n, ShelN) then
-            addObj(o)
+        if #rows >= 35 then break end
+        local n = tostring(o.Name)
+        if inL(n, KeyN) then addObj(o, "钥匙", Color3.fromRGB(255, 200, 80))
+        elseif inL(n, ExtN) then addObj(o, "灭火器", Color3.fromRGB(255, 140, 60))
+        elseif inL(n, BatN) then addObj(o, "棒球棒", Color3.fromRGB(180, 220, 100))
+        elseif inL(n, ShelN) then addObj(o, "避难所", Color3.fromRGB(140, 180, 255))
         end
     end
     table.sort(rows, function(a, b) return a.d < b.d end)
     local y = 0
     for i, r in ipairs(rows) do
-        if i > 25 then break end
+        if i > 30 then break end
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, -4, 0, 22)
         b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
-        b.Text = string.format("  [%s] %s  %.0f", r.typ, r.name, r.d)
+        b.Text = string.format("  [%s] %s %.0f%s", r.typ, r.name, r.d, r.tag or "")
         b.TextColor3 = r.col
         b.Font = Enum.Font.Gotham
         b.TextSize = 10
@@ -754,7 +775,7 @@ local function refItemList()
         y = y + 24
     end
     ItemF.CanvasSize = UDim2.new(0, 0, 0, math.max(y, 1))
-    N("物品 " .. #rows .. " 个")
+    N(string.format("物品%d (碎片/眼镜可自动 其它仅传送)", #rows))
 end
 
 local function toShel()
@@ -775,6 +796,7 @@ end
 
 local function hop()
     N("换服中...")
+    task.wait(0.3) -- 稍等，减少瞬踢
     pcall(function() TS:Teleport(PLACE, LP) end)
     pcall(function() TS:Teleport(game.PlaceId, LP) end)
 end
@@ -784,6 +806,38 @@ local function afk()
         VU:CaptureController()
         VU:ClickButton2(Vector2.new())
     end)
+    -- 轻微移动防挂机检测
+    pcall(function()
+        local h = HRP()
+        if h then
+            h.CFrame = h.CFrame + Vector3.new(0.1, 0, 0)
+            task.wait(0.05)
+            h.CFrame = h.CFrame + Vector3.new(-0.1, 0, 0)
+        end
+    end)
+end
+
+local rejoining = false
+local function rejoin(reason)
+    if rejoining or not C.Rejoin then return end
+    rejoining = true
+    N("重进中: " .. tostring(reason or "?"))
+    print("[tau] rejoin:", reason)
+    -- 换服后自动再跑脚本（若执行器支持）
+    pcall(function()
+        if typeof(queue_on_teleport) == "function" then
+            queue_on_teleport([[
+                task.wait(2)
+                -- 提示：请在执行器里开 Auto Execute，或手动再跑 tau_simple
+                print("[tau] rejoin teleport done - re-execute script if needed")
+            ]])
+        end
+    end)
+    task.wait(0.5)
+    local pid = game.PlaceId
+    pcall(function() TS:Teleport(pid, LP) end)
+    pcall(function() TS:Teleport(PLACE, LP) end)
+    task.delay(8, function() rejoining = false end)
 end
 
 Auto_tr.MouseButton1Click:Connect(function()
@@ -810,6 +864,11 @@ ShelA_tr.MouseButton1Click:Connect(function()
     C.ShelAuto = not C.ShelAuto
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
 end)
+Rej_tr.MouseButton1Click:Connect(function()
+    C.Rejoin = not C.Rejoin
+    setTog(Rej_tr, Rej_th, C.Rejoin)
+    N(C.Rejoin and "自动重进 ON" or "自动重进 OFF")
+end)
 ShelB.MouseButton1Click:Connect(toShel)
 HopB.MouseButton1Click:Connect(hop)
 RefPlrB.MouseButton1Click:Connect(refPlrList)
@@ -827,9 +886,6 @@ RestoreMusicB.MouseButton1Click:Connect(restoreMusic)
 SaveB.MouseButton1Click:Connect(saveConfig)
 LoadB.MouseButton1Click:Connect(loadConfig)
 
-pcall(function()
-    LP.Idled:Connect(function() if C.AFK then afk() end end)
-end)
 
 workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
@@ -936,5 +992,60 @@ task.spawn(function()
     pcall(loadConfig)
 end)
 
+
+-- ===== 防踢 / 277 重进 =====
+pcall(function()
+    LP.Idled:Connect(function()
+        if C.AFK then afk() end
+    end)
+end)
+
+-- 被踢出 / 离开时尝试重进同 Place
+pcall(function()
+    Players.PlayerRemoving:Connect(function(pl)
+        if pl == LP then
+            rejoin("PlayerRemoving")
+        end
+    end)
+end)
+
+-- 传送失败再试
+pcall(function()
+    TS.TeleportInitFailed:Connect(function(player, result, err)
+        if player == LP and C.Rejoin then
+            N("传送失败，重试...")
+            task.wait(2)
+            rejoining = false
+            rejoin("TeleportFailed:" .. tostring(result))
+        end
+    end)
+end)
+
+-- 网络错误提示时尝试重进（部分执行器有效）
+pcall(function()
+    local GuiService = game:GetService("GuiService")
+    GuiService.ErrorMessageChanged:Connect(function()
+        local msg = tostring(GuiService:GetErrorMessage() or "")
+        if msg ~= "" and C.Rejoin then
+            print("[tau] error msg:", msg)
+            if string.find(msg:lower(), "277") or string.find(msg:lower(), "connection")
+                or string.find(msg:lower(), "disconnect") or string.find(msg:lower(), "lost") then
+                task.wait(1)
+                rejoin("Error:" .. msg)
+            end
+        end
+    end)
+end)
+
+-- 心跳：长时间无响应时轻点防挂
+task.spawn(function()
+    while Gui and Gui.Parent do
+        if C.AFK then
+            pcall(afk)
+        end
+        task.wait(40)
+    end
+end)
+
 print("[tau] TAB ready - 主页/传送/音乐/储存")
-N("已优化卡顿")
+N("防踢/重进已开")
