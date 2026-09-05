@@ -1,5 +1,5 @@
 -- tau simple+ TAB版 (Arceus X)
--- 顶部一排 Tab：主页 / VIP / 音乐 / 储存
+-- 顶部一排 Tab：主页 / 传送 / 音乐 / 储存
 
 print("[tau] simple tab start")
 
@@ -25,12 +25,14 @@ local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
     Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false,
-    RoundDur = 120,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
 local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
+local KeyN = {"Shelter Key", "ShelterKey", "避难所钥匙"}
+local ExtN = {"Fire Extinguisher", "Extinguisher", "灭火器"}
+local BatN = {"Baseball Bat", "BaseballBat", "棒球棒"}
 local kF, kG = {}, {}
 local myF, gotG = 0, false
 local tried = {}
@@ -193,7 +195,7 @@ local function mkTab(name)
 end
 
 local T1 = mkTab("主页")
-local T2 = mkTab("VIP")
+local T2 = mkTab("传送")
 local T3 = mkTab("音乐")
 local T4 = mkTab("储存")
 
@@ -310,18 +312,33 @@ local ShelA_tr, ShelA_th = mkTog(P1, 178, "定时去避难所", false)
 local ShelB = mkBtn(P1, 210, "传送避难所", Color3.fromRGB(45, 45, 58))
 local HopB = mkBtn(P1, 242, "换服", Color3.fromRGB(50, 90, 140))
 
-local P2 = mkPage("VIP")
-mkLabel(P2, 0, "VIP 服指令 (需你是私服主)", Color3.fromRGB(200, 180, 100))
-mkLabel(P2, 18, "RoundDuration 回合时长(秒)", Color3.fromRGB(180, 180, 195))
-local DurBox = mkBox(P2, 38, "秒数 例如 120 / 可试 0")
-DurBox.Text = "120"
-local SetDurB = mkBtn(P2, 70, "设置回合时长", Color3.fromRGB(50, 100, 140))
-local Set0B = mkBtn(P2, 102, "设为 0 (可能立刻结束)", Color3.fromRGB(140, 60, 50))
-local Set30B = mkBtn(P2, 134, "设为 30 秒", Color3.fromRGB(45, 45, 58))
-local Set60B = mkBtn(P2, 166, "设为 60 秒", Color3.fromRGB(45, 45, 58))
-local Set120B = mkBtn(P2, 198, "设为 120 秒", Color3.fromRGB(45, 45, 58))
-local VipStatus = mkLabel(P2, 234, "VIP: 待命", Color3.fromRGB(180, 180, 195))
-mkLabel(P2, 254, "0 可能无效或被服务器限制", Color3.fromRGB(255, 160, 100))
+
+local P2 = mkPage("传送")
+mkLabel(P2, 0, "玩家 (点击传送)", Color3.fromRGB(200, 180, 100))
+local PlrF = Instance.new("ScrollingFrame")
+PlrF.Size = UDim2.new(1, -4, 0, 110)
+PlrF.Position = UDim2.new(0, 2, 0, 18)
+PlrF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+PlrF.BorderSizePixel = 0
+PlrF.ScrollBarThickness = 3
+PlrF.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlrF.Parent = P2
+Instance.new("UICorner", PlrF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", PlrF).Padding = UDim.new(0, 2)
+local RefPlrB = mkBtn(P2, 132, "刷新玩家列表", Color3.fromRGB(45, 45, 58))
+
+mkLabel(P2, 164, "物品检测 (点击传送)", Color3.fromRGB(200, 180, 100))
+local ItemF = Instance.new("ScrollingFrame")
+ItemF.Size = UDim2.new(1, -4, 0, 90)
+ItemF.Position = UDim2.new(0, 2, 0, 182)
+ItemF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+ItemF.BorderSizePixel = 0
+ItemF.ScrollBarThickness = 3
+ItemF.CanvasSize = UDim2.new(0, 0, 0, 0)
+ItemF.Parent = P2
+Instance.new("UICorner", ItemF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", ItemF).Padding = UDim.new(0, 2)
+local RefItemB = mkBtn(P2, 276, "刷新物品列表", Color3.fromRGB(45, 45, 58))
 
 local P3 = mkPage("音乐")
 mkLabel(P3, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
@@ -332,7 +349,7 @@ local RestoreMusicB = mkBtn(P3, 116, "恢复原音乐", Color3.fromRGB(90, 70, 5
 mkLabel(P3, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
 
 local P4 = mkPage("储存")
-mkLabel(P4, 0, "保存开关 / VIP时长 / 音乐", Color3.fromRGB(140, 200, 255))
+mkLabel(P4, 0, "保存开关 / 音乐设置", Color3.fromRGB(140, 200, 255))
 local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
 local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
 local SaveL = mkLabel(P4, 96, "储存: 未操作")
@@ -343,7 +360,11 @@ local function swTab(name)
     for k, p in pairs(Pages) do
         p.Visible = (k == name)
     end
-    local map = {["主页"] = T1, ["VIP"] = T2, ["音乐"] = T3, ["储存"] = T4}
+    if name == "传送" then
+        pcall(refPlrList)
+        pcall(refItemList)
+    end
+    local map = {["主页"] = T1, ["传送"] = T2, ["音乐"] = T3, ["储存"] = T4}
     for _, t in pairs({T1, T2, T3, T4}) do
         t.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
         t.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -355,7 +376,7 @@ local function swTab(name)
 end
 
 T1.MouseButton1Click:Connect(function() swTab("主页") end)
-T2.MouseButton1Click:Connect(function() swTab("VIP") end)
+T2.MouseButton1Click:Connect(function() swTab("传送") end)
 T3.MouseButton1Click:Connect(function() swTab("音乐") end)
 T4.MouseButton1Click:Connect(function() swTab("储存") end)
 swTab("主页")
@@ -438,44 +459,6 @@ local function detectMode()
     end)
 end
 
-local function vipCmd(A, B, C)
-    local ok, res = pcall(function()
-        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
-        local Ev = Signals and Signals:FindFirstChild("FEvent")
-        if not Ev then error("无 FEvent") end
-        return Ev:InvokeServer({
-            A = A,
-            reason = "VIPServerCommand",
-            C = C,
-            B = B,
-        })
-    end)
-    if ok then
-        VipStatus.Text = "VIP: OK " .. tostring(A) .. "=" .. tostring(C)
-        VipStatus.TextColor3 = Color3.fromRGB(100, 220, 140)
-        N("VIP " .. tostring(A) .. " = " .. tostring(C))
-        return true, res
-    else
-        VipStatus.Text = "VIP失败: " .. tostring(res)
-        VipStatus.TextColor3 = Color3.fromRGB(255, 120, 100)
-        N("VIP失败: " .. tostring(res))
-        return false, res
-    end
-end
-
-local function setRoundDuration(sec)
-    sec = tonumber(sec)
-    if sec == nil then
-        N("请输入数字")
-        return
-    end
-    -- 允许 0；负数按 0 处理
-    if sec < 0 then sec = 0 end
-    C.RoundDur = sec
-    DurBox.Text = tostring(sec)
-    vipCmd("RoundDuration", "Number", sec)
-end
-
 local function changeMusic(id)
     id = tostring(id or "")
     if id == "" then N("请输入音乐ID") return false end
@@ -522,7 +505,6 @@ local function applyToggles()
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
-    if C.RoundDur then DurBox.Text = tostring(C.RoundDur) end
 end
 
 local function saveConfig()
@@ -639,6 +621,114 @@ local function pickup(o, typ)
     end)
 end
 
+
+local function toPart(part, label)
+    local h = HRP()
+    if not h then N("无角色") return end
+    if not part then N("无目标") return end
+    pcall(function()
+        h.CFrame = part.CFrame + Vector3.new(0, 4, 0)
+    end)
+    N("已传到 " .. tostring(label or "?"))
+end
+
+local function toPlr(pl)
+    if not pl or pl == LP then return end
+    local c = pl.Character
+    local th = c and c:FindFirstChild("HumanoidRootPart")
+    if th then
+        toPart(th, pl.Name)
+    else
+        N(pl.Name .. " 无角色")
+    end
+end
+
+local function itemType(o)
+    if isF(o) then return "碎片", Color3.fromRGB(255, 100, 100) end
+    if isG(o) then return "眼镜", Color3.fromRGB(80, 220, 220) end
+    if inL(o.Name, KeyN) then return "钥匙", Color3.fromRGB(255, 200, 80) end
+    if inL(o.Name, ExtN) then return "灭火器", Color3.fromRGB(255, 140, 60) end
+    if inL(o.Name, BatN) then return "棒球棒", Color3.fromRGB(180, 220, 100) end
+    if inL(o.Name, ShelN) then return "避难所", Color3.fromRGB(140, 180, 255) end
+    return nil
+end
+
+local function refPlrList()
+    for _, ch in ipairs(PlrF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    local y = 0
+    local list = {}
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LP then table.insert(list, pl) end
+    end
+    table.sort(list, function(a, b) return a.Name:lower() < b.Name:lower() end)
+    for _, pl in ipairs(list) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 22)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        b.Text = "  " .. pl.Name
+        b.TextColor3 = Color3.fromRGB(220, 220, 230)
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 11
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = PlrF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        local target = pl
+        b.MouseButton1Click:Connect(function()
+            toPlr(target)
+        end)
+        y = y + 24
+    end
+    PlrF.CanvasSize = UDim2.new(0, 0, 0, math.max(y, 1))
+    if #list == 0 then
+        N("没有其他玩家")
+    end
+end
+
+local function refItemList()
+    for _, ch in ipairs(ItemF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    local h = HRP()
+    local pos = h and h.Position or Vector3.zero
+    local rows = {}
+    local seen = {}
+    for _, o in ipairs(workspace:GetDescendants()) do
+        local typ, col = itemType(o)
+        if typ then
+            local part = best(o)
+            if part and not seen[part] then
+                seen[part] = true
+                local d = (part.Position - pos).Magnitude
+                table.insert(rows, {o = o, part = part, typ = typ, col = col, d = d, name = o.Name})
+            end
+        end
+    end
+    table.sort(rows, function(a, b) return a.d < b.d end)
+    local y = 0
+    for i, r in ipairs(rows) do
+        if i > 40 then break end -- 防太多卡顿
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 22)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        b.Text = string.format("  [%s] %s  %.0f", r.typ, r.name, r.d)
+        b.TextColor3 = r.col
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 10
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = ItemF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        local part, label = r.part, r.typ .. " " .. r.name
+        b.MouseButton1Click:Connect(function()
+            toPart(part, label)
+        end)
+        y = y + 24
+    end
+    ItemF.CanvasSize = UDim2.new(0, 0, 0, math.max(y, 1))
+    N("物品 " .. #rows .. " 个")
+end
+
 local function toShel()
     local h = HRP()
     if not h then N("无角色") return end
@@ -694,15 +784,8 @@ ShelA_tr.MouseButton1Click:Connect(function()
 end)
 ShelB.MouseButton1Click:Connect(toShel)
 HopB.MouseButton1Click:Connect(hop)
-SetDurB.MouseButton1Click:Connect(function()
-    setRoundDuration(DurBox.Text)
-end)
-Set0B.MouseButton1Click:Connect(function()
-    setRoundDuration(0)
-end)
-Set30B.MouseButton1Click:Connect(function() setRoundDuration(30) end)
-Set60B.MouseButton1Click:Connect(function() setRoundDuration(60) end)
-Set120B.MouseButton1Click:Connect(function() setRoundDuration(120) end)
+RefPlrB.MouseButton1Click:Connect(refPlrList)
+RefItemB.MouseButton1Click:Connect(refItemList)
 AddMusicB.MouseButton1Click:Connect(function()
     local id = MusicIdBox.Text
     local name = MusicNameBox.Text
@@ -806,5 +889,5 @@ task.spawn(function()
     pcall(loadConfig)
 end)
 
-print("[tau] TAB ready - 主页/VIP/音乐/储存")
-N("VIP RoundDuration 已就绪")
+print("[tau] TAB ready - 主页/传送/音乐/储存")
+N("已就绪 - 玩家/物品传送")
