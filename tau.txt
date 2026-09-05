@@ -1,5 +1,5 @@
 -- tau simple+ TAB版 (Arceus X)
--- 顶部一排 Tab：主页 / 队列 / 音乐 / 储存
+-- 顶部一排 Tab：主页 / VIP / 音乐 / 储存
 
 print("[tau] simple tab start")
 
@@ -25,30 +25,20 @@ local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
     Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false,
-    ModeQ = false, ModeHop = false,
+    RoundDur = 120,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
 local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
-local MODES = {
-    {id = "Tartarus", name = "Tartarus"},
-    {id = "Doomsday", name = "Doomsday"},
-    {id = "Chad", name = "Chad"},
-    {id = "Twisty", name = "Twisty"},
-    {id = "Weeping Angel", name = "Weeping Angel"},
-}
-
 local kF, kG = {}, {}
 local myF, gotG = 0, false
 local tried = {}
 local isMin = false
-local modeQueue = {}
 local currentMode = "Unknown"
 local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
-local tModeHop = 0
 
 local function N(msg)
     pcall(function()
@@ -203,7 +193,7 @@ local function mkTab(name)
 end
 
 local T1 = mkTab("主页")
-local T2 = mkTab("队列")
+local T2 = mkTab("VIP")
 local T3 = mkTab("音乐")
 local T4 = mkTab("储存")
 
@@ -320,19 +310,18 @@ local ShelA_tr, ShelA_th = mkTog(P1, 178, "定时去避难所", false)
 local ShelB = mkBtn(P1, 210, "传送避难所", Color3.fromRGB(45, 45, 58))
 local HopB = mkBtn(P1, 242, "换服", Color3.fromRGB(50, 90, 140))
 
-local P2 = mkPage("队列")
-mkLabel(P2, 0, "点模式加入队列 (再点移除)", Color3.fromRGB(200, 180, 100))
-local ModeListF = Instance.new("Frame")
-ModeListF.Size = UDim2.new(1, -4, 0, 140)
-ModeListF.Position = UDim2.new(0, 2, 0, 20)
-ModeListF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
-ModeListF.BorderSizePixel = 0
-ModeListF.Parent = P2
-Instance.new("UICorner", ModeListF).CornerRadius = UDim.new(0, 6)
-Instance.new("UIListLayout", ModeListF).Padding = UDim.new(0, 2)
-local MQ_tr, MQ_th = mkTog(P2, 168, "启用模式队列", false)
-local MH_tr, MH_th = mkTog(P2, 194, "非目标自动换服", false)
-local ModeQStatus = mkLabel(P2, 224, "队列: (空)")
+local P2 = mkPage("VIP")
+mkLabel(P2, 0, "VIP 服指令 (需你是私服主)", Color3.fromRGB(200, 180, 100))
+mkLabel(P2, 18, "RoundDuration 回合时长(秒)", Color3.fromRGB(180, 180, 195))
+local DurBox = mkBox(P2, 38, "秒数 例如 120 / 可试 0")
+DurBox.Text = "120"
+local SetDurB = mkBtn(P2, 70, "设置回合时长", Color3.fromRGB(50, 100, 140))
+local Set0B = mkBtn(P2, 102, "设为 0 (可能立刻结束)", Color3.fromRGB(140, 60, 50))
+local Set30B = mkBtn(P2, 134, "设为 30 秒", Color3.fromRGB(45, 45, 58))
+local Set60B = mkBtn(P2, 166, "设为 60 秒", Color3.fromRGB(45, 45, 58))
+local Set120B = mkBtn(P2, 198, "设为 120 秒", Color3.fromRGB(45, 45, 58))
+local VipStatus = mkLabel(P2, 234, "VIP: 待命", Color3.fromRGB(180, 180, 195))
+mkLabel(P2, 254, "0 可能无效或被服务器限制", Color3.fromRGB(255, 160, 100))
 
 local P3 = mkPage("音乐")
 mkLabel(P3, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
@@ -343,7 +332,7 @@ local RestoreMusicB = mkBtn(P3, 116, "恢复原音乐", Color3.fromRGB(90, 70, 5
 mkLabel(P3, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
 
 local P4 = mkPage("储存")
-mkLabel(P4, 0, "保存开关 / 队列 / 音乐设置", Color3.fromRGB(140, 200, 255))
+mkLabel(P4, 0, "保存开关 / VIP时长 / 音乐", Color3.fromRGB(140, 200, 255))
 local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
 local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
 local SaveL = mkLabel(P4, 96, "储存: 未操作")
@@ -354,7 +343,7 @@ local function swTab(name)
     for k, p in pairs(Pages) do
         p.Visible = (k == name)
     end
-    local map = {["主页"] = T1, ["队列"] = T2, ["音乐"] = T3, ["储存"] = T4}
+    local map = {["主页"] = T1, ["VIP"] = T2, ["音乐"] = T3, ["储存"] = T4}
     for _, t in pairs({T1, T2, T3, T4}) do
         t.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
         t.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -366,7 +355,7 @@ local function swTab(name)
 end
 
 T1.MouseButton1Click:Connect(function() swTab("主页") end)
-T2.MouseButton1Click:Connect(function() swTab("队列") end)
+T2.MouseButton1Click:Connect(function() swTab("VIP") end)
 T3.MouseButton1Click:Connect(function() swTab("音乐") end)
 T4.MouseButton1Click:Connect(function() swTab("储存") end)
 swTab("主页")
@@ -403,65 +392,6 @@ MinB.MouseButton1Click:Connect(function()
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
 
-local function qIndex(id)
-    for i, v in ipairs(modeQueue) do
-        if v == id then return i end
-    end
-end
-
-local function refreshQ()
-    if #modeQueue == 0 then
-        ModeQStatus.Text = "队列: (空)"
-        ModeQStatus.TextColor3 = Color3.fromRGB(180, 180, 195)
-    else
-        local p = {}
-        for i, id in ipairs(modeQueue) do table.insert(p, i .. "." .. id) end
-        ModeQStatus.Text = "队列: " .. table.concat(p, " → ")
-        ModeQStatus.TextColor3 = Color3.fromRGB(100, 220, 140)
-    end
-end
-
-local function rebuildModeList()
-    for _, ch in ipairs(ModeListF:GetChildren()) do
-        if ch:IsA("TextButton") then ch:Destroy() end
-    end
-    for _, m in ipairs(MODES) do
-        local rank = qIndex(m.id)
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, -4, 0, 24)
-        b.BackgroundColor3 = rank and Color3.fromRGB(30, 55, 40) or Color3.fromRGB(40, 40, 52)
-        b.Text = (rank and (" #" .. rank .. " ") or "  ") .. m.name .. (rank and " [队列]" or "")
-        b.TextColor3 = rank and Color3.fromRGB(120, 255, 160) or Color3.fromRGB(200, 200, 210)
-        b.Font = Enum.Font.Gotham
-        b.TextSize = 11
-        b.TextXAlignment = Enum.TextXAlignment.Left
-        b.Parent = ModeListF
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-        local mid = m.id
-        b.MouseButton1Click:Connect(function()
-            local i = qIndex(mid)
-            if i then
-                table.remove(modeQueue, i)
-                N("移除: " .. mid)
-            else
-                table.insert(modeQueue, mid)
-                N("加入 #" .. #modeQueue .. ": " .. mid)
-            end
-            refreshQ()
-            rebuildModeList()
-        end)
-    end
-end
-rebuildModeList()
-refreshQ()
-
-local function inQueue(mode)
-    local lo = string.lower(tostring(mode or ""))
-    for _, id in ipairs(modeQueue) do
-        if lo == string.lower(id) or string.find(lo, string.lower(id), 1, true) then return true end
-    end
-    return false
-end
 
 local function detectMode()
     pcall(function()
@@ -508,19 +438,42 @@ local function detectMode()
     end)
 end
 
-local function checkModeQ()
-    if not C.ModeQ or #modeQueue == 0 then return end
-    if currentMode == "Intermission" or currentMode == "Unknown" then return end
-    if inQueue(currentMode) then return end
-    if C.ModeHop and tick() - tModeHop > 12 then
-        tModeHop = tick()
-        N("模式 " .. currentMode .. " 不在队列 → 换服")
-        pcall(function() TS:Teleport(PLACE, LP) end)
-        pcall(function() TS:Teleport(game.PlaceId, LP) end)
-    elseif not C.ModeHop and tick() - tModeHop > 20 then
-        tModeHop = tick()
-        N("模式 " .. currentMode .. " 不在队列")
+local function vipCmd(A, B, C)
+    local ok, res = pcall(function()
+        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
+        local Ev = Signals and Signals:FindFirstChild("FEvent")
+        if not Ev then error("无 FEvent") end
+        return Ev:InvokeServer({
+            A = A,
+            reason = "VIPServerCommand",
+            C = C,
+            B = B,
+        })
+    end)
+    if ok then
+        VipStatus.Text = "VIP: OK " .. tostring(A) .. "=" .. tostring(C)
+        VipStatus.TextColor3 = Color3.fromRGB(100, 220, 140)
+        N("VIP " .. tostring(A) .. " = " .. tostring(C))
+        return true, res
+    else
+        VipStatus.Text = "VIP失败: " .. tostring(res)
+        VipStatus.TextColor3 = Color3.fromRGB(255, 120, 100)
+        N("VIP失败: " .. tostring(res))
+        return false, res
     end
+end
+
+local function setRoundDuration(sec)
+    sec = tonumber(sec)
+    if sec == nil then
+        N("请输入数字")
+        return
+    end
+    -- 允许 0；负数按 0 处理
+    if sec < 0 then sec = 0 end
+    C.RoundDur = sec
+    DurBox.Text = tostring(sec)
+    vipCmd("RoundDuration", "Number", sec)
 end
 
 local function changeMusic(id)
@@ -567,18 +520,15 @@ local function applyToggles()
     setTog(ESP_tr, ESP_th, C.ESP)
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
-    setTog(MQ_tr, MQ_th, C.ModeQ)
-    setTog(MH_tr, MH_th, C.ModeHop)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
-    refreshQ()
-    rebuildModeList()
+    if C.RoundDur then DurBox.Text = tostring(C.RoundDur) end
 end
 
 local function saveConfig()
     local ok, err = pcall(function()
         if typeof(writefile) ~= "function" then error("无 writefile") end
-        writefile(SAVE_FILE, HS:JSONEncode({C = C, modeQueue = modeQueue, musicHistory = musicHistory}))
+        writefile(SAVE_FILE, HS:JSONEncode({C = C, musicHistory = musicHistory}))
     end)
     if ok then
         SaveL.Text = "储存: 已保存"
@@ -598,12 +548,6 @@ local function loadConfig()
         local data = HS:JSONDecode(readfile(SAVE_FILE))
         if typeof(data.C) == "table" then
             for k, v in pairs(data.C) do if C[k] ~= nil then C[k] = v end end
-        end
-        modeQueue = {}
-        if typeof(data.modeQueue) == "table" then
-            for _, id in ipairs(data.modeQueue) do
-                if typeof(id) == "string" then table.insert(modeQueue, id) end
-            end
         end
         musicHistory = typeof(data.musicHistory) == "table" and data.musicHistory or {}
     end)
@@ -748,17 +692,17 @@ ShelA_tr.MouseButton1Click:Connect(function()
     C.ShelAuto = not C.ShelAuto
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
 end)
-MQ_tr.MouseButton1Click:Connect(function()
-    C.ModeQ = not C.ModeQ
-    setTog(MQ_tr, MQ_th, C.ModeQ)
-    N(C.ModeQ and "Mode Queue ON" or "OFF")
-end)
-MH_tr.MouseButton1Click:Connect(function()
-    C.ModeHop = not C.ModeHop
-    setTog(MH_tr, MH_th, C.ModeHop)
-end)
 ShelB.MouseButton1Click:Connect(toShel)
 HopB.MouseButton1Click:Connect(hop)
+SetDurB.MouseButton1Click:Connect(function()
+    setRoundDuration(DurBox.Text)
+end)
+Set0B.MouseButton1Click:Connect(function()
+    setRoundDuration(0)
+end)
+Set30B.MouseButton1Click:Connect(function() setRoundDuration(30) end)
+Set60B.MouseButton1Click:Connect(function() setRoundDuration(60) end)
+Set120B.MouseButton1Click:Connect(function() setRoundDuration(120) end)
 AddMusicB.MouseButton1Click:Connect(function()
     local id = MusicIdBox.Text
     local name = MusicNameBox.Text
@@ -851,7 +795,6 @@ task.spawn(function()
             if now - tMode >= 1.2 then
                 tMode = now
                 detectMode()
-                checkModeQ()
             end
         end)
         task.wait(0.15)
@@ -863,5 +806,5 @@ task.spawn(function()
     pcall(loadConfig)
 end)
 
-print("[tau] TAB ready - 主页/队列/音乐/储存")
-N("Tab版已就绪")
+print("[tau] TAB ready - 主页/VIP/音乐/储存")
+N("VIP RoundDuration 已就绪")
