@@ -578,36 +578,56 @@ end
 -- 全图扫描节流（很耗，少做）
 local lastFullScan = 0
 
--- 读大厅 Tartarus 预测 / 碎片进度 (目标共 5 个)
+-- 读大厅 Tartarus 预测进度
+-- 路径: Workspace.Lobby.TartarusForecast.Screen.TartarusForecast
 local function readLobbyFrag()
     pcall(function()
-        local pg = LP:FindFirstChild("PlayerGui")
-        if not pg then return end
         local bestN = nil
-        for _, gui in ipairs(pg:GetDescendants()) do
-            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-                local tx = tostring(gui.Text or "")
-                local lo = string.lower(tx)
-                -- 匹配 3/5、2/5、碎片进度等
-                local a, b = string.match(tx, "(%d)%s*/%s*(%d)")
-                if a and b and tonumber(b) == NEED_FRAG then
-                    local n = tonumber(a)
-                    if n and n >= 0 and n <= NEED_FRAG then
-                        bestN = n
-                    end
-                end
-                if string.find(lo, "fragment") or string.find(tx, "碎片") or string.find(lo, "tartarus") or string.find(tx, "血月") then
-                    local n2 = tonumber(string.match(tx, "(%d)"))
-                    if n2 and n2 >= 0 and n2 <= NEED_FRAG and string.find(tx, "/") then
-                        local aa, bb = string.match(tx, "(%d)%s*/%s*(%d)")
-                        if aa and tonumber(bb) == NEED_FRAG then
-                            bestN = tonumber(aa)
+        -- 官方路径（注意游戏里拼写是 Trartarus）
+        -- 正确路径: Workspace.Lobby.TartarusForecast.Screen.TartarusForecast
+        local lobby = workspace:FindFirstChild("Lobby")
+        local forecast = lobby and (lobby:FindFirstChild("TartarusForecast") or lobby:FindFirstChild("TrartarusForecast"))
+        local screen = forecast and (forecast:FindFirstChild("Screen") or forecast:FindFirstChild("屏幕"))
+        local node = screen and (
+            screen:FindFirstChild("TartarusForecast")
+            or screen:FindFirstChild("TrartarusForecast")
+            or screen:FindFirstChildWhichIsA("TextLabel")
+            or screen:FindFirstChildWhichIsA("TextButton")
+        )
+        if not node and screen then node = screen end
+        if node then
+            local function takeText(obj)
+                if not obj then return end
+                if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                    local tx = tostring(obj.Text or "")
+                    local a, b = string.match(tx, "(%d+)%s*/%s*(%d+)")
+                    if a and b and tonumber(b) == NEED_FRAG then
+                        bestN = tonumber(a)
+                    elseif bestN == nil then
+                        local only = string.match(tx, "(%d+)")
+                        if only then
+                            local n = tonumber(only)
+                            if n and n >= 0 and n <= NEED_FRAG then bestN = n end
                         end
                     end
                 end
-                if string.find(lo, "tartarus") and (string.find(lo, "unlock") or string.find(lo, "summon") or string.find(tx, "解锁") or string.find(tx, "已召唤")) then
-                    tartUnlocked = true
-                    bestN = NEED_FRAG
+                -- StringValue / NumberValue
+                if obj:IsA("StringValue") then
+                    local a, b = string.match(tostring(obj.Value), "(%d+)%s*/%s*(%d+)")
+                    if a and tonumber(b) == NEED_FRAG then bestN = tonumber(a) end
+                elseif obj:IsA("IntValue") or obj:IsA("NumberValue") then
+                    local n = tonumber(obj.Value)
+                    if n and n >= 0 and n <= NEED_FRAG then bestN = n end
+                end
+            end
+            takeText(node)
+            for _, c in ipairs(node:GetDescendants()) do
+                takeText(c)
+            end
+            -- Screen 层也扫一下
+            if screen then
+                for _, c in ipairs(screen:GetDescendants()) do
+                    takeText(c)
                 end
             end
         end
@@ -616,7 +636,6 @@ local function readLobbyFrag()
             if serverFrag >= NEED_FRAG then tartUnlocked = true end
         end
     end)
-    -- 个人捡到的作为下限参考
     if myF > serverFrag then serverFrag = math.min(NEED_FRAG, myF) end
     if serverFrag >= NEED_FRAG then tartUnlocked = true end
 end
