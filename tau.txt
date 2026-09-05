@@ -1,7 +1,7 @@
--- tau only apple SIMPLE (Arceus X)
--- 精简稳定版：自动捡碎片/眼镜 + 避难所 + ESP + AntiAFK
+-- tau simple + Queue + Music + Save (Arceus X)
+-- 精简版 + 模式队列 + 音乐 + 储存
 
-print("[tau] simple start")
+print("[tau] simple+ start")
 
 pcall(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
@@ -9,9 +9,7 @@ end)
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
-if not LP then
-    LP = Players.PlayerAdded:Wait()
-end
+if not LP then LP = Players.PlayerAdded:Wait() end
 print("[tau] player", LP.Name)
 
 local SG = game:GetService("StarterGui")
@@ -19,33 +17,43 @@ local UIS = game:GetService("UserInputService")
 local VU = game:GetService("VirtualUser")
 local RS = game:GetService("RunService")
 local TS = game:GetService("TeleportService")
+local SS = game:GetService("SoundService")
+local RPS = game:GetService("ReplicatedStorage")
+local HS = game:GetService("HttpService")
 local PLACE = 2313058949
+local SAVE_FILE = "tau_simple_save.json"
 
--- 设置
 local C = {
-    Auto = false,
-    OnlyFrag = true,
-    ESP = true,
-    AFK = true,
-    ShelAuto = false,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false,
+    ModeQ = false, ModeHop = false,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
 local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
 
+local MODES = {
+    {id = "Tartarus", name = "Tartarus"},
+    {id = "Doomsday", name = "Doomsday"},
+    {id = "Chad", name = "Chad"},
+    {id = "Twisty", name = "Twisty"},
+    {id = "Weeping Angel", name = "Weeping Angel"},
+}
+
 local kF, kG = {}, {}
 local myF, gotG = 0, false
 local tried = {}
 local isMin = false
+local modeQueue = {} -- 有序
+local currentMode = "Unknown"
+local musicHistory = {}
+local originalIds = {}
+local MAX_MUSIC = 20
+local tModeHop = 0
 
 local function N(msg)
     pcall(function()
-        SG:SetCore("SendNotification", {
-            Title = "tau simple",
-            Text = tostring(msg),
-            Duration = 2.5
-        })
+        SG:SetCore("SendNotification", {Title = "tau simple", Text = tostring(msg), Duration = 2.5})
     end)
     print("[tau]", msg)
 end
@@ -53,9 +61,7 @@ end
 local function inL(name, list)
     local n = string.lower(tostring(name or ""))
     for _, v in ipairs(list) do
-        if n == string.lower(v) or string.find(n, string.lower(v), 1, true) then
-            return true
-        end
+        if n == string.lower(v) or string.find(n, string.lower(v), 1, true) then return true end
     end
     return false
 end
@@ -86,12 +92,12 @@ local function best(o)
     return o:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- ========== UI (PlayerGui 优先 - Arceus X) ==========
+-- ===== UI =====
 pcall(function()
     local pg = LP:FindFirstChild("PlayerGui")
     if pg then
-        local old = pg:FindFirstChild("tau_simple")
-        if old then old:Destroy() end
+        local o = pg:FindFirstChild("tau_simple")
+        if o then o:Destroy() end
     end
 end)
 
@@ -103,44 +109,33 @@ Gui.IgnoreGuiInset = true
 Gui.Enabled = true
 
 do
-    local ok = false
-    pcall(function()
+    local ok = pcall(function()
         local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 10)
-        if pg then
-            Gui.Parent = pg
-            ok = Gui.Parent ~= nil
-        end
+        if pg then Gui.Parent = pg end
     end)
-    if not ok then
-        pcall(function()
-            if typeof(gethui) == "function" then Gui.Parent = gethui() end
-        end)
+    if not Gui.Parent then
+        pcall(function() if typeof(gethui) == "function" then Gui.Parent = gethui() end end)
     end
     if not Gui.Parent then
         pcall(function() Gui.Parent = game:GetService("CoreGui") end)
     end
     print("[tau] UI parent =", tostring(Gui.Parent))
 end
-
-if not Gui.Parent then
-    N("UI挂载失败")
-    return
-end
+if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 260, 0, 320)
-Main.Position = UDim2.new(0, 20, 0.3, 0)
+Main.Size = UDim2.new(0, 280, 0, 420)
+Main.Position = UDim2.new(0, 16, 0.2, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
-Main.Active = true
 Main.Visible = true
+Main.Active = true
 Main.Parent = Gui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
-
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(80, 80, 100)
-stroke.Thickness = 1.5
-stroke.Parent = Main
+local sk = Instance.new("UIStroke")
+sk.Color = Color3.fromRGB(80, 80, 100)
+sk.Thickness = 1.5
+sk.Parent = Main
 
 local TB = Instance.new("Frame")
 TB.Size = UDim2.new(1, 0, 0, 32)
@@ -153,7 +148,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -60, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "tau simple"
+Title.Text = "tau simple+"
 Title.TextColor3 = Color3.fromRGB(240, 240, 245)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 13
@@ -182,93 +177,139 @@ ClB.TextSize = 14
 ClB.Parent = TB
 Instance.new("UICorner", ClB).CornerRadius = UDim.new(0, 5)
 
-local Body = Instance.new("Frame")
-Body.Name = "Body"
-Body.Size = UDim2.new(1, -16, 1, -42)
-Body.Position = UDim2.new(0, 8, 0, 38)
-Body.BackgroundTransparency = 1
-Body.Parent = Main
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Name = "Body"
+Scroll.Size = UDim2.new(1, -12, 1, -40)
+Scroll.Position = UDim2.new(0, 6, 0, 36)
+Scroll.BackgroundTransparency = 1
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 4
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 780)
+Scroll.Parent = Main
 
 local function mkLabel(y, text, col)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, 0, 0, 18)
-    l.Position = UDim2.new(0, 0, 0, y)
+    l.Size = UDim2.new(1, -8, 0, 16)
+    l.Position = UDim2.new(0, 4, 0, y)
     l.BackgroundTransparency = 1
     l.Text = text
     l.TextColor3 = col or Color3.fromRGB(180, 180, 195)
     l.Font = Enum.Font.Gotham
-    l.TextSize = 12
+    l.TextSize = 11
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Parent = Body
+    l.Parent = Scroll
     return l
 end
 
 local function mkTog(y, text, on)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 26)
-    row.Position = UDim2.new(0, 0, 0, y)
+    row.Size = UDim2.new(1, -8, 0, 24)
+    row.Position = UDim2.new(0, 4, 0, y)
     row.BackgroundTransparency = 1
-    row.Parent = Body
-
+    row.Parent = Scroll
     local lb = Instance.new("TextLabel")
-    lb.Size = UDim2.new(1, -50, 1, 0)
+    lb.Size = UDim2.new(1, -48, 1, 0)
     lb.BackgroundTransparency = 1
     lb.Text = text
     lb.TextColor3 = Color3.fromRGB(220, 220, 230)
     lb.Font = Enum.Font.Gotham
-    lb.TextSize = 12
+    lb.TextSize = 11
     lb.TextXAlignment = Enum.TextXAlignment.Left
     lb.Parent = row
-
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 42, 0, 20)
-    btn.Position = UDim2.new(1, -42, 0.5, -10)
+    btn.Size = UDim2.new(0, 40, 0, 18)
+    btn.Position = UDim2.new(1, -40, 0.5, -9)
     btn.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
     btn.Text = ""
     btn.Parent = row
     Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-
     local kn = Instance.new("Frame")
-    kn.Size = UDim2.new(0, 16, 0, 16)
-    kn.Position = on and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    kn.Size = UDim2.new(0, 14, 0, 14)
+    kn.Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     kn.BackgroundColor3 = Color3.new(1, 1, 1)
     kn.Parent = btn
     Instance.new("UICorner", kn).CornerRadius = UDim.new(1, 0)
-
     return btn, kn
 end
 
 local function setTog(btn, kn, on)
     btn.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
-    kn.Position = on and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    kn.Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
 end
 
 local function mkBtn(y, text, col)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, 0, 0, 28)
-    b.Position = UDim2.new(0, 0, 0, y)
+    b.Size = UDim2.new(1, -8, 0, 26)
+    b.Position = UDim2.new(0, 4, 0, y)
     b.BackgroundColor3 = col or Color3.fromRGB(45, 45, 58)
     b.Text = text
     b.TextColor3 = Color3.new(1, 1, 1)
     b.Font = Enum.Font.GothamBold
-    b.TextSize = 12
-    b.Parent = Body
+    b.TextSize = 11
+    b.Parent = Scroll
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
     return b
 end
 
-local StatusL = mkLabel(0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
-local FragL = mkLabel(20, "碎片: 地图0 | 我0/5")
-local GlassL = mkLabel(38, "眼镜: 未找到")
+local function mkBox(y, ph)
+    local t = Instance.new("TextBox")
+    t.Size = UDim2.new(1, -8, 0, 24)
+    t.Position = UDim2.new(0, 4, 0, y)
+    t.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+    t.PlaceholderText = ph
+    t.Text = ""
+    t.TextColor3 = Color3.new(1, 1, 1)
+    t.PlaceholderColor3 = Color3.fromRGB(140, 140, 155)
+    t.Font = Enum.Font.Gotham
+    t.TextSize = 11
+    t.ClearTextOnFocus = false
+    t.Parent = Scroll
+    Instance.new("UICorner", t).CornerRadius = UDim.new(0, 5)
+    return t
+end
 
-local Auto_tr, Auto_th = mkTog(64, "Auto Loot", false)
-local Only_tr, Only_th = mkTog(92, "只有碎片", true)
-local ESP_tr, ESP_th = mkTog(120, "ESP", true)
-local AFK_tr, AFK_th = mkTog(148, "Anti-AFK", true)
+-- 基础
+local StatusL = mkLabel(0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
+local FragL = mkLabel(18, "碎片: 地图0 | 我0/5")
+local GlassL = mkLabel(34, "眼镜: 未找到")
+local ModeL = mkLabel(50, "模式: Unknown")
+
+local Auto_tr, Auto_th = mkTog(72, "Auto Loot", false)
+local Only_tr, Only_th = mkTog(98, "只有碎片", true)
+local ESP_tr, ESP_th = mkTog(124, "ESP", true)
+local AFK_tr, AFK_th = mkTog(150, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(176, "定时去避难所", false)
 
-local ShelB = mkBtn(210, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(244, "换服", Color3.fromRGB(50, 90, 140))
+local ShelB = mkBtn(206, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(236, "换服", Color3.fromRGB(50, 90, 140))
+
+-- 模式队列
+mkLabel(272, "── 模式队列 (点加入/移除) ──", Color3.fromRGB(200, 180, 100))
+local ModeListF = Instance.new("Frame")
+ModeListF.Size = UDim2.new(1, -8, 0, 130)
+ModeListF.Position = UDim2.new(0, 4, 0, 290)
+ModeListF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+ModeListF.BorderSizePixel = 0
+ModeListF.Parent = Scroll
+Instance.new("UICorner", ModeListF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", ModeListF).Padding = UDim.new(0, 2)
+
+local MQ_tr, MQ_th = mkTog(426, "启用模式队列", false)
+local MH_tr, MH_th = mkTog(452, "非目标自动换服", false)
+local ModeQStatus = mkLabel(478, "队列: (空)")
+
+-- 音乐
+mkLabel(500, "── 音乐 ──", Color3.fromRGB(140, 200, 255))
+local MusicIdBox = mkBox(518, "音乐 ID")
+local MusicNameBox = mkBox(546, "歌名")
+local AddMusicB = mkBtn(574, "更换音乐", Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkBtn(604, "恢复原音乐", Color3.fromRGB(90, 70, 50))
+
+-- 储存
+mkLabel(640, "── 储存 ──", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(658, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(688, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkLabel(720, "储存: 未操作")
 
 N("UI 已加载")
 print("[tau] UI OK")
@@ -277,22 +318,17 @@ print("[tau] UI OK")
 do
     local drag, d0, p0 = false, nil, nil
     TB.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1
-        or i.UserInputType == Enum.UserInputType.Touch then
-            drag = true
-            d0 = i.Position
-            p0 = Main.Position
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = true; d0 = i.Position; p0 = Main.Position
         end
     end)
     TB.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1
-        or i.UserInputType == Enum.UserInputType.Touch then
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
             drag = false
         end
     end)
     UIS.InputChanged:Connect(function(i)
-        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement
-            or i.UserInputType == Enum.UserInputType.Touch) then
+        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
             local d = i.Position - d0
             Main.Position = UDim2.new(p0.X.Scale, p0.X.Offset + d.X, p0.Y.Scale, p0.Y.Offset + d.Y)
         end
@@ -301,27 +337,252 @@ end
 
 MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
-    Body.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 180, 0, 32) or UDim2.new(0, 260, 0, 320)
+    Scroll.Visible = not isMin
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 280, 0, 420)
     MinB.Text = isMin and "+" or "-"
 end)
+ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
 
-ClB.MouseButton1Click:Connect(function()
-    Gui:Destroy()
-end)
+-- ===== 队列 =====
+local function qIndex(id)
+    for i, v in ipairs(modeQueue) do
+        if v == id then return i end
+    end
+end
 
--- ========== 逻辑 ==========
+local function refreshQ()
+    if #modeQueue == 0 then
+        ModeQStatus.Text = "队列: (空)"
+        ModeQStatus.TextColor3 = Color3.fromRGB(180, 180, 195)
+    else
+        local p = {}
+        for i, id in ipairs(modeQueue) do table.insert(p, i .. "." .. id) end
+        ModeQStatus.Text = "队列: " .. table.concat(p, " → ")
+        ModeQStatus.TextColor3 = Color3.fromRGB(100, 220, 140)
+    end
+end
+
+local function rebuildModeList()
+    for _, ch in ipairs(ModeListF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    for _, m in ipairs(MODES) do
+        local rank = qIndex(m.id)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 22)
+        b.BackgroundColor3 = rank and Color3.fromRGB(30, 55, 40) or Color3.fromRGB(40, 40, 52)
+        b.Text = (rank and (" #" .. rank .. " ") or "  ") .. m.name .. (rank and " [队列]" or "")
+        b.TextColor3 = rank and Color3.fromRGB(120, 255, 160) or Color3.fromRGB(200, 200, 210)
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 11
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = ModeListF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        local mid = m.id
+        b.MouseButton1Click:Connect(function()
+            local i = qIndex(mid)
+            if i then
+                table.remove(modeQueue, i)
+                N("移除: " .. mid)
+            else
+                table.insert(modeQueue, mid)
+                N("加入 #" .. #modeQueue .. ": " .. mid)
+            end
+            refreshQ()
+            rebuildModeList()
+        end)
+    end
+end
+rebuildModeList()
+refreshQ()
+
+local function inQueue(mode)
+    local lo = string.lower(tostring(mode or ""))
+    for _, id in ipairs(modeQueue) do
+        if lo == string.lower(id) or string.find(lo, string.lower(id), 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ===== 模式检测 =====
+local function detectMode()
+    pcall(function()
+        local g = LP:FindFirstChild("PlayerGui")
+        if not g then return end
+        local n = g:FindFirstChild("Notifications")
+        local sg = n and n:FindFirstChild("SelectedGamemode")
+        local o = sg and sg:FindFirstChild("Objective")
+        local txt = o and (o:IsA("TextLabel") and o.Text or nil)
+        if not txt then
+            local l = o and o:FindFirstChildWhichIsA("TextLabel", true)
+            txt = l and l.Text
+        end
+        if not txt or #txt < 2 then return end
+        local lo = string.lower(txt)
+        if string.find(lo, "tartarus") then currentMode = "Tartarus"
+        elseif string.find(lo, "doomsday") or string.find(lo, "doom") then currentMode = "Doomsday"
+        elseif string.find(lo, "chad") then currentMode = "Chad"
+        elseif string.find(lo, "twisty") then currentMode = "Twisty"
+        elseif string.find(lo, "weeping") then currentMode = "Weeping Angel"
+        elseif string.find(lo, "intermission") then currentMode = "Intermission"
+        end
+        ModeL.Text = "模式: " .. currentMode
+    end)
+    pcall(function()
+        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
+        local Ev = Signals and Signals:FindFirstChild("Event")
+        if Ev and not Ev:GetAttribute("tauHooked") then
+            Ev:SetAttribute("tauHooked", true)
+            Ev.OnClientEvent:Connect(function(data)
+                if typeof(data) ~= "table" or not data.reason then return end
+                if data.reason == "Cutscene" and data.F and data.F.Name then
+                    currentMode = data.F.Name
+                    ModeL.Text = "模式: " .. currentMode
+                elseif data.reason == "TartarusClock" or data.reason == "TartarusSummon" then
+                    currentMode = "Tartarus"
+                    ModeL.Text = "模式: Tartarus"
+                elseif data.reason == "DoomsDayForecast" then
+                    currentMode = "Doomsday"
+                    ModeL.Text = "模式: Doomsday"
+                end
+            end)
+        end
+    end)
+end
+
+local function checkModeQ()
+    if not C.ModeQ or #modeQueue == 0 then return end
+    if currentMode == "Intermission" or currentMode == "Unknown" then return end
+    if inQueue(currentMode) then return end
+    if C.ModeHop and tick() - tModeHop > 12 then
+        tModeHop = tick()
+        N("模式 " .. currentMode .. " 不在队列 → 换服")
+        pcall(function() TS:Teleport(PLACE, LP) end)
+        pcall(function() TS:Teleport(game.PlaceId, LP) end)
+    elseif not C.ModeHop and tick() - tModeHop > 20 then
+        tModeHop = tick()
+        N("模式 " .. currentMode .. " 不在队列")
+    end
+end
+
+-- ===== 音乐 =====
+local function changeMusic(id)
+    id = tostring(id or "")
+    if id == "" then N("请输入音乐ID") return false end
+    if not string.find(id, "rbxassetid://") then id = "rbxassetid://" .. id end
+    local ok = false
+    pcall(function()
+        local music = SS:FindFirstChild("Music")
+        local targets = {}
+        if music then
+            for _, name in ipairs({"Gamemode", "BonusDisaster"}) do
+                local s = music:FindFirstChild(name)
+                if s and s:IsA("Sound") then table.insert(targets, s) end
+            end
+        end
+        if #targets == 0 then
+            for _, s in ipairs(SS:GetDescendants()) do
+                if s:IsA("Sound") and s.IsPlaying then table.insert(targets, s) end
+            end
+        end
+        for _, s in ipairs(targets) do
+            if not originalIds[s] then originalIds[s] = s.SoundId end
+            s.SoundId = id
+            ok = true
+        end
+    end)
+    if ok then N("音乐已更换") else N("未找到可换音乐") end
+    return ok
+end
+
+local function restoreMusic()
+    pcall(function()
+        for s, old in pairs(originalIds) do
+            if s and s.Parent then s.SoundId = old end
+        end
+        N("已恢复原音乐")
+    end)
+end
+
+-- ===== 储存 =====
+local function saveConfig()
+    local ok, err = pcall(function()
+        if typeof(writefile) ~= "function" then error("无 writefile") end
+        local data = {
+            C = C,
+            modeQueue = modeQueue,
+            musicHistory = musicHistory,
+        }
+        writefile(SAVE_FILE, HS:JSONEncode(data))
+    end)
+    if ok then
+        SaveL.Text = "储存: 已保存"
+        SaveL.TextColor3 = Color3.fromRGB(100, 220, 140)
+        N("已保存")
+    else
+        SaveL.Text = "储存失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 120, 100)
+        N("保存失败: " .. tostring(err))
+    end
+end
+
+local function applyToggles()
+    setTog(Auto_tr, Auto_th, C.Auto)
+    setTog(Only_tr, Only_th, C.OnlyFrag)
+    setTog(ESP_tr, ESP_th, C.ESP)
+    setTog(AFK_tr, AFK_th, C.AFK)
+    setTog(ShelA_tr, ShelA_th, C.ShelAuto)
+    setTog(MQ_tr, MQ_th, C.ModeQ)
+    setTog(MH_tr, MH_th, C.ModeHop)
+    StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
+    StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+    refreshQ()
+    rebuildModeList()
+end
+
+local function loadConfig()
+    local ok, err = pcall(function()
+        if typeof(readfile) ~= "function" then error("无 readfile") end
+        if typeof(isfile) == "function" and not isfile(SAVE_FILE) then error("无存档") end
+        local raw = readfile(SAVE_FILE)
+        local data = HS:JSONDecode(raw)
+        if typeof(data.C) == "table" then
+            for k, v in pairs(data.C) do
+                if C[k] ~= nil then C[k] = v end
+            end
+        end
+        modeQueue = {}
+        if typeof(data.modeQueue) == "table" then
+            for _, id in ipairs(data.modeQueue) do
+                if typeof(id) == "string" then table.insert(modeQueue, id) end
+            end
+        end
+        musicHistory = typeof(data.musicHistory) == "table" and data.musicHistory or {}
+    end)
+    if ok then
+        applyToggles()
+        SaveL.Text = "储存: 已读取"
+        SaveL.TextColor3 = Color3.fromRGB(100, 200, 255)
+        N("已读取")
+    else
+        SaveL.Text = "无存档/失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 160, 100)
+        N("读取: " .. tostring(err))
+    end
+end
+
+-- ===== 捡取 / ESP / 避难所 =====
 local espFolder = Instance.new("Folder")
 espFolder.Name = "tau_esp"
 espFolder.Parent = Gui
 
 local function clrESP()
-    for _, c in ipairs(espFolder:GetChildren()) do
-        c:Destroy()
-    end
+    for _, c in ipairs(espFolder:GetChildren()) do c:Destroy() end
 end
 
-local function addESP(o, col, lab)
+local function addESP(o, col)
     local p = best(o)
     if not p then return end
     pcall(function()
@@ -340,13 +601,8 @@ local function scan()
     for o in pairs(kG) do kG[o] = nil end
     local fc, gc = 0, 0
     for _, o in ipairs(workspace:GetDescendants()) do
-        if isF(o) then
-            kF[o] = true
-            fc = fc + 1
-        elseif isG(o) then
-            kG[o] = true
-            gc = gc + 1
-        end
+        if isF(o) then kF[o] = true; fc = fc + 1
+        elseif isG(o) then kG[o] = true; gc = gc + 1 end
     end
     return fc, gc
 end
@@ -354,19 +610,15 @@ end
 local function pickup(o, typ)
     if not o or not o.Parent then return end
     local key = tostring(o)
-    if tried[key] and tick() - tried[key] < 0.6 then return end
+    if tried[key] and tick() - tried[key] < 0.55 then return end
     tried[key] = tick()
     local h = HRP()
     if not h then return end
     local part = best(o)
     if not part then return end
-
     local offs = {
-        Vector3.new(0, 2, 0),
-        Vector3.new(0, 1.5, 1.5),
-        Vector3.new(0, 1.5, -1.5),
-        Vector3.new(1.5, 1.5, 0),
-        Vector3.new(-1.5, 1.5, 0),
+        Vector3.new(0, 2, 0), Vector3.new(0, 1.5, 1.5), Vector3.new(0, 1.5, -1.5),
+        Vector3.new(1.5, 1.5, 0), Vector3.new(-1.5, 1.5, 0),
     }
     for _, off in ipairs(offs) do
         if not o.Parent then break end
@@ -401,10 +653,7 @@ end
 
 local function toShel()
     local h = HRP()
-    if not h then
-        N("无角色")
-        return
-    end
+    if not h then N("无角色") return end
     for _, o in ipairs(workspace:GetDescendants()) do
         if inL(o.Name, ShelN) then
             local p = best(o)
@@ -431,7 +680,7 @@ local function afk()
     end)
 end
 
--- 开关
+-- 按钮
 Auto_tr.MouseButton1Click:Connect(function()
     C.Auto = not C.Auto
     setTog(Auto_tr, Auto_th, C.Auto)
@@ -439,80 +688,78 @@ Auto_tr.MouseButton1Click:Connect(function()
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
     N(C.Auto and "Auto ON" or "Auto OFF")
 end)
-
 Only_tr.MouseButton1Click:Connect(function()
     C.OnlyFrag = not C.OnlyFrag
     setTog(Only_tr, Only_th, C.OnlyFrag)
-    N(C.OnlyFrag and "只捡碎片" or "碎片+眼镜")
 end)
-
 ESP_tr.MouseButton1Click:Connect(function()
     C.ESP = not C.ESP
     setTog(ESP_tr, ESP_th, C.ESP)
     if not C.ESP then clrESP() end
 end)
-
 AFK_tr.MouseButton1Click:Connect(function()
     C.AFK = not C.AFK
     setTog(AFK_tr, AFK_th, C.AFK)
 end)
-
 ShelA_tr.MouseButton1Click:Connect(function()
     C.ShelAuto = not C.ShelAuto
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
 end)
-
+MQ_tr.MouseButton1Click:Connect(function()
+    C.ModeQ = not C.ModeQ
+    setTog(MQ_tr, MQ_th, C.ModeQ)
+    N(C.ModeQ and "Mode Queue ON" or "Mode Queue OFF")
+end)
+MH_tr.MouseButton1Click:Connect(function()
+    C.ModeHop = not C.ModeHop
+    setTog(MH_tr, MH_th, C.ModeHop)
+end)
 ShelB.MouseButton1Click:Connect(toShel)
 HopB.MouseButton1Click:Connect(hop)
+AddMusicB.MouseButton1Click:Connect(function()
+    local id = MusicIdBox.Text
+    local name = MusicNameBox.Text
+    if changeMusic(id) then
+        table.insert(musicHistory, 1, {name = name ~= "" and name or "未命名", id = id})
+        while #musicHistory > MAX_MUSIC do table.remove(musicHistory) end
+        MusicNameBox.Text = ""
+    end
+end)
+RestoreMusicB.MouseButton1Click:Connect(restoreMusic)
+SaveB.MouseButton1Click:Connect(saveConfig)
+LoadB.MouseButton1Click:Connect(loadConfig)
 
 pcall(function()
-    LP.Idled:Connect(function()
-        if C.AFK then afk() end
-    end)
+    LP.Idled:Connect(function() if C.AFK then afk() end end)
 end)
 
 workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
         if isF(o) then
             kF[o] = true
-            if C.Auto then
-                task.wait(0.1)
-                pickup(o, "Fragment")
-            end
+            if C.Auto then task.wait(0.1) pickup(o, "Fragment") end
         elseif isG(o) then
             kG[o] = true
-            if C.Auto and not C.OnlyFrag then
-                task.wait(0.1)
-                pickup(o, "Glasses")
-            end
+            if C.Auto and not C.OnlyFrag then task.wait(0.1) pickup(o, "Glasses") end
         end
     end)
 end)
-
 workspace.DescendantRemoving:Connect(function(o)
     kF[o] = nil
     kG[o] = nil
 end)
 
 -- 主循环
-local tScan, tShel, tEsp, tAfk = 0, 0, 0, 0
+local tScan, tShel, tEsp, tAfk, tMode = 0, 0, 0, 0, 0
 task.spawn(function()
     while Gui and Gui.Parent do
-        local ok, err = pcall(function()
+        pcall(function()
             local now = tick()
-            local fc, gc = 0, 0
             if now - tScan >= 0.5 then
                 tScan = now
-                fc, gc = scan()
+                local fc, gc = scan()
                 FragL.Text = string.format("碎片: 地图%d | 我%d/5", fc, myF)
-                if gotG or gc > 0 then
-                    GlassL.Text = "眼镜: 有"
-                    GlassL.TextColor3 = Color3.fromRGB(100, 255, 120)
-                else
-                    GlassL.Text = "眼镜: 未找到"
-                    GlassL.TextColor3 = Color3.fromRGB(180, 180, 195)
-                end
-
+                GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
                 if C.Auto then
                     local h = HRP()
                     local pos = h and h.Position or Vector3.zero
@@ -520,66 +767,60 @@ task.spawn(function()
                     for o in pairs(kF) do
                         if o and o.Parent then
                             local p = best(o)
-                            if p then
-                                table.insert(list, {o = o, d = (p.Position - pos).Magnitude})
-                            end
+                            if p then table.insert(list, {o = o, d = (p.Position - pos).Magnitude}) end
                         end
                     end
                     table.sort(list, function(a, b) return a.d < b.d end)
                     for _, d in ipairs(list) do
                         pickup(d.o, "Fragment")
-                        task.wait(0.08)
+                        task.wait(0.07)
                     end
-                    -- 第二遍防漏
                     for o in pairs(kF) do
                         if o and o.Parent then
                             tried[tostring(o)] = 0
                             pickup(o, "Fragment")
-                            task.wait(0.06)
+                            task.wait(0.05)
                         end
                     end
                     if not C.OnlyFrag then
                         for o in pairs(kG) do
                             if o and o.Parent then
                                 pickup(o, "Glasses")
-                                task.wait(0.08)
+                                task.wait(0.07)
                             end
                         end
                     end
                 end
             end
-
             if C.ESP and now - tEsp >= 1 then
                 tEsp = now
                 clrESP()
-                for o in pairs(kF) do
-                    if o and o.Parent then
-                        addESP(o, Color3.fromRGB(255, 70, 70), "F")
-                    end
-                end
-                for o in pairs(kG) do
-                    if o and o.Parent then
-                        addESP(o, Color3.fromRGB(80, 220, 220), "G")
-                    end
-                end
+                for o in pairs(kF) do if o and o.Parent then addESP(o, Color3.fromRGB(255, 70, 70)) end end
+                for o in pairs(kG) do if o and o.Parent then addESP(o, Color3.fromRGB(80, 220, 220)) end end
             end
-
             if C.ShelAuto and now - tShel >= 30 then
                 tShel = now
                 toShel()
             end
-
             if C.AFK and now - tAfk >= 30 then
                 tAfk = now
                 afk()
             end
+            if now - tMode >= 1.2 then
+                tMode = now
+                detectMode()
+                checkModeQ()
+            end
         end)
-        if not ok then
-            warn("[tau] loop err:", err)
-        end
         task.wait(0.15)
     end
 end)
 
-print("[tau] SIMPLE ready - Arceus X")
-N("精简版已就绪")
+-- 自动读档
+task.spawn(function()
+    task.wait(0.4)
+    pcall(loadConfig)
+end)
+
+print("[tau] SIMPLE+ ready (Queue/Music/Save)")
+N("精简版+ 已就绪")
