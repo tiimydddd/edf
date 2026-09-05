@@ -35,6 +35,9 @@ local ExtN = {"Fire Extinguisher", "Extinguisher", "灭火器"}
 local BatN = {"Baseball Bat", "BaseballBat", "棒球棒"}
 local kF, kG = {}, {}
 local myF, gotG = 0, false
+local serverFrag = 0 -- 大厅/服务器已收集进度 0~5
+local NEED_FRAG = 5 -- Tartarus 需要 5 个血月碎片
+local tartUnlocked = false
 local tried = {}
 local isMin = false
 local currentMode = "Unknown"
@@ -301,17 +304,19 @@ end
 
 local P1 = mkPage("主页")
 local StatusL = mkLabel(P1, 0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
-local FragL = mkLabel(P1, 18, "碎片: 地图0 | 我0/5")
+local FragL = mkLabel(P1, 18, "碎片: 地图0 | 进度0/5")
 local GlassL = mkLabel(P1, 34, "眼镜: 未找到")
 local ModeL = mkLabel(P1, 50, "模式: Unknown")
-local Auto_tr, Auto_th = mkTog(P1, 74, "Auto(仅碎片/眼镜)", false)
-local Only_tr, Only_th = mkTog(P1, 100, "只有碎片", true)
-local ESP_tr, ESP_th = mkTog(P1, 126, "ESP", true)
-local AFK_tr, AFK_th = mkTog(P1, 152, "Anti-AFK", true)
-local ShelA_tr, ShelA_th = mkTog(P1, 178, "定时去避难所", false)
-local Rej_tr, Rej_th = mkTog(P1, 204, "被踢/断线自动重进", true)
-local ShelB = mkBtn(P1, 234, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(P1, 266, "换服", Color3.fromRGB(50, 90, 140))
+local TartL = mkLabel(P1, 66, "Tartarus: 未解锁 (需5碎片)", Color3.fromRGB(255, 160, 100))
+
+local Auto_tr, Auto_th = mkTog(P1, 88, "Auto(仅碎片/眼镜)", false)
+local Only_tr, Only_th = mkTog(P1, 114, "只有碎片", true)
+local ESP_tr, ESP_th = mkTog(P1, 140, "ESP", true)
+local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
+local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
+local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
+local ShelB = mkBtn(P1, 248, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(P1, 280, "换服", Color3.fromRGB(50, 90, 140))
 
 
 local P2 = mkPage("传送")
@@ -451,6 +456,8 @@ local function detectMode()
                 elseif data.reason == "TartarusClock" or data.reason == "TartarusSummon" then
                     currentMode = "Tartarus"
                     ModeL.Text = "模式: Tartarus"
+                    tartUnlocked = true
+                    serverFrag = NEED_FRAG
                 elseif data.reason == "DoomsDayForecast" then
                     currentMode = "Doomsday"
                     ModeL.Text = "模式: Doomsday"
@@ -570,6 +577,62 @@ end
 
 -- 全图扫描节流（很耗，少做）
 local lastFullScan = 0
+
+-- 读大厅 Tartarus 预测 / 碎片进度 (目标共 5 个)
+local function readLobbyFrag()
+    pcall(function()
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then return end
+        local bestN = nil
+        for _, gui in ipairs(pg:GetDescendants()) do
+            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                local tx = tostring(gui.Text or "")
+                local lo = string.lower(tx)
+                -- 匹配 3/5、2/5、碎片进度等
+                local a, b = string.match(tx, "(%d)%s*/%s*(%d)")
+                if a and b and tonumber(b) == NEED_FRAG then
+                    local n = tonumber(a)
+                    if n and n >= 0 and n <= NEED_FRAG then
+                        bestN = n
+                    end
+                end
+                if string.find(lo, "fragment") or string.find(tx, "碎片") or string.find(lo, "tartarus") or string.find(tx, "血月") then
+                    local n2 = tonumber(string.match(tx, "(%d)"))
+                    if n2 and n2 >= 0 and n2 <= NEED_FRAG and string.find(tx, "/") then
+                        local aa, bb = string.match(tx, "(%d)%s*/%s*(%d)")
+                        if aa and tonumber(bb) == NEED_FRAG then
+                            bestN = tonumber(aa)
+                        end
+                    end
+                end
+                if string.find(lo, "tartarus") and (string.find(lo, "unlock") or string.find(lo, "summon") or string.find(tx, "解锁") or string.find(tx, "已召唤")) then
+                    tartUnlocked = true
+                    bestN = NEED_FRAG
+                end
+            end
+        end
+        if bestN ~= nil then
+            serverFrag = bestN
+            if serverFrag >= NEED_FRAG then tartUnlocked = true end
+        end
+    end)
+    -- 个人捡到的作为下限参考
+    if myF > serverFrag then serverFrag = math.min(NEED_FRAG, myF) end
+    if serverFrag >= NEED_FRAG then tartUnlocked = true end
+end
+
+local function updFragUI(mapCount)
+    readLobbyFrag()
+    FragL.Text = string.format("碎片: 地图%d | 进度%d/%d", mapCount or 0, serverFrag, NEED_FRAG)
+    if tartUnlocked or serverFrag >= NEED_FRAG then
+        TartL.Text = "Tartarus: 已解锁 (5/5)"
+        TartL.TextColor3 = Color3.fromRGB(100, 255, 140)
+    else
+        TartL.Text = string.format("Tartarus: 未解锁 (%d/%d)", serverFrag, NEED_FRAG)
+        TartL.TextColor3 = Color3.fromRGB(255, 160, 100)
+    end
+end
+
 local function countKnown()
     local fc, gc = 0, 0
     for o in pairs(kF) do
@@ -630,8 +693,13 @@ local function pickup(o, typ)
     task.delay(0.4, function()
         if not o or not o.Parent then
             if typ == "Fragment" then
-                myF = math.min(5, myF + 1)
-                N("碎片 " .. myF .. "/5")
+                myF = math.min(NEED_FRAG, myF + 1)
+                serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
+                N(string.format("碎片进度 %d/%d", serverFrag, NEED_FRAG))
+                if serverFrag >= NEED_FRAG then
+                    tartUnlocked = true
+                    N("Tartarus 应已解锁!")
+                end
             elseif typ == "Glasses" then
                 gotG = true
                 N("眼镜已找到")
@@ -914,7 +982,7 @@ task.spawn(function()
             if now - tScan >= 1 then
                 tScan = now
                 local fc, gc = scan()
-                FragL.Text = string.format("碎片: 地图%d | 我%d/5", fc, myF)
+                updFragUI(fc)
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
             end
             -- Auto 捡：每 0.9 秒最多捡 3 个最近的（不双遍）
