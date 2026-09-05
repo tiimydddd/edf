@@ -1,7 +1,7 @@
--- tau simple + Queue + Music + Save (Arceus X)
--- 精简版 + 模式队列 + 音乐 + 储存
+-- tau simple+ TAB版 (Arceus X)
+-- 顶部一排 Tab：主页 / 队列 / 音乐 / 储存
 
-print("[tau] simple+ start")
+print("[tau] simple tab start")
 
 pcall(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
@@ -31,7 +31,6 @@ local C = {
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
 local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
-
 local MODES = {
     {id = "Tartarus", name = "Tartarus"},
     {id = "Doomsday", name = "Doomsday"},
@@ -44,7 +43,7 @@ local kF, kG = {}, {}
 local myF, gotG = 0, false
 local tried = {}
 local isMin = false
-local modeQueue = {} -- 有序
+local modeQueue = {}
 local currentMode = "Unknown"
 local musicHistory = {}
 local originalIds = {}
@@ -92,7 +91,6 @@ local function best(o)
     return o:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- ===== UI =====
 pcall(function()
     local pg = LP:FindFirstChild("PlayerGui")
     if pg then
@@ -109,7 +107,7 @@ Gui.IgnoreGuiInset = true
 Gui.Enabled = true
 
 do
-    local ok = pcall(function()
+    pcall(function()
         local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 10)
         if pg then Gui.Parent = pg end
     end)
@@ -124,8 +122,8 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 280, 0, 420)
-Main.Position = UDim2.new(0, 16, 0.2, 0)
+Main.Size = UDim2.new(0, 300, 0, 360)
+Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Visible = true
@@ -177,36 +175,77 @@ ClB.TextSize = 14
 ClB.Parent = TB
 Instance.new("UICorner", ClB).CornerRadius = UDim.new(0, 5)
 
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Name = "Body"
-Scroll.Size = UDim2.new(1, -12, 1, -40)
-Scroll.Position = UDim2.new(0, 6, 0, 36)
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 4
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 780)
-Scroll.Parent = Main
+-- 一排 Tab
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -12, 0, 28)
+TabBar.Position = UDim2.new(0, 6, 0, 36)
+TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 6)
 
-local function mkLabel(y, text, col)
+local tabLay = Instance.new("UIListLayout")
+tabLay.FillDirection = Enum.FillDirection.Horizontal
+tabLay.Padding = UDim.new(0, 3)
+tabLay.Parent = TabBar
+
+local function mkTab(name)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 68, 1, -4)
+    b.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    b.Text = name
+    b.TextColor3 = Color3.fromRGB(160, 160, 175)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.Parent = TabBar
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    return b
+end
+
+local T1 = mkTab("主页")
+local T2 = mkTab("队列")
+local T3 = mkTab("音乐")
+local T4 = mkTab("储存")
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -12, 1, -72)
+Content.Position = UDim2.new(0, 6, 0, 68)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Pages = {}
+
+local function mkPage(name)
+    local p = Instance.new("Frame")
+    p.Name = name
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.BackgroundTransparency = 1
+    p.Visible = false
+    p.Parent = Content
+    Pages[name] = p
+    return p
+end
+
+local function mkLabel(par, y, text, col)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -8, 0, 16)
-    l.Position = UDim2.new(0, 4, 0, y)
+    l.Size = UDim2.new(1, -4, 0, 16)
+    l.Position = UDim2.new(0, 2, 0, y)
     l.BackgroundTransparency = 1
     l.Text = text
     l.TextColor3 = col or Color3.fromRGB(180, 180, 195)
     l.Font = Enum.Font.Gotham
     l.TextSize = 11
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Parent = Scroll
+    l.Parent = par
     return l
 end
 
-local function mkTog(y, text, on)
+local function mkTog(par, y, text, on)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -8, 0, 24)
-    row.Position = UDim2.new(0, 4, 0, y)
+    row.Size = UDim2.new(1, -4, 0, 24)
+    row.Position = UDim2.new(0, 2, 0, y)
     row.BackgroundTransparency = 1
-    row.Parent = Scroll
+    row.Parent = par
     local lb = Instance.new("TextLabel")
     lb.Size = UDim2.new(1, -48, 1, 0)
     lb.BackgroundTransparency = 1
@@ -237,24 +276,24 @@ local function setTog(btn, kn, on)
     kn.Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
 end
 
-local function mkBtn(y, text, col)
+local function mkBtn(par, y, text, col)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -8, 0, 26)
-    b.Position = UDim2.new(0, 4, 0, y)
+    b.Size = UDim2.new(1, -4, 0, 26)
+    b.Position = UDim2.new(0, 2, 0, y)
     b.BackgroundColor3 = col or Color3.fromRGB(45, 45, 58)
     b.Text = text
     b.TextColor3 = Color3.new(1, 1, 1)
     b.Font = Enum.Font.GothamBold
     b.TextSize = 11
-    b.Parent = Scroll
+    b.Parent = par
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
     return b
 end
 
-local function mkBox(y, ph)
+local function mkBox(par, y, ph)
     local t = Instance.new("TextBox")
-    t.Size = UDim2.new(1, -8, 0, 24)
-    t.Position = UDim2.new(0, 4, 0, y)
+    t.Size = UDim2.new(1, -4, 0, 24)
+    t.Position = UDim2.new(0, 2, 0, y)
     t.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
     t.PlaceholderText = ph
     t.Text = ""
@@ -263,58 +302,78 @@ local function mkBox(y, ph)
     t.Font = Enum.Font.Gotham
     t.TextSize = 11
     t.ClearTextOnFocus = false
-    t.Parent = Scroll
+    t.Parent = par
     Instance.new("UICorner", t).CornerRadius = UDim.new(0, 5)
     return t
 end
 
--- 基础
-local StatusL = mkLabel(0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
-local FragL = mkLabel(18, "碎片: 地图0 | 我0/5")
-local GlassL = mkLabel(34, "眼镜: 未找到")
-local ModeL = mkLabel(50, "模式: Unknown")
+local P1 = mkPage("主页")
+local StatusL = mkLabel(P1, 0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
+local FragL = mkLabel(P1, 18, "碎片: 地图0 | 我0/5")
+local GlassL = mkLabel(P1, 34, "眼镜: 未找到")
+local ModeL = mkLabel(P1, 50, "模式: Unknown")
+local Auto_tr, Auto_th = mkTog(P1, 74, "Auto Loot", false)
+local Only_tr, Only_th = mkTog(P1, 100, "只有碎片", true)
+local ESP_tr, ESP_th = mkTog(P1, 126, "ESP", true)
+local AFK_tr, AFK_th = mkTog(P1, 152, "Anti-AFK", true)
+local ShelA_tr, ShelA_th = mkTog(P1, 178, "定时去避难所", false)
+local ShelB = mkBtn(P1, 210, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(P1, 242, "换服", Color3.fromRGB(50, 90, 140))
 
-local Auto_tr, Auto_th = mkTog(72, "Auto Loot", false)
-local Only_tr, Only_th = mkTog(98, "只有碎片", true)
-local ESP_tr, ESP_th = mkTog(124, "ESP", true)
-local AFK_tr, AFK_th = mkTog(150, "Anti-AFK", true)
-local ShelA_tr, ShelA_th = mkTog(176, "定时去避难所", false)
-
-local ShelB = mkBtn(206, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(236, "换服", Color3.fromRGB(50, 90, 140))
-
--- 模式队列
-mkLabel(272, "── 模式队列 (点加入/移除) ──", Color3.fromRGB(200, 180, 100))
+local P2 = mkPage("队列")
+mkLabel(P2, 0, "点模式加入队列 (再点移除)", Color3.fromRGB(200, 180, 100))
 local ModeListF = Instance.new("Frame")
-ModeListF.Size = UDim2.new(1, -8, 0, 130)
-ModeListF.Position = UDim2.new(0, 4, 0, 290)
+ModeListF.Size = UDim2.new(1, -4, 0, 140)
+ModeListF.Position = UDim2.new(0, 2, 0, 20)
 ModeListF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
 ModeListF.BorderSizePixel = 0
-ModeListF.Parent = Scroll
+ModeListF.Parent = P2
 Instance.new("UICorner", ModeListF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", ModeListF).Padding = UDim.new(0, 2)
+local MQ_tr, MQ_th = mkTog(P2, 168, "启用模式队列", false)
+local MH_tr, MH_th = mkTog(P2, 194, "非目标自动换服", false)
+local ModeQStatus = mkLabel(P2, 224, "队列: (空)")
 
-local MQ_tr, MQ_th = mkTog(426, "启用模式队列", false)
-local MH_tr, MH_th = mkTog(452, "非目标自动换服", false)
-local ModeQStatus = mkLabel(478, "队列: (空)")
+local P3 = mkPage("音乐")
+mkLabel(P3, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
+local MusicIdBox = mkBox(P3, 22, "音乐 ID (数字)")
+local MusicNameBox = mkBox(P3, 52, "歌名（可选）")
+local AddMusicB = mkBtn(P3, 84, "更换音乐", Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkBtn(P3, 116, "恢复原音乐", Color3.fromRGB(90, 70, 50))
+mkLabel(P3, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
 
--- 音乐
-mkLabel(500, "── 音乐 ──", Color3.fromRGB(140, 200, 255))
-local MusicIdBox = mkBox(518, "音乐 ID")
-local MusicNameBox = mkBox(546, "歌名")
-local AddMusicB = mkBtn(574, "更换音乐", Color3.fromRGB(50, 120, 80))
-local RestoreMusicB = mkBtn(604, "恢复原音乐", Color3.fromRGB(90, 70, 50))
+local P4 = mkPage("储存")
+mkLabel(P4, 0, "保存开关 / 队列 / 音乐设置", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkLabel(P4, 96, "储存: 未操作")
+mkLabel(P4, 120, "文件: tau_simple_save.json", Color3.fromRGB(140, 140, 155))
+mkLabel(P4, 140, "需执行器支持 writefile", Color3.fromRGB(140, 140, 155))
 
--- 储存
-mkLabel(640, "── 储存 ──", Color3.fromRGB(140, 200, 255))
-local SaveB = mkBtn(658, "保存设置", Color3.fromRGB(50, 100, 140))
-local LoadB = mkBtn(688, "读取储存", Color3.fromRGB(45, 70, 100))
-local SaveL = mkLabel(720, "储存: 未操作")
+local function swTab(name)
+    for k, p in pairs(Pages) do
+        p.Visible = (k == name)
+    end
+    local map = {["主页"] = T1, ["队列"] = T2, ["音乐"] = T3, ["储存"] = T4}
+    for _, t in pairs({T1, T2, T3, T4}) do
+        t.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        t.TextColor3 = Color3.fromRGB(160, 160, 175)
+    end
+    if map[name] then
+        map[name].BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        map[name].TextColor3 = Color3.new(1, 1, 1)
+    end
+end
+
+T1.MouseButton1Click:Connect(function() swTab("主页") end)
+T2.MouseButton1Click:Connect(function() swTab("队列") end)
+T3.MouseButton1Click:Connect(function() swTab("音乐") end)
+T4.MouseButton1Click:Connect(function() swTab("储存") end)
+swTab("主页")
 
 N("UI 已加载")
 print("[tau] UI OK")
 
--- 拖动
 do
     local drag, d0, p0 = false, nil, nil
     TB.InputBegan:Connect(function(i)
@@ -337,13 +396,13 @@ end
 
 MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
-    Scroll.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 280, 0, 420)
+    TabBar.Visible = not isMin
+    Content.Visible = not isMin
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 360)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
 
--- ===== 队列 =====
 local function qIndex(id)
     for i, v in ipairs(modeQueue) do
         if v == id then return i end
@@ -369,7 +428,7 @@ local function rebuildModeList()
     for _, m in ipairs(MODES) do
         local rank = qIndex(m.id)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, -4, 0, 22)
+        b.Size = UDim2.new(1, -4, 0, 24)
         b.BackgroundColor3 = rank and Color3.fromRGB(30, 55, 40) or Color3.fromRGB(40, 40, 52)
         b.Text = (rank and (" #" .. rank .. " ") or "  ") .. m.name .. (rank and " [队列]" or "")
         b.TextColor3 = rank and Color3.fromRGB(120, 255, 160) or Color3.fromRGB(200, 200, 210)
@@ -399,14 +458,11 @@ refreshQ()
 local function inQueue(mode)
     local lo = string.lower(tostring(mode or ""))
     for _, id in ipairs(modeQueue) do
-        if lo == string.lower(id) or string.find(lo, string.lower(id), 1, true) then
-            return true
-        end
+        if lo == string.lower(id) or string.find(lo, string.lower(id), 1, true) then return true end
     end
     return false
 end
 
--- ===== 模式检测 =====
 local function detectMode()
     pcall(function()
         local g = LP:FindFirstChild("PlayerGui")
@@ -467,7 +523,6 @@ local function checkModeQ()
     end
 end
 
--- ===== 音乐 =====
 local function changeMusic(id)
     id = tostring(id or "")
     if id == "" then N("请输入音乐ID") return false end
@@ -506,28 +561,6 @@ local function restoreMusic()
     end)
 end
 
--- ===== 储存 =====
-local function saveConfig()
-    local ok, err = pcall(function()
-        if typeof(writefile) ~= "function" then error("无 writefile") end
-        local data = {
-            C = C,
-            modeQueue = modeQueue,
-            musicHistory = musicHistory,
-        }
-        writefile(SAVE_FILE, HS:JSONEncode(data))
-    end)
-    if ok then
-        SaveL.Text = "储存: 已保存"
-        SaveL.TextColor3 = Color3.fromRGB(100, 220, 140)
-        N("已保存")
-    else
-        SaveL.Text = "储存失败"
-        SaveL.TextColor3 = Color3.fromRGB(255, 120, 100)
-        N("保存失败: " .. tostring(err))
-    end
-end
-
 local function applyToggles()
     setTog(Auto_tr, Auto_th, C.Auto)
     setTog(Only_tr, Only_th, C.OnlyFrag)
@@ -542,16 +575,29 @@ local function applyToggles()
     rebuildModeList()
 end
 
+local function saveConfig()
+    local ok, err = pcall(function()
+        if typeof(writefile) ~= "function" then error("无 writefile") end
+        writefile(SAVE_FILE, HS:JSONEncode({C = C, modeQueue = modeQueue, musicHistory = musicHistory}))
+    end)
+    if ok then
+        SaveL.Text = "储存: 已保存"
+        SaveL.TextColor3 = Color3.fromRGB(100, 220, 140)
+        N("已保存")
+    else
+        SaveL.Text = "储存失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 120, 100)
+        N("保存失败: " .. tostring(err))
+    end
+end
+
 local function loadConfig()
     local ok, err = pcall(function()
         if typeof(readfile) ~= "function" then error("无 readfile") end
         if typeof(isfile) == "function" and not isfile(SAVE_FILE) then error("无存档") end
-        local raw = readfile(SAVE_FILE)
-        local data = HS:JSONDecode(raw)
+        local data = HS:JSONDecode(readfile(SAVE_FILE))
         if typeof(data.C) == "table" then
-            for k, v in pairs(data.C) do
-                if C[k] ~= nil then C[k] = v end
-            end
+            for k, v in pairs(data.C) do if C[k] ~= nil then C[k] = v end end
         end
         modeQueue = {}
         if typeof(data.modeQueue) == "table" then
@@ -569,11 +615,9 @@ local function loadConfig()
     else
         SaveL.Text = "无存档/失败"
         SaveL.TextColor3 = Color3.fromRGB(255, 160, 100)
-        N("读取: " .. tostring(err))
     end
 end
 
--- ===== 捡取 / ESP / 避难所 =====
 local espFolder = Instance.new("Folder")
 espFolder.Name = "tau_esp"
 espFolder.Parent = Gui
@@ -680,7 +724,6 @@ local function afk()
     end)
 end
 
--- 按钮
 Auto_tr.MouseButton1Click:Connect(function()
     C.Auto = not C.Auto
     setTog(Auto_tr, Auto_th, C.Auto)
@@ -708,7 +751,7 @@ end)
 MQ_tr.MouseButton1Click:Connect(function()
     C.ModeQ = not C.ModeQ
     setTog(MQ_tr, MQ_th, C.ModeQ)
-    N(C.ModeQ and "Mode Queue ON" or "Mode Queue OFF")
+    N(C.ModeQ and "Mode Queue ON" or "OFF")
 end)
 MH_tr.MouseButton1Click:Connect(function()
     C.ModeHop = not C.ModeHop
@@ -749,7 +792,6 @@ workspace.DescendantRemoving:Connect(function(o)
     kG[o] = nil
 end)
 
--- 主循环
 local tScan, tShel, tEsp, tAfk, tMode = 0, 0, 0, 0, 0
 task.spawn(function()
     while Gui and Gui.Parent do
@@ -816,11 +858,10 @@ task.spawn(function()
     end
 end)
 
--- 自动读档
 task.spawn(function()
     task.wait(0.4)
     pcall(loadConfig)
 end)
 
-print("[tau] SIMPLE+ ready (Queue/Music/Save)")
-N("精简版+ 已就绪")
+print("[tau] TAB ready - 主页/队列/音乐/储存")
+N("Tab版已就绪")
