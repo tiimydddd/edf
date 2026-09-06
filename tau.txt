@@ -640,8 +640,12 @@ local function readLobbyFrag()
     if serverFrag >= NEED_FRAG then tartUnlocked = true end
 end
 
-local function updFragUI(mapCount)
-    readLobbyFrag()
+local lastLobbyRead = 0
+local function updFragUI(mapCount, doLobby)
+    if doLobby or (tick() - lastLobbyRead >= 5) then
+        lastLobbyRead = tick()
+        readLobbyFrag()
+    end
     FragL.Text = string.format("碎片: 地图%d | 进度%d/%d", mapCount or 0, serverFrag, NEED_FRAG)
     if tartUnlocked or serverFrag >= NEED_FRAG then
         TartL.Text = "Tartarus: 已解锁 (5/5)"
@@ -998,10 +1002,11 @@ task.spawn(function()
         pcall(function()
             local now = tick()
             -- UI 数字：1 秒更新
-            if now - tScan >= 1 then
+            -- 地图数量 2 秒刷新；大厅进度在 updFragUI 内最多 5 秒读一次
+            if now - tScan >= 2 then
                 tScan = now
                 local fc, gc = scan()
-                updFragUI(fc)
+                updFragUI(fc, false)
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
             end
             -- Auto 捡：每 0.9 秒最多捡 3 个最近的（不双遍）
