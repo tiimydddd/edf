@@ -641,8 +641,9 @@ local function readLobbyFrag()
 end
 
 local lastLobbyRead = 0
+local LOBBY_READ_INTERVAL = 60 -- 雪月/血月预测 每 60 秒更新一次
 local function updFragUI(mapCount, doLobby)
-    if doLobby or (tick() - lastLobbyRead >= 5) then
+    if doLobby or (tick() - lastLobbyRead >= LOBBY_READ_INTERVAL) then
         lastLobbyRead = tick()
         readLobbyFrag()
     end
@@ -998,6 +999,8 @@ local lastEspKey = ""
 task.spawn(function()
     -- 启动时扫一次
     pcall(fullScan)
+    pcall(readLobbyFrag)
+    lastLobbyRead = tick()
     while Gui and Gui.Parent do
         pcall(function()
             local now = tick()
