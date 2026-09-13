@@ -886,11 +886,77 @@ local function toShel()
     N("没找到避难所")
 end
 
-local function hop()
-    N("换服中...")
-    task.wait(0.3) -- 稍等，减少瞬踢
+local rejoining = false
+local pendingHop = false
+local kickHandled = false
+
+local function queueScript()
+    pcall(function()
+        if typeof(queue_on_teleport) == "function" then
+            queue_on_teleport([[
+                task.wait(2)
+                print("[tau] after kick/rejoin - re-execute script if needed")
+            ]])
+        end
+    end)
+end
+
+local function doTeleport()
+    local pid = game.PlaceId
+    pcall(function() TS:Teleport(pid, LP) end)
+    task.wait(0.2)
     pcall(function() TS:Teleport(PLACE, LP) end)
-    pcall(function() TS:Teleport(game.PlaceId, LP) end)
+end
+
+-- 先处理 kick，再 rejoin
+local function rejoin(reason)
+    if rejoining then return end
+    if not C.Rejoin and not pendingHop then return end
+    rejoining = true
+    N("重进中: " .. tostring(reason or "?"))
+    print("[tau] rejoin:", reason, "kickHandled=", kickHandled)
+    queueScript()
+    -- 若还没走过 kick 流程，先等一下让离开生效
+    if not kickHandled then
+        N("等待 kick/离开处理...")
+        task.wait(2.0)
+        kickHandled = true
+    else
+        -- 已 kick 过：再稍等，避免同 JobId
+        task.wait(pendingHop and 1.5 or 0.5)
+    end
+    N("开始 rejoin 新实例...")
+    doTeleport()
+    task.delay(10, function()
+        rejoining = false
+        pendingHop = false
+        kickHandled = false
+    end)
+end
+
+local function hop()
+    -- 不先完整离开的话，容易进回同一 JobId，私服不会重开
+    N("换服: ①彻底离开 → ②新服 rejoin")
+    pendingHop = true
+    kickHandled = false
+    rejoining = false
+    queueScript()
+    task.spawn(function()
+        N("① 彻底离开当前服...")
+        pcall(function()
+            if LP.Kick then LP:Kick("tau hop leave") end
+        end)
+        -- 多等一会，让实例有时间卸掉玩家，私服才可能关掉再开
+        task.wait(2.5)
+        kickHandled = true
+        N("① 已离开，准备进新实例")
+        task.wait(1.0)
+        if pendingHop then
+            N("② rejoin 新服...")
+            rejoining = false
+            rejoin("HopAfterKick")
+        end
+    end)
 end
 
 local function afk()
@@ -898,7 +964,6 @@ local function afk()
         VU:CaptureController()
         VU:ClickButton2(Vector2.new())
     end)
-    -- 轻微移动防挂机检测
     pcall(function()
         local h = HRP()
         if h then
@@ -907,29 +972,6 @@ local function afk()
             h.CFrame = h.CFrame + Vector3.new(-0.1, 0, 0)
         end
     end)
-end
-
-local rejoining = false
-local function rejoin(reason)
-    if rejoining or not C.Rejoin then return end
-    rejoining = true
-    N("重进中: " .. tostring(reason or "?"))
-    print("[tau] rejoin:", reason)
-    -- 换服后自动再跑脚本（若执行器支持）
-    pcall(function()
-        if typeof(queue_on_teleport) == "function" then
-            queue_on_teleport([[
-                task.wait(2)
-                -- 提示：请在执行器里开 Auto Execute，或手动再跑 tau_simple
-                print("[tau] rejoin teleport done - re-execute script if needed")
-            ]])
-        end
-    end)
-    task.wait(0.5)
-    local pid = game.PlaceId
-    pcall(function() TS:Teleport(pid, LP) end)
-    pcall(function() TS:Teleport(PLACE, LP) end)
-    task.delay(8, function() rejoining = false end)
 end
 
 Auto_tr.MouseButton1Click:Connect(function()
@@ -1099,7 +1141,13 @@ end)
 pcall(function()
     Players.PlayerRemoving:Connect(function(pl)
         if pl == LP then
-            rejoin("PlayerRemoving")
+            kickHandled = true
+            N("检测到离开/kick，准备 rejoin")
+            -- 必须先 kick 处理完，再 rejoin
+            task.defer(function()
+                task.wait(0.5)
+                rejoin(pendingHop and "HopKick" or "PlayerRemoving")
+            end)
         end
     end)
 end)
