@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -33,6 +33,7 @@ local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", 
 local KeyN = {"Shelter Key", "ShelterKey", "避难所钥匙"}
 local ExtN = {"Fire Extinguisher", "Extinguisher", "灭火器"}
 local BatN = {"Baseball Bat", "BaseballBat", "棒球棒"}
+local VoteMaps = {"Beginnings", "Islands", "Island"} -- 优先投票
 local kF, kG = {}, {}
 local myF, gotG = 0, false
 local serverFrag = 0 -- 大厅/服务器已收集进度 0~5
@@ -45,7 +46,7 @@ local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
 local serverJoinTime = tick()
-local MIN_STAY = 70   -- 你数的休息+进图约74秒，再判断碎片
+local MIN_STAY = 74 -- 你数的休息+进图约74秒，再判断碎片
 local didEarlyScan = false
 
 local function N(msg)
@@ -120,7 +121,7 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 300, 0, 400)
+Main.Size = UDim2.new(0, 300, 0, 430)
 Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -319,9 +320,10 @@ local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
 local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
 local SmH_tr, SmH_th = mkTog(P1, 244, "自动:搜净0再换服", true)
-local ShelB = mkBtn(P1, 274, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(P1, 304, "换服(可强制)", Color3.fromRGB(50, 90, 140))
-local HopHint = mkLabel(P1, 332, "地图生成后无碎片→自动换", Color3.fromRGB(140, 200, 255))
+local Vote_tr, Vote_th = mkTog(P1, 268, "自动投票 Beginnings/Islands", true)
+local ShelB = mkBtn(P1, 296, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(P1, 326, "换服(可强制)", Color3.fromRGB(50, 90, 140))
+local HopHint = mkLabel(P1, 354, "地图生成后无碎片→自动换", Color3.fromRGB(140, 200, 255))
 
 
 local P2 = mkPage("传送")
@@ -419,11 +421,72 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 400)
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 430)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
 
+
+
+local lastVoteTry = 0
+local function preferMapName(name)
+    local n = string.lower(tostring(name or ""))
+    for _, m in ipairs(VoteMaps) do
+        if string.find(n, string.lower(m), 1, true) then return true end
+    end
+    return false
+end
+
+local function tryClick(gui)
+    if not gui then return false end
+    local ok = false
+    pcall(function()
+        if gui:IsA("GuiButton") then
+            if typeof(firesignal) == "function" then
+                pcall(firesignal, gui.MouseButton1Click)
+                pcall(firesignal, gui.Activated)
+            end
+            pcall(function() gui.MouseButton1Click:Fire() end)
+            ok = true
+        end
+    end)
+    return ok
+end
+
+local function autoVoteMaps()
+    if not C.AutoVote then return end
+    if tick() - lastVoteTry < 1.2 then return end
+    lastVoteTry = tick()
+    local pg = LP:FindFirstChild("PlayerGui")
+    if not pg then return end
+    local candidates = {}
+    for _, d in ipairs(pg:GetDescendants()) do
+        if d:IsA("TextButton") or d:IsA("ImageButton") then
+            local tx = ""
+            pcall(function() tx = tostring(d.Text or "") end)
+            local nm = tostring(d.Name or "")
+            if preferMapName(tx) or preferMapName(nm) then
+                if d.Visible ~= false and d.AbsoluteSize.X > 2 then
+                    table.insert(candidates, d)
+                end
+            end
+            -- 父级名字带地图
+            local par = d.Parent
+            if par and (preferMapName(par.Name) or preferMapName(par:GetAttribute and par:GetAttribute("MapName") or "")) then
+                if d.Visible ~= false then table.insert(candidates, d) end
+            end
+        elseif d:IsA("TextLabel") and preferMapName(d.Text) then
+            local btn = d.Parent and (d.Parent:IsA("GuiButton") and d.Parent or d.Parent:FindFirstChildWhichIsA("GuiButton"))
+            if btn then table.insert(candidates, btn) end
+        end
+    end
+    for _, b in ipairs(candidates) do
+        if tryClick(b) then
+            N("已投票: " .. tostring(b.Name or b.Text or "?"))
+            return
+        end
+    end
+end
 
 local function detectMode()
     pcall(function()
@@ -519,6 +582,7 @@ local function applyToggles()
     setTog(Rej_tr, Rej_th, C.Rejoin)
     setTog(SmH_tr, SmH_th, C.AutoHop)
     C.SmartHop = C.AutoHop
+    setTog(Vote_tr, Vote_th, C.AutoVote)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -949,16 +1013,33 @@ local function mapFragCount()
     end
     return fc
 end
+local function mapGlassCount()
+    local gc = 0
+    for o in pairs(kG) do
+        if o and o.Parent then gc = gc + 1 end
+    end
+    return gc
+end
+-- 是否还能搜：有碎片，或（非仅碎片模式且有眼镜）
+local function stillHasLoot()
+    if mapFragCount() > 0 then return true end
+    if not C.OnlyFrag and mapGlassCount() > 0 then return true end
+    return false
+end
 
 local function canSmartHop(force)
     if force then return true, "强制换服" end
     if not C.SmartHop then return true, "智能换服关" end
     -- 1) 先扫干净
     pcall(fullScan)
-    local fc = mapFragCount()
+    local fc, gc = mapFragCount(), mapGlassCount()
     if fc > 0 then
         zeroFragSince = nil
         return false, string.format("地图还有 %d 碎片，搜干净再换", fc)
+    end
+    if not C.OnlyFrag and gc > 0 then
+        zeroFragSince = nil
+        return false, string.format("地图还有 %d 眼镜，先捡再换", gc)
     end
     -- 2) 确认 0：至少稳定一段时间
     local need = tonumber(C.HopWait) or 0
@@ -1068,6 +1149,7 @@ SmH_tr.MouseButton1Click:Connect(function()
     C.SmartHop = not C.SmartHop
     setTog(SmH_tr, SmH_th, C.AutoHop)
     C.SmartHop = C.AutoHop
+    setTog(Vote_tr, Vote_th, C.AutoVote)
     N(C.SmartHop and "搜净再换 ON" or "搜净再换 OFF(随时可换)")
 end)
 RefPlrB.MouseButton1Click:Connect(refPlrList)
@@ -1126,12 +1208,17 @@ task.spawn(function()
                     pcall(fullScan)
                     fc = select(1, countKnown())
                 end
-                if fc > 0 or inRest or not C.Auto then
+                local hasLoot = stillHasLoot()
+                if hasLoot or inRest or not C.Auto then
                     zeroFragSince = nil
                 elseif C.AutoHop and C.Auto and (tick() - serverJoinTime) >= MIN_STAY then
-                    -- 74秒后仍无碎片：立刻重建，不确认
+                    -- 74秒后：无碎片（且仅碎片模式或无眼镜）→ 立刻重建
                     if not pendingHop and not rejoining then
-                        N("74秒后无碎片 → 重建")
+                        if C.OnlyFrag then
+                            N("74秒后无碎片 → 重建")
+                        else
+                            N("74秒后无碎片/眼镜 → 重建")
+                        end
                         hop(true)
                     end
                 end
@@ -1145,11 +1232,16 @@ task.spawn(function()
                     elseif (tick() - serverJoinTime) < MIN_STAY then
                         HopHint.Text = string.format("自动换服: 进服等待 %.0fs", MIN_STAY - (tick() - serverJoinTime))
                         HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
-                    elseif fc > 0 then
-                        HopHint.Text = string.format("自动换服: 地图还有%d碎片", fc)
+                    elseif stillHasLoot() then
+                        local gc = mapGlassCount()
+                        if fc > 0 then
+                            HopHint.Text = string.format("自动换服: 还有%d碎片", fc)
+                        else
+                            HopHint.Text = string.format("自动换服: 还有%d眼镜", gc)
+                        end
                         HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
                     elseif (tick() - serverJoinTime) >= MIN_STAY then
-                        HopHint.Text = "自动换服: 无碎片，立即重建"
+                        HopHint.Text = C.OnlyFrag and "自动换服: 无碎片，立即重建" or "自动换服: 无碎片/眼镜，重建"
                         HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
                         if not pendingHop and not rejoining then
                             N("74秒后无碎片 → 重建")
