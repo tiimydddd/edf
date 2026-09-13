@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 90,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -44,6 +44,8 @@ local currentMode = "Unknown"
 local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
+local serverJoinTime = tick()
+local MIN_STAY = 45 -- 进服至少待45秒再开始算确认0
 
 local function N(msg)
     pcall(function()
@@ -117,7 +119,7 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 300, 0, 360)
+Main.Size = UDim2.new(0, 300, 0, 400)
 Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -315,8 +317,10 @@ local ESP_tr, ESP_th = mkTog(P1, 140, "ESP", true)
 local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
 local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
-local ShelB = mkBtn(P1, 248, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(P1, 280, "换服", Color3.fromRGB(50, 90, 140))
+local SmH_tr, SmH_th = mkTog(P1, 244, "自动:搜净0再换服", true)
+local ShelB = mkBtn(P1, 274, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopB = mkBtn(P1, 304, "换服(可强制)", Color3.fromRGB(50, 90, 140))
+local HopHint = mkLabel(P1, 332, "自动换服: 搜净→确认0→换", Color3.fromRGB(140, 200, 255))
 
 
 local P2 = mkPage("传送")
@@ -414,7 +418,7 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 360)
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 400)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
@@ -512,6 +516,8 @@ local function applyToggles()
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
     setTog(Rej_tr, Rej_th, C.Rejoin)
+    setTog(SmH_tr, SmH_th, C.AutoHop)
+    C.SmartHop = C.AutoHop
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -934,19 +940,58 @@ local function rejoin(reason)
     end)
 end
 
-local function hop()
+local zeroFragSince = nil
+local function mapFragCount()
+    local fc = 0
+    for o in pairs(kF) do
+        if o and o.Parent then fc = fc + 1 end
+    end
+    return fc
+end
+
+local function canSmartHop(force)
+    if force then return true, "强制换服" end
+    if not C.SmartHop then return true, "智能换服关" end
+    -- 1) 先扫干净
+    pcall(fullScan)
+    local fc = mapFragCount()
+    if fc > 0 then
+        zeroFragSince = nil
+        return false, string.format("地图还有 %d 碎片，搜干净再换", fc)
+    end
+    -- 2) 确认 0：至少稳定一段时间
+    local need = tonumber(C.HopWait) or 90
+    if zeroFragSince == nil then
+        zeroFragSince = tick()
+        return false, string.format("地图已是 0，再确认 %d 秒", need)
+    end
+    local waited = tick() - zeroFragSince
+    if waited < need then
+        return false, string.format("确认中 %.0f/%d 秒 (地图0)", waited, need)
+    end
+    return true, "搜净且确认地图0，可以换服"
+end
+
+local function hop(force)
+    local ok, why = canSmartHop(force == true)
+    N(why)
+    if HopHint then
+        HopHint.Text = "换服: " .. why
+        HopHint.TextColor3 = ok and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 180, 100)
+    end
+    if not ok then return end
     -- 不先完整离开的话，容易进回同一 JobId，私服不会重开
     N("换服: ①彻底离开 → ②新服 rejoin")
     pendingHop = true
     kickHandled = false
     rejoining = false
+    zeroFragSince = nil
     queueScript()
     task.spawn(function()
         N("① 彻底离开当前服...")
         pcall(function()
             if LP.Kick then LP:Kick("tau hop leave") end
         end)
-        -- 多等一会，让实例有时间卸掉玩家，私服才可能关掉再开
         task.wait(2.5)
         kickHandled = true
         N("① 已离开，准备进新实例")
@@ -1004,7 +1049,23 @@ Rej_tr.MouseButton1Click:Connect(function()
     N(C.Rejoin and "自动重进 ON" or "自动重进 OFF")
 end)
 ShelB.MouseButton1Click:Connect(toShel)
-HopB.MouseButton1Click:Connect(hop)
+local lastHopClick = 0
+HopB.MouseButton1Click:Connect(function()
+    local now = tick()
+    if now - lastHopClick < 2.5 then
+        N("强制换服")
+        hop(true)
+    else
+        lastHopClick = now
+        hop(false)
+    end
+end)
+SmH_tr.MouseButton1Click:Connect(function()
+    C.SmartHop = not C.SmartHop
+    setTog(SmH_tr, SmH_th, C.AutoHop)
+    C.SmartHop = C.AutoHop
+    N(C.SmartHop and "搜净再换 ON" or "搜净再换 OFF(随时可换)")
+end)
 RefPlrB.MouseButton1Click:Connect(refPlrList)
 RefItemB.MouseButton1Click:Connect(refItemList)
 AddMusicB.MouseButton1Click:Connect(function()
@@ -1053,6 +1114,49 @@ task.spawn(function()
                 local fc, gc = scan()
                 updFragUI(fc, false)
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
+                -- 自动换服计时：需开 Auto，且进服已超过 MIN_STAY
+                if fc > 0 then
+                    zeroFragSince = nil
+                elseif C.AutoHop and C.Auto and (tick() - serverJoinTime) >= MIN_STAY then
+                    if zeroFragSince == nil then
+                        zeroFragSince = tick()
+                    end
+                elseif not C.Auto then
+                    zeroFragSince = nil
+                end
+                if HopHint then
+                    if not C.AutoHop then
+                        HopHint.Text = "自动换服: 已关闭"
+                        HopHint.TextColor3 = Color3.fromRGB(140, 140, 155)
+                    elseif not C.Auto then
+                        HopHint.Text = "自动换服: 请先开 Auto 搜图"
+                        HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
+                    elseif (tick() - serverJoinTime) < MIN_STAY then
+                        HopHint.Text = string.format("自动换服: 进服等待 %.0fs", MIN_STAY - (tick() - serverJoinTime))
+                        HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
+                    elseif fc > 0 then
+                        HopHint.Text = string.format("自动换服: 地图还有%d碎片", fc)
+                        HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
+                    elseif zeroFragSince then
+                        local need = tonumber(C.HopWait) or 90
+                        local w = tick() - zeroFragSince
+                        if w >= need then
+                            HopHint.Text = "自动换服: 确认0完成，即将换服"
+                            HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+                            -- 自动执行：搜净→确认0→换
+                            if not pendingHop and not rejoining then
+                                N("自动: 搜净确认0 → 换服")
+                                hop(true) -- 已确认过，直接走换服流程
+                            end
+                        else
+                            HopHint.Text = string.format("自动换服: 确认0中 %.0f/%ds", w, need)
+                            HopHint.TextColor3 = Color3.fromRGB(200, 200, 120)
+                        end
+                    else
+                        HopHint.Text = "自动换服: 等待地图0..."
+                        HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
+                    end
+                end
             end
             -- Auto 捡：每 0.9 秒最多捡 3 个最近的（不双遍）
             if C.Auto and now - tLoot >= 0.9 then
