@@ -441,14 +441,36 @@ local function tryClick(gui)
     if not gui then return false end
     local ok = false
     pcall(function()
-        if gui:IsA("GuiButton") then
-            if typeof(firesignal) == "function" then
-                pcall(firesignal, gui.MouseButton1Click)
-                pcall(firesignal, gui.Activated)
-            end
-            pcall(function() gui.MouseButton1Click:Fire() end)
+        if not (gui:IsA("TextButton") or gui:IsA("ImageButton") or gui:IsA("GuiButton")) then
+            return
+        end
+        -- 不要用 :Fire()，部分执行器上是 nil 会报 attempt to call a nil value
+        if typeof(firesignal) == "function" then
+            pcall(firesignal, gui.MouseButton1Click)
+            pcall(firesignal, gui.Activated)
             ok = true
         end
+        if typeof(getconnections) == "function" then
+            pcall(function()
+                for _, c in ipairs(getconnections(gui.MouseButton1Click)) do
+                    if c.Function then pcall(c.Function) end
+                end
+                for _, c in ipairs(getconnections(gui.Activated)) do
+                    if c.Function then pcall(c.Function) end
+                end
+                ok = true
+            end)
+        end
+        -- 退化：虚拟点击位置
+        pcall(function()
+            local pos = gui.AbsolutePosition + gui.AbsoluteSize / 2
+            local vim = game:GetService("VirtualInputManager")
+            if vim then
+                vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+                vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+                ok = true
+            end
+        end)
     end)
     return ok
 end
@@ -472,7 +494,7 @@ local function autoVoteMaps()
             end
             -- 父级名字带地图
             local par = d.Parent
-            if par and (preferMapName(par.Name) or preferMapName(par:GetAttribute and par:GetAttribute("MapName") or "")) then
+            if par and preferMapName(par.Name) then
                 if d.Visible ~= false then table.insert(candidates, d) end
             end
         elseif d:IsA("TextLabel") and preferMapName(d.Text) then
@@ -582,7 +604,7 @@ local function applyToggles()
     setTog(Rej_tr, Rej_th, C.Rejoin)
     setTog(SmH_tr, SmH_th, C.AutoHop)
     C.SmartHop = C.AutoHop
-    setTog(Vote_tr, Vote_th, C.AutoVote)
+    if Vote_tr then setTog(Vote_tr, Vote_th, C.AutoVote) end
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -1075,7 +1097,7 @@ local function hop(force)
     task.spawn(function()
         N("① 彻底离开当前服...")
         pcall(function()
-            if LP.Kick then LP:Kick("tau hop leave") end
+            pcall(function() if typeof(LP.Kick) == "function" then LP:Kick("tau hop leave") end end)
         end)
         task.wait(2.5)
         kickHandled = true
@@ -1146,12 +1168,18 @@ HopB.MouseButton1Click:Connect(function()
     end
 end)
 SmH_tr.MouseButton1Click:Connect(function()
-    C.SmartHop = not C.SmartHop
-    setTog(SmH_tr, SmH_th, C.AutoHop)
+    C.AutoHop = not C.AutoHop
     C.SmartHop = C.AutoHop
-    setTog(Vote_tr, Vote_th, C.AutoVote)
-    N(C.SmartHop and "搜净再换 ON" or "搜净再换 OFF(随时可换)")
+    setTog(SmH_tr, SmH_th, C.AutoHop)
+    N(C.AutoHop and "自动搜净换服 ON" or "自动换服 OFF")
 end)
+if Vote_tr then
+    Vote_tr.MouseButton1Click:Connect(function()
+        C.AutoVote = not C.AutoVote
+        setTog(Vote_tr, Vote_th, C.AutoVote)
+        N(C.AutoVote and "自动投票 ON" or "自动投票 OFF")
+    end)
+end
 RefPlrB.MouseButton1Click:Connect(refPlrList)
 RefItemB.MouseButton1Click:Connect(refItemList)
 AddMusicB.MouseButton1Click:Connect(function()
