@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 90,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 12,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -45,7 +45,8 @@ local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
 local serverJoinTime = tick()
-local MIN_STAY = 45 -- 进服至少待45秒再开始算确认0
+local MIN_STAY = 18 -- 进图/过场大约十几秒，再开始看碎片
+local didEarlyScan = false
 
 local function N(msg)
     pcall(function()
@@ -320,7 +321,7 @@ local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
 local SmH_tr, SmH_th = mkTog(P1, 244, "自动:搜净0再换服", true)
 local ShelB = mkBtn(P1, 274, "传送避难所", Color3.fromRGB(45, 45, 58))
 local HopB = mkBtn(P1, 304, "换服(可强制)", Color3.fromRGB(50, 90, 140))
-local HopHint = mkLabel(P1, 332, "自动换服: 搜净→确认0→换", Color3.fromRGB(140, 200, 255))
+local HopHint = mkLabel(P1, 332, "地图生成后无碎片→自动换", Color3.fromRGB(140, 200, 255))
 
 
 local P2 = mkPage("传送")
@@ -1114,15 +1115,21 @@ task.spawn(function()
                 local fc, gc = scan()
                 updFragUI(fc, false)
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
-                -- 自动换服计时：需开 Auto，且进服已超过 MIN_STAY
-                if fc > 0 then
+                -- 地图出来后：没碎片就短确认再换（不等90秒）
+                -- 休息/投票中不换
+                local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
+                if (tick() - serverJoinTime) >= MIN_STAY and not didEarlyScan then
+                    didEarlyScan = true
+                    pcall(fullScan)
+                    fc = select(1, countKnown())
+                end
+                if fc > 0 or inRest or not C.Auto then
                     zeroFragSince = nil
                 elseif C.AutoHop and C.Auto and (tick() - serverJoinTime) >= MIN_STAY then
                     if zeroFragSince == nil then
                         zeroFragSince = tick()
+                        N("地图无碎片，约12秒后换服")
                     end
-                elseif not C.Auto then
-                    zeroFragSince = nil
                 end
                 if HopHint then
                     if not C.AutoHop then
