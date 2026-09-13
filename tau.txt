@@ -45,7 +45,7 @@ local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
 local serverJoinTime = tick()
-local MIN_STAY = 74 -- 你数的休息+进图约74秒，再判断碎片
+local MIN_STAY = 70   -- 你数的休息+进图约74秒，再判断碎片
 local didEarlyScan = false
 
 local function N(msg)
