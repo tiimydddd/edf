@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 2,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
@@ -961,7 +961,10 @@ local function canSmartHop(force)
         return false, string.format("地图还有 %d 碎片，搜干净再换", fc)
     end
     -- 2) 确认 0：至少稳定一段时间
-    local need = tonumber(C.HopWait) or 90
+    local need = tonumber(C.HopWait) or 0
+    if need <= 0 then
+        return true, "74秒后无碎片，直接重建"
+    end
     if zeroFragSince == nil then
         zeroFragSince = tick()
         return false, string.format("地图已是 0，再确认 %d 秒", need)
@@ -1126,9 +1129,10 @@ task.spawn(function()
                 if fc > 0 or inRest or not C.Auto then
                     zeroFragSince = nil
                 elseif C.AutoHop and C.Auto and (tick() - serverJoinTime) >= MIN_STAY then
-                    if zeroFragSince == nil then
-                        zeroFragSince = tick()
-                        N("地图无碎片，2秒后换服")
+                    -- 74秒后仍无碎片：立刻重建，不确认
+                    if not pendingHop and not rejoining then
+                        N("74秒后无碎片 → 重建")
+                        hop(true)
                     end
                 end
                 if HopHint then
@@ -1144,23 +1148,15 @@ task.spawn(function()
                     elseif fc > 0 then
                         HopHint.Text = string.format("自动换服: 地图还有%d碎片", fc)
                         HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
-                    elseif zeroFragSince then
-                        local need = tonumber(C.HopWait) or 90
-                        local w = tick() - zeroFragSince
-                        if w >= need then
-                            HopHint.Text = "自动换服: 确认0完成，即将换服"
-                            HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
-                            -- 自动执行：搜净→确认0→换
-                            if not pendingHop and not rejoining then
-                                N("自动: 搜净确认0 → 换服")
-                                hop(true) -- 已确认过，直接走换服流程
-                            end
-                        else
-                            HopHint.Text = string.format("自动换服: 确认0中 %.0f/%ds", w, need)
-                            HopHint.TextColor3 = Color3.fromRGB(200, 200, 120)
+                    elseif (tick() - serverJoinTime) >= MIN_STAY then
+                        HopHint.Text = "自动换服: 无碎片，立即重建"
+                        HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+                        if not pendingHop and not rejoining then
+                            N("74秒后无碎片 → 重建")
+                            hop(true)
                         end
                     else
-                        HopHint.Text = "自动换服: 等待地图0..."
+                        HopHint.Text = "自动换服: 等待地图判定..."
                         HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
                     end
                 end
