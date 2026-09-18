@@ -46,8 +46,9 @@ local musicHistory = {}
 local originalIds = {}
 local MAX_MUSIC = 20
 local serverJoinTime = tick()
-local MIN_STAY = 69 -- 你数的休息+进图约74秒，再判断碎片
+local MIN_STAY = 70 -- 实测约70秒后无碎片可重建
 local didEarlyScan = false
+local foundThisRound = false -- 本局已捡到碎片/眼镜则不自动重建
 
 local function N(msg)
     pcall(function()
@@ -121,7 +122,7 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 300, 0, 430)
+Main.Size = UDim2.new(0, 300, 0, 440)
 Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -319,11 +320,10 @@ local ESP_tr, ESP_th = mkTog(P1, 140, "ESP", true)
 local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
 local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
-local SmH_tr, SmH_th = mkTog(P1, 244, "自动:搜净0再换服", true)
 local Vote_tr, Vote_th = mkTog(P1, 268, "自动投票 Beginnings/Islands", true)
-local ShelB = mkBtn(P1, 296, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopB = mkBtn(P1, 326, "换服(可强制)", Color3.fromRGB(50, 90, 140))
-local HopHint = mkLabel(P1, 354, "地图生成后无碎片→自动换", Color3.fromRGB(140, 200, 255))
+local SmH_tr, SmH_th = mkTog(P1, 292, "自动换服(无碎片重建)", true)
+local ShelB = mkBtn(P1, 320, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopHint = mkLabel(P1, 350, "自动换服: 70秒后无碎片→重建", Color3.fromRGB(140, 200, 255))
 
 
 local P2 = mkPage("传送")
@@ -421,7 +421,7 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 430)
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 440)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
@@ -602,8 +602,8 @@ local function applyToggles()
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
     setTog(Rej_tr, Rej_th, C.Rejoin)
-    setTog(SmH_tr, SmH_th, C.AutoHop)
     C.SmartHop = C.AutoHop
+    if SmH_tr then setTog(SmH_tr, SmH_th, C.AutoHop) end
     if Vote_tr then setTog(Vote_tr, Vote_th, C.AutoVote) end
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
@@ -786,6 +786,10 @@ local function pickup(o, typ)
     local key = tostring(o)
     if tried[key] and tick() - tried[key] < 0.8 then return end
     tried[key] = tick()
+    -- 一开始捡就标记：避免捡完地图变0后误判为空图去重建
+    if typ == "Fragment" or typ == "Glasses" then
+        foundThisRound = true
+    end
     local h = HRP()
     if not h then return end
     local part = best(o)
@@ -810,6 +814,7 @@ local function pickup(o, typ)
     task.delay(0.4, function()
         if not o or not o.Parent then
             if typ == "Fragment" then
+                foundThisRound = true
                 myF = math.min(NEED_FRAG, myF + 1)
                 serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
                 N(string.format("碎片进度 %d/%d", serverFrag, NEED_FRAG))
@@ -819,6 +824,7 @@ local function pickup(o, typ)
                 end
             elseif typ == "Glasses" then
                 gotG = true
+                foundThisRound = true
                 N("眼镜已找到")
             end
         end
@@ -1044,9 +1050,25 @@ local function mapGlassCount()
 end
 -- 是否还能搜：有碎片，或（非仅碎片模式且有眼镜）
 local function stillHasLoot()
+    -- 地图上还有可捡的
     if mapFragCount() > 0 then return true end
-    if not C.OnlyFrag and mapGlassCount() > 0 then return true end
+    if mapGlassCount() > 0 then
+        -- 只有碎片模式：眼镜不挡换服；否则眼镜也算
+        if not C.OnlyFrag then return true end
+    end
     return false
+end
+local function shouldAutoHop()
+    if not C.AutoHop or not C.Auto then return false end
+    if pendingHop or rejoining then return false end
+    if (tick() - serverJoinTime) < MIN_STAY then return false end
+    local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
+    if inRest then return false end
+    -- 本局已经捡到过 → 不重建（避免找到了还换服）
+    if foundThisRound or myF > 0 or gotG then return false end
+    pcall(fullScan)
+    if stillHasLoot() then return false end
+    return true
 end
 
 local function canSmartHop(force)
@@ -1066,7 +1088,7 @@ local function canSmartHop(force)
     -- 2) 确认 0：至少稳定一段时间
     local need = tonumber(C.HopWait) or 0
     if need <= 0 then
-        return true, "74秒后无碎片，直接重建"
+        return true, "70秒后无碎片，直接重建"
     end
     if zeroFragSince == nil then
         zeroFragSince = tick()
@@ -1080,33 +1102,34 @@ local function canSmartHop(force)
 end
 
 local function hop(force)
-    local ok, why = canSmartHop(force == true)
-    N(why)
-    if HopHint then
-        HopHint.Text = "换服: " .. why
-        HopHint.TextColor3 = ok and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 180, 100)
+    if pendingHop or rejoining then return end
+    -- 非强制：地图还有碎片/眼镜，或本局已捡到 → 绝不换服
+    if not force then
+        pcall(fullScan)
+        if stillHasLoot() then
+            N("还有碎片/眼镜在地图上，取消换服")
+            return
+        end
+        if foundThisRound or myF > 0 or gotG then
+            N("本局已找到碎片/眼镜，不换服")
+            return
+        end
     end
-    if not ok then return end
-    -- 不先完整离开的话，容易进回同一 JobId，私服不会重开
-    N("换服: ①彻底离开 → ②新服 rejoin")
     pendingHop = true
     kickHandled = false
     rejoining = false
-    zeroFragSince = nil
+    N("换服: ①离开 → ②重建")
     queueScript()
     task.spawn(function()
-        N("① 彻底离开当前服...")
         pcall(function()
-            pcall(function() if typeof(LP.Kick) == "function" then LP:Kick("tau hop leave") end end)
+            if typeof(LP.Kick) == "function" then LP:Kick("tau auto hop") end
         end)
         task.wait(2.5)
         kickHandled = true
-        N("① 已离开，准备进新实例")
         task.wait(1.0)
         if pendingHop then
-            N("② rejoin 新服...")
             rejoining = false
-            rejoin("HopAfterKick")
+            rejoin("AutoHop")
         end
     end)
 end
@@ -1156,28 +1179,22 @@ Rej_tr.MouseButton1Click:Connect(function()
     N(C.Rejoin and "自动重进 ON" or "自动重进 OFF")
 end)
 ShelB.MouseButton1Click:Connect(toShel)
-local lastHopClick = 0
-HopB.MouseButton1Click:Connect(function()
-    local now = tick()
-    if now - lastHopClick < 2.5 then
-        N("强制换服")
-        hop(true)
-    else
-        lastHopClick = now
-        hop(false)
-    end
-end)
-SmH_tr.MouseButton1Click:Connect(function()
-    C.AutoHop = not C.AutoHop
-    C.SmartHop = C.AutoHop
-    setTog(SmH_tr, SmH_th, C.AutoHop)
-    N(C.AutoHop and "自动搜净换服 ON" or "自动换服 OFF")
-end)
 if Vote_tr then
     Vote_tr.MouseButton1Click:Connect(function()
         C.AutoVote = not C.AutoVote
         setTog(Vote_tr, Vote_th, C.AutoVote)
         N(C.AutoVote and "自动投票 ON" or "自动投票 OFF")
+    end)
+end
+if SmH_tr then
+    SmH_tr.MouseButton1Click:Connect(function()
+        C.AutoHop = not C.AutoHop
+        C.SmartHop = C.AutoHop
+        setTog(SmH_tr, SmH_th, C.AutoHop)
+        N(C.AutoHop and "自动换服 ON" or "自动换服 OFF")
+        if HopHint then
+            HopHint.Text = C.AutoHop and "自动换服: 70秒后无碎片→重建" or "自动换服: 已关闭"
+        end
     end)
 end
 RefPlrB.MouseButton1Click:Connect(refPlrList)
@@ -1207,6 +1224,18 @@ workspace.DescendantAdded:Connect(function(o)
     end)
 end)
 workspace.DescendantRemoving:Connect(function(o)
+    if kF[o] then
+        foundThisRound = true
+        -- 地图上的碎片消失 = 有人捡了（可能是你）
+        myF = math.min(NEED_FRAG, math.max(myF, 1))
+        serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
+        N("检测到碎片被捡起，本局不自动重建")
+    end
+    if kG[o] then
+        foundThisRound = true
+        gotG = true
+        N("检测到眼镜被捡起，本局不自动重建")
+    end
     kF[o] = nil
     kG[o] = nil
 end)
@@ -1239,45 +1268,26 @@ task.spawn(function()
                 local hasLoot = stillHasLoot()
                 if hasLoot or inRest or not C.Auto then
                     zeroFragSince = nil
-                elseif C.AutoHop and C.Auto and (tick() - serverJoinTime) >= MIN_STAY then
-                    -- 74秒后：无碎片（且仅碎片模式或无眼镜）→ 立刻重建
-                    if not pendingHop and not rejoining then
-                        if C.OnlyFrag then
-                            N("74秒后无碎片 → 重建")
-                        else
-                            N("74秒后无碎片/眼镜 → 重建")
+                    if HopHint and C.AutoHop then
+                        if inRest then
+                            HopHint.Text = "自动换服: 休息/投票中..."
+                        elseif hasLoot then
+                            HopHint.Text = string.format("自动换服: 还有物资(碎%d 眼%d)", mapFragCount(), mapGlassCount())
+                        elseif not C.Auto then
+                            HopHint.Text = "自动换服: 请开 Auto"
                         end
-                        hop(true)
                     end
-                end
-                if HopHint then
-                    if not C.AutoHop then
-                        HopHint.Text = "自动换服: 已关闭"
-                        HopHint.TextColor3 = Color3.fromRGB(140, 140, 155)
-                    elseif not C.Auto then
-                        HopHint.Text = "自动换服: 请先开 Auto 搜图"
-                        HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
-                    elseif (tick() - serverJoinTime) < MIN_STAY then
-                        HopHint.Text = string.format("自动换服: 进服等待 %.0fs", MIN_STAY - (tick() - serverJoinTime))
-                        HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
-                    elseif stillHasLoot() then
-                        local gc = mapGlassCount()
-                        if fc > 0 then
-                            HopHint.Text = string.format("自动换服: 还有%d碎片", fc)
-                        else
-                            HopHint.Text = string.format("自动换服: 还有%d眼镜", gc)
-                        end
-                        HopHint.TextColor3 = Color3.fromRGB(255, 180, 100)
-                    elseif (tick() - serverJoinTime) >= MIN_STAY then
-                        HopHint.Text = C.OnlyFrag and "自动换服: 无碎片，立即重建" or "自动换服: 无碎片/眼镜，重建"
+                elseif shouldAutoHop() then
+                    if HopHint then
+                        HopHint.Text = "自动换服: 确认无物资，重建"
                         HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
-                        if not pendingHop and not rejoining then
-                            N("74秒后无碎片 → 重建")
-                            hop(true)
-                        end
-                    else
-                        HopHint.Text = "自动换服: 等待地图判定..."
-                        HopHint.TextColor3 = Color3.fromRGB(180, 180, 195)
+                    end
+                    N("70秒后仍无碎片/眼镜 → 重建")
+                    hop(false)
+                elseif HopHint and C.AutoHop then
+                    local left = MIN_STAY - (tick() - serverJoinTime)
+                    if left > 0 then
+                        HopHint.Text = string.format("自动换服: 进图等待 %.0fs", left)
                     end
                 end
             end
