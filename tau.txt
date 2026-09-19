@@ -24,10 +24,10 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true,
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true, TargetFrag = 1, LootMode = "frag",
 }
 
-local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片"}
+local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "BloodMoon Fragment", "blood moon fragment"}
 local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
 local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
 local KeyN = {"Shelter Key", "ShelterKey", "避难所钥匙"}
@@ -49,6 +49,8 @@ local serverJoinTime = tick()
 local MIN_STAY = 70 -- 实测约70秒后无碎片可重建
 local didEarlyScan = false
 local foundThisRound = false -- 本局已捡到碎片/眼镜则不自动重建
+local sawLootThisRound = false -- 本局曾扫到过碎片/眼镜
+local countedFragKeys = {} -- 防止同一碎片加两次进度
 
 local function N(msg)
     pcall(function()
@@ -65,10 +67,22 @@ local function inL(name, list)
     return false
 end
 
+local function nameLooksFrag(name)
+    local n = string.lower(tostring(name or ""))
+    if inL(name, FragN) then return true end
+    if (string.find(n, "fragment", 1, true) or string.find(n, "碎片", 1, true))
+        and (string.find(n, "blood", 1, true) or string.find(n, "moon", 1, true) or string.find(n, "血月", 1, true)) then
+        return true
+    end
+    return false
+end
 local function isF(o)
     if not o or not o.Parent then return false end
-    if not inL(o.Name, FragN) then return false end
-    if o.Parent and inL(o.Parent.Name, FragN) then return false end
+    if not nameLooksFrag(o.Name) then return false end
+    -- 父级已经是碎片 → 只算父级，子部件不重复计数
+    if o.Parent and o.Parent ~= workspace and nameLooksFrag(o.Parent.Name) then
+        return false
+    end
     return true
 end
 
@@ -122,7 +136,7 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 300, 0, 440)
+Main.Size = UDim2.new(0, 300, 0, 460)
 Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -315,15 +329,19 @@ local ModeL = mkLabel(P1, 50, "模式: Unknown")
 local TartL = mkLabel(P1, 66, "Tartarus: 未解锁 (需5碎片)", Color3.fromRGB(255, 160, 100))
 
 local Auto_tr, Auto_th = mkTog(P1, 88, "Auto(仅碎片/眼镜)", false)
-local Only_tr, Only_th = mkTog(P1, 114, "只有碎片", true)
+local Only_tr, Only_th = mkTog(P1, 114, "只有碎片(旧)", true)
+Only_tr.Visible = false
+Only_th.Visible = false
+local LootModeB = mkBtn(P1, 114, "捡取: 仅碎片 (点切换)", Color3.fromRGB(70, 55, 90))
 local ESP_tr, ESP_th = mkTog(P1, 140, "ESP", true)
 local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
 local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
 local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
 local Vote_tr, Vote_th = mkTog(P1, 268, "自动投票 Beginnings/Islands", true)
 local SmH_tr, SmH_th = mkTog(P1, 292, "自动换服(无碎片重建)", true)
-local ShelB = mkBtn(P1, 320, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopHint = mkLabel(P1, 350, "自动换服: 70秒后无碎片→重建", Color3.fromRGB(140, 200, 255))
+local TargetB = mkBtn(P1, 318, "目标碎片: 1 (点切换 1~5)", Color3.fromRGB(70, 55, 90))
+local ShelB = mkBtn(P1, 348, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopHint = mkLabel(P1, 378, "自动换服: 70秒空图重建 | 捡够目标可换", Color3.fromRGB(140, 200, 255))
 
 
 local P2 = mkPage("传送")
@@ -421,7 +439,7 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 440)
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 460)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
@@ -595,6 +613,44 @@ local function restoreMusic()
     end)
 end
 
+
+
+local function updateLootModeBtn()
+    local m = C.LootMode or "frag"
+    if m ~= "frag" and m ~= "glass" and m ~= "both" then m = "frag" end
+    C.LootMode = m
+    C.OnlyFrag = (m == "frag") -- 兼容旧逻辑
+    if LootModeB then
+        if m == "frag" then
+            LootModeB.Text = "捡取: 仅碎片 (点切换)"
+        elseif m == "glass" then
+            LootModeB.Text = "捡取: 仅眼镜 (点切换)"
+        else
+            LootModeB.Text = "捡取: 碎片+眼镜 (点切换)"
+        end
+    end
+end
+local function wantFrag()
+    local m = C.LootMode or "frag"
+    return m == "frag" or m == "both"
+end
+local function wantGlass()
+    local m = C.LootMode or "frag"
+    return m == "glass" or m == "both"
+end
+local function updateTargetBtn()
+    local n = tonumber(C.TargetFrag) or 1
+    if n < 1 then n = 1 end
+    if n > 5 then n = 5 end
+    C.TargetFrag = n
+    if TargetB then
+        TargetB.Text = string.format("目标碎片: %d (点切换 1~5)", n)
+    end
+end
+local function reachedFragTarget()
+    local need = tonumber(C.TargetFrag) or 1
+    return myF >= need
+end
 local function applyToggles()
     setTog(Auto_tr, Auto_th, C.Auto)
     setTog(Only_tr, Only_th, C.OnlyFrag)
@@ -605,6 +661,8 @@ local function applyToggles()
     C.SmartHop = C.AutoHop
     if SmH_tr then setTog(SmH_tr, SmH_th, C.AutoHop) end
     if Vote_tr then setTog(Vote_tr, Vote_th, C.AutoVote) end
+    pcall(updateTargetBtn)
+    pcall(updateLootModeBtn)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -740,7 +798,7 @@ local function updFragUI(mapCount, doLobby)
         lastLobbyRead = tick()
         readLobbyFrag()
     end
-    FragL.Text = string.format("碎片: 地图%d | 进度%d/%d", mapCount or 0, serverFrag, NEED_FRAG)
+    FragL.Text = string.format("碎片: 地图%d | 本局%d | 大厅%d/%d", mapCount or 0, myF, serverFrag, NEED_FRAG)
     if tartUnlocked or serverFrag >= NEED_FRAG then
         TartL.Text = "Tartarus: 已解锁 (5/5)"
         TartL.TextColor3 = Color3.fromRGB(100, 255, 140)
@@ -770,7 +828,9 @@ local function fullScan()
         elseif isG(o) then kG[o] = true end
     end
     lastFullScan = tick()
-    return countKnown()
+    local fc, gc = countKnown()
+    if fc > 0 or gc > 0 then sawLootThisRound = true end
+    return fc, gc
 end
 
 local function scan()
@@ -781,6 +841,28 @@ local function scan()
     return countKnown()
 end
 
+
+local function creditFragment(src)
+    local key = tostring(src)
+    if countedFragKeys[key] then return end
+    -- 同位置近似也去重
+    local posKey = nil
+    pcall(function()
+        local part = best(src)
+        if part then
+            local p = part.Position
+            posKey = string.format("f_%.0f_%.0f_%.0f", p.X/5, p.Y/5, p.Z/5)
+        end
+    end)
+    if posKey and countedFragKeys[posKey] then return end
+    countedFragKeys[key] = true
+    if posKey then countedFragKeys[posKey] = true end
+    foundThisRound = true
+    sawLootThisRound = true
+    myF = math.min(NEED_FRAG, myF + 1)
+    serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
+    N(string.format("碎片 +1 → 本局进度 %d/%d（显示用，全服以大厅为准）", myF, NEED_FRAG))
+end
 local function pickup(o, typ)
     if not o or not o.Parent then return end
     local key = tostring(o)
@@ -814,11 +896,8 @@ local function pickup(o, typ)
     task.delay(0.4, function()
         if not o or not o.Parent then
             if typ == "Fragment" then
-                foundThisRound = true
-                myF = math.min(NEED_FRAG, myF + 1)
-                serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
-                N(string.format("碎片进度 %d/%d", serverFrag, NEED_FRAG))
-                if serverFrag >= NEED_FRAG then
+                creditFragment(o)
+                if serverFrag >= NEED_FRAG or myF >= NEED_FRAG then
                     tartUnlocked = true
                     N("Tartarus 应已解锁!")
                 end
@@ -1049,25 +1128,56 @@ local function mapGlassCount()
     return gc
 end
 -- 是否还能搜：有碎片，或（非仅碎片模式且有眼镜）
-local function stillHasLoot()
-    -- 地图上还有可捡的
-    if mapFragCount() > 0 then return true end
-    if mapGlassCount() > 0 then
-        -- 只有碎片模式：眼镜不挡换服；否则眼镜也算
-        if not C.OnlyFrag then return true end
+
+local function liveScanHasLoot()
+    local hasF, hasG = false, false
+    pcall(function()
+        for _, o in ipairs(workspace:GetDescendants()) do
+            if isF(o) then
+                hasF = true
+                kF[o] = true
+            elseif isG(o) then
+                hasG = true
+                kG[o] = true
+            end
+            if hasF and hasG then break end
+        end
+    end)
+    if hasF or hasG then
+        sawLootThisRound = true
     end
+    if wantFrag() and hasF then return true end
+    if wantGlass() and hasG then return true end
+    return false
+end
+local function stillHasLoot()
+    if wantFrag() and mapFragCount() > 0 then return true end
+    if wantGlass() and mapGlassCount() > 0 then return true end
+    if liveScanHasLoot() then return true end
     return false
 end
 local function shouldAutoHop()
     if not C.AutoHop or not C.Auto then return false end
     if pendingHop or rejoining then return false end
-    if (tick() - serverJoinTime) < MIN_STAY then return false end
     local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
     if inRest then return false end
-    -- 本局已经捡到过 → 不重建（避免找到了还换服）
-    if foundThisRound or myF > 0 or gotG then return false end
+    -- 已达本局目标碎片数 → 可以换服继续刷
+    if reachedFragTarget() and myF > 0 then
+        return true
+    end
+    if (tick() - serverJoinTime) < MIN_STAY then return false end
+    -- 空图且本局从未见过碎片 → 重建
+    if foundThisRound or sawLootThisRound or myF > 0 or gotG then
+        return false
+    end
     pcall(fullScan)
-    if stillHasLoot() then return false end
+    if stillHasLoot() then
+        sawLootThisRound = true
+        return false
+    end
+    if liveScanHasLoot() then
+        return false
+    end
     return true
 end
 
@@ -1103,16 +1213,22 @@ end
 
 local function hop(force)
     if pendingHop or rejoining then return end
-    -- 非强制：地图还有碎片/眼镜，或本局已捡到 → 绝不换服
+    -- 非强制：有碎片就绝对不换
     if not force then
-        pcall(fullScan)
-        if stillHasLoot() then
-            N("还有碎片/眼镜在地图上，取消换服")
-            return
-        end
-        if foundThisRound or myF > 0 or gotG then
-            N("本局已找到碎片/眼镜，不换服")
-            return
+        -- 已达目标：允许换服去下一局继续刷
+        if reachedFragTarget() and myF > 0 then
+            N(string.format("已达目标 %d 碎片 → 换服", C.TargetFrag))
+        else
+            pcall(fullScan)
+            if liveScanHasLoot() or stillHasLoot() then
+                sawLootThisRound = true
+                N("地图上还有碎片/眼镜 → 取消换服")
+                return
+            end
+            if foundThisRound or sawLootThisRound or myF > 0 or gotG then
+                N("本局已发现过碎片/眼镜 → 不换服")
+                return
+            end
         end
     end
     pendingHop = true
@@ -1156,10 +1272,29 @@ Auto_tr.MouseButton1Click:Connect(function()
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
     N(C.Auto and "Auto ON" or "Auto OFF")
 end)
-Only_tr.MouseButton1Click:Connect(function()
-    C.OnlyFrag = not C.OnlyFrag
-    setTog(Only_tr, Only_th, C.OnlyFrag)
-end)
+if Only_tr then
+    Only_tr.MouseButton1Click:Connect(function()
+        C.OnlyFrag = not C.OnlyFrag
+        C.LootMode = C.OnlyFrag and "frag" or "both"
+        setTog(Only_tr, Only_th, C.OnlyFrag)
+        pcall(updateLootModeBtn)
+    end)
+end
+if LootModeB then
+    LootModeB.MouseButton1Click:Connect(function()
+        local m = C.LootMode or "frag"
+        if m == "frag" then
+            C.LootMode = "glass"
+        elseif m == "glass" then
+            C.LootMode = "both"
+        else
+            C.LootMode = "frag"
+        end
+        updateLootModeBtn()
+        N("捡取模式: " .. tostring(C.LootMode))
+    end)
+end
+pcall(updateLootModeBtn)
 ESP_tr.MouseButton1Click:Connect(function()
     C.ESP = not C.ESP
     setTog(ESP_tr, ESP_th, C.ESP)
@@ -1193,10 +1328,20 @@ if SmH_tr then
         setTog(SmH_tr, SmH_th, C.AutoHop)
         N(C.AutoHop and "自动换服 ON" or "自动换服 OFF")
         if HopHint then
-            HopHint.Text = C.AutoHop and "自动换服: 70秒后无碎片→重建" or "自动换服: 已关闭"
+            HopHint.Text = C.AutoHop and "自动换服: 70秒空图重建 | 捡够目标可换" or "自动换服: 已关闭"
         end
     end)
 end
+if TargetB then
+    TargetB.MouseButton1Click:Connect(function()
+        local n = (tonumber(C.TargetFrag) or 1) + 1
+        if n > 5 then n = 1 end
+        C.TargetFrag = n
+        updateTargetBtn()
+        N("本局目标碎片: " .. tostring(n))
+    end)
+end
+pcall(updateTargetBtn)
 RefPlrB.MouseButton1Click:Connect(refPlrList)
 RefItemB.MouseButton1Click:Connect(refItemList)
 AddMusicB.MouseButton1Click:Connect(function()
@@ -1217,24 +1362,26 @@ workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
         if isF(o) then
             kF[o] = true
-            -- 不在这里立刻 pickup，交给主循环限速捡，避免卡顿
+            sawLootThisRound = true
         elseif isG(o) then
             kG[o] = true
+            sawLootThisRound = true
         end
     end)
 end)
 workspace.DescendantRemoving:Connect(function(o)
     if kF[o] then
+        -- 只标记本局有货，进度只由 creditFragment 加一次，避免 +2
         foundThisRound = true
-        -- 地图上的碎片消失 = 有人捡了（可能是你）
-        myF = math.min(NEED_FRAG, math.max(myF, 1))
-        serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
-        N("检测到碎片被捡起，本局不自动重建")
+        sawLootThisRound = true
+        creditFragment(o)
+        N("检测到碎片消失，本局不自动重建")
     end
     if kG[o] then
         foundThisRound = true
+        sawLootThisRound = true
         gotG = true
-        N("检测到眼镜被捡起，本局不自动重建")
+        N("检测到眼镜消失，本局不自动重建")
     end
     kF[o] = nil
     kG[o] = nil
@@ -1279,10 +1426,18 @@ task.spawn(function()
                     end
                 elseif shouldAutoHop() then
                     if HopHint then
-                        HopHint.Text = "自动换服: 确认无物资，重建"
+                        if reachedFragTarget() and myF > 0 then
+                            HopHint.Text = string.format("已达目标%d → 换服", C.TargetFrag)
+                        else
+                            HopHint.Text = "自动换服: 空图重建"
+                        end
                         HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
                     end
-                    N("70秒后仍无碎片/眼镜 → 重建")
+                    if reachedFragTarget() and myF > 0 then
+                        N(string.format("已达目标 %d → 换服", C.TargetFrag))
+                    else
+                        N("70秒后仍无碎片/眼镜 → 重建")
+                    end
                     hop(false)
                 elseif HopHint and C.AutoHop then
                     local left = MIN_STAY - (tick() - serverJoinTime)
@@ -1296,26 +1451,31 @@ task.spawn(function()
                 tLoot = now
                 local h = HRP()
                 local pos = h and h.Position or Vector3.zero
-                local list = {}
-                for o in pairs(kF) do
-                    if o and o.Parent then
-                        local p = best(o)
-                        if p then table.insert(list, {o = o, d = (p.Position - pos).Magnitude}) end
+                -- 碎片
+                if wantFrag() and not reachedFragTarget() then
+                    local list = {}
+                    for o in pairs(kF) do
+                        if o and o.Parent then
+                            local p = best(o)
+                            if p then table.insert(list, {o = o, d = (p.Position - pos).Magnitude}) end
+                        end
+                    end
+                    table.sort(list, function(a, b) return a.d < b.d end)
+                    local n = 0
+                    for _, d in ipairs(list) do
+                        if n >= 3 then break end
+                        if reachedFragTarget() then break end
+                        pickup(d.o, "Fragment")
+                        n = n + 1
+                        task.wait(0.05)
                     end
                 end
-                table.sort(list, function(a, b) return a.d < b.d end)
-                local n = 0
-                for _, d in ipairs(list) do
-                    if n >= 3 then break end
-                    pickup(d.o, "Fragment")
-                    n = n + 1
-                    task.wait(0.05)
-                end
-                if not C.OnlyFrag then
+                -- 眼镜
+                if wantGlass() and not gotG then
                     for o in pairs(kG) do
                         if o and o.Parent then
                             pickup(o, "Glasses")
-                            break -- 眼镜一次一个
+                            break
                         end
                     end
                 end
