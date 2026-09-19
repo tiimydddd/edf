@@ -1,5 +1,5 @@
 -- tau simple+ TAB版 (Arceus X)
--- 顶部一排 Tab：主页 / 传送 / 音乐 / 储存
+-- 顶部一排 Tab：主页 / 传送 / Farm / 音乐 / 储存
 
 print("[tau] simple tab start")
 
@@ -136,7 +136,7 @@ end
 if not Gui.Parent then N("UI挂载失败") return end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 300, 0, 460)
+Main.Size = UDim2.new(0, 300, 0, 400)
 Main.Position = UDim2.new(0, 16, 0.25, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -205,7 +205,7 @@ tabLay.Parent = TabBar
 
 local function mkTab(name)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 68, 1, -4)
+    b.Size = UDim2.new(0, 54, 1, -4)
     b.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     b.Text = name
     b.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -218,8 +218,9 @@ end
 
 local T1 = mkTab("主页")
 local T2 = mkTab("传送")
-local T3 = mkTab("音乐")
-local T4 = mkTab("储存")
+local T3 = mkTab("Farm")
+local T4 = mkTab("音乐")
+local T5 = mkTab("储存")
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -12, 1, -72)
@@ -328,21 +329,11 @@ local GlassL = mkLabel(P1, 34, "眼镜: 未找到")
 local ModeL = mkLabel(P1, 50, "模式: Unknown")
 local TartL = mkLabel(P1, 66, "Tartarus: 未解锁 (需5碎片)", Color3.fromRGB(255, 160, 100))
 
-local Auto_tr, Auto_th = mkTog(P1, 88, "Auto(仅碎片/眼镜)", false)
-local Only_tr, Only_th = mkTog(P1, 114, "只有碎片(旧)", true)
-Only_tr.Visible = false
-Only_th.Visible = false
-local LootModeB = mkBtn(P1, 114, "捡取: 仅碎片 (点切换)", Color3.fromRGB(70, 55, 90))
-local ESP_tr, ESP_th = mkTog(P1, 140, "ESP", true)
-local AFK_tr, AFK_th = mkTog(P1, 166, "Anti-AFK", true)
-local ShelA_tr, ShelA_th = mkTog(P1, 192, "定时去避难所", false)
-local Rej_tr, Rej_th = mkTog(P1, 218, "被踢/断线自动重进", true)
-local Vote_tr, Vote_th = mkTog(P1, 268, "自动投票 Beginnings/Islands", true)
-local SmH_tr, SmH_th = mkTog(P1, 292, "自动换服(无碎片重建)", true)
-local TargetB = mkBtn(P1, 318, "目标碎片: 1 (点切换 1~5)", Color3.fromRGB(70, 55, 90))
-local ShelB = mkBtn(P1, 348, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopHint = mkLabel(P1, 378, "自动换服: 70秒空图重建 | 捡够目标可换", Color3.fromRGB(140, 200, 255))
-
+local ESP_tr, ESP_th = mkTog(P1, 88, "ESP", true)
+local AFK_tr, AFK_th = mkTog(P1, 114, "Anti-AFK", true)
+local Rej_tr, Rej_th = mkTog(P1, 140, "被踢/断线自动重进", true)
+mkLabel(P1, 170, "自动设置请到 Farm 分页", Color3.fromRGB(140, 200, 255))
+mkLabel(P1, 188, "状态区只看进度 / 模式", Color3.fromRGB(140, 140, 155))
 
 local P2 = mkPage("传送")
 mkLabel(P2, 0, "玩家 (点击传送)", Color3.fromRGB(200, 180, 100))
@@ -371,21 +362,37 @@ Instance.new("UICorner", ItemF).CornerRadius = UDim.new(0, 6)
 Instance.new("UIListLayout", ItemF).Padding = UDim.new(0, 2)
 local RefItemB = mkBtn(P2, 276, "刷新物品列表", Color3.fromRGB(45, 45, 58))
 
-local P3 = mkPage("音乐")
-mkLabel(P3, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
-local MusicIdBox = mkBox(P3, 22, "音乐 ID (数字)")
-local MusicNameBox = mkBox(P3, 52, "歌名（可选）")
-local AddMusicB = mkBtn(P3, 84, "更换音乐", Color3.fromRGB(50, 120, 80))
-local RestoreMusicB = mkBtn(P3, 116, "恢复原音乐", Color3.fromRGB(90, 70, 50))
-mkLabel(P3, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
+local P3 = mkPage("Farm")
+mkLabel(P3, 0, "=== Auto Farm 设置 ===", Color3.fromRGB(255, 200, 100))
+local Auto_tr, Auto_th = mkTog(P3, 22, "Auto 总开关", false)
+local LootModeB = mkBtn(P3, 50, "捡取: 仅碎片 (点切换)", Color3.fromRGB(70, 55, 90))
+local TargetB = mkBtn(P3, 80, "目标碎片: 1 (点切换 1~5)", Color3.fromRGB(70, 55, 90))
+local SmH_tr, SmH_th = mkTog(P3, 110, "自动换服(空图/达目标)", true)
+local ShelA_tr, ShelA_th = mkTog(P3, 136, "定时去避难所", false)
+local Vote_tr, Vote_th = mkTog(P3, 162, "自动投票 Beginnings/Islands", true)
+local ShelB = mkBtn(P3, 192, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopHint = mkLabel(P3, 224, "Farm: 70秒空图重建 | 捡够目标可换", Color3.fromRGB(140, 200, 255))
+mkLabel(P3, 244, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
+mkLabel(P3, 262, "目标: 本局捡够 N 块后可自动换服", Color3.fromRGB(140, 140, 155))
+local Only_tr, Only_th = mkTog(P3, 280, "只有碎片(旧兼容)", true)
+Only_tr.Visible = false
+Only_th.Visible = false
 
-local P4 = mkPage("储存")
-mkLabel(P4, 0, "保存开关 / 音乐设置", Color3.fromRGB(140, 200, 255))
-local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
-local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
-local SaveL = mkLabel(P4, 96, "储存: 未操作")
-mkLabel(P4, 120, "文件: tau_simple_save.json", Color3.fromRGB(140, 140, 155))
-mkLabel(P4, 140, "需执行器支持 writefile", Color3.fromRGB(140, 140, 155))
+local P4 = mkPage("音乐")
+mkLabel(P4, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
+local MusicIdBox = mkBox(P4, 22, "音乐 ID (数字)")
+local MusicNameBox = mkBox(P4, 52, "歌名（可选）")
+local AddMusicB = mkBtn(P4, 84, "更换音乐", Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkBtn(P4, 116, "恢复原音乐", Color3.fromRGB(90, 70, 50))
+mkLabel(P4, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
+
+local P5 = mkPage("储存")
+mkLabel(P5, 0, "保存开关 / 音乐设置", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(P5, 28, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(P5, 60, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkLabel(P5, 96, "储存: 未操作")
+mkLabel(P5, 120, "文件: tau_simple_save.json", Color3.fromRGB(140, 140, 155))
+mkLabel(P5, 140, "需执行器支持 writefile", Color3.fromRGB(140, 140, 155))
 
 local function swTab(name)
     for k, p in pairs(Pages) do
@@ -395,10 +402,10 @@ local function swTab(name)
         pcall(refPlrList)
         pcall(refItemList)
     end
-    local map = {["主页"] = T1, ["传送"] = T2, ["音乐"] = T3, ["储存"] = T4}
-    for _, t in pairs({T1, T2, T3, T4}) do
-        t.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-        t.TextColor3 = Color3.fromRGB(160, 160, 175)
+    local map = {["主页"] = T1, ["传送"] = T2, ["Farm"] = T3, ["音乐"] = T4, ["储存"] = T5}
+    for _, tb in pairs({T1, T2, T3, T4, T5}) do
+        tb.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        tb.TextColor3 = Color3.fromRGB(160, 160, 175)
     end
     if map[name] then
         map[name].BackgroundColor3 = Color3.fromRGB(55, 55, 70)
@@ -408,8 +415,9 @@ end
 
 T1.MouseButton1Click:Connect(function() swTab("主页") end)
 T2.MouseButton1Click:Connect(function() swTab("传送") end)
-T3.MouseButton1Click:Connect(function() swTab("音乐") end)
-T4.MouseButton1Click:Connect(function() swTab("储存") end)
+T3.MouseButton1Click:Connect(function() swTab("Farm") end)
+T4.MouseButton1Click:Connect(function() swTab("音乐") end)
+T5.MouseButton1Click:Connect(function() swTab("储存") end)
 swTab("主页")
 
 N("UI 已加载")
@@ -439,7 +447,7 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 460)
+    Main.Size = isMin and UDim2.new(0, 160, 0, 32) or UDim2.new(0, 300, 0, 400)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
@@ -1587,5 +1595,5 @@ task.spawn(function()
     end
 end)
 
-print("[tau] TAB ready - 主页/传送/音乐/储存")
+print("[tau] TAB ready - 主页/传送/Farm/音乐/储存")
 N("防踢/重进已开")
