@@ -371,9 +371,9 @@ local SmH_tr, SmH_th = mkTog(P3, 110, "自动换服(空图/达目标)", true)
 local ShelA_tr, ShelA_th = mkTog(P3, 136, "定时去避难所", false)
 local Vote_tr, Vote_th = mkTog(P3, 162, "自动投票 Beginnings/Islands", true)
 local ShelB = mkBtn(P3, 192, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopHint = mkLabel(P3, 224, "Farm: 70秒空图重建 | 捡够目标可换", Color3.fromRGB(140, 200, 255))
+local HopHint = mkLabel(P3, 224, "Farm: 仅空图才重建 | 捡够目标留下", Color3.fromRGB(140, 200, 255))
 mkLabel(P3, 244, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
-mkLabel(P3, 262, "目标: 本局捡够 N 块后可自动换服", Color3.fromRGB(140, 140, 155))
+mkLabel(P3, 262, "目标: 本局捡够 N 块后停止，留下不换服", Color3.fromRGB(140, 140, 155))
 local Only_tr, Only_th = mkTog(P3, 280, "只有碎片(旧兼容)", true)
 Only_tr.Visible = false
 Only_th.Visible = false
@@ -870,6 +870,13 @@ local function creditFragment(src)
     myF = math.min(NEED_FRAG, myF + 1)
     serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
     N(string.format("碎片 +1 → 本局进度 %d/%d（显示用，全服以大厅为准）", myF, NEED_FRAG))
+    if reachedFragTarget() then
+        N(string.format("已达目标 %d 块 → 停止捡取，留下不换服", C.TargetFrag))
+        if HopHint then
+            HopHint.Text = string.format("已达目标%d → 留下", C.TargetFrag)
+            HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+        end
+    end
 end
 local function pickup(o, typ)
     if not o or not o.Parent then return end
@@ -1169,13 +1176,13 @@ local function shouldAutoHop()
     if pendingHop or rejoining then return false end
     local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
     if inRest then return false end
-    -- 已达本局目标碎片数 → 可以换服继续刷
-    if reachedFragTarget() and myF > 0 then
-        return true
+    -- 已达目标 / 本局捡过 → 留下，绝不因为目标达成而 rejoin
+    if reachedFragTarget() or foundThisRound or myF > 0 or gotG then
+        return false
     end
     if (tick() - serverJoinTime) < MIN_STAY then return false end
-    -- 空图且本局从未见过碎片 → 重建
-    if foundThisRound or sawLootThisRound or myF > 0 or gotG then
+    -- 仅：空图且本局从未见过货 → 重建
+    if sawLootThisRound then
         return false
     end
     pcall(fullScan)
@@ -1223,20 +1230,20 @@ local function hop(force)
     if pendingHop or rejoining then return end
     -- 非强制：有碎片就绝对不换
     if not force then
-        -- 已达目标：允许换服去下一局继续刷
-        if reachedFragTarget() and myF > 0 then
-            N(string.format("已达目标 %d 碎片 → 换服", C.TargetFrag))
-        else
-            pcall(fullScan)
-            if liveScanHasLoot() or stillHasLoot() then
-                sawLootThisRound = true
-                N("地图上还有碎片/眼镜 → 取消换服")
-                return
-            end
-            if foundThisRound or sawLootThisRound or myF > 0 or gotG then
-                N("本局已发现过碎片/眼镜 → 不换服")
-                return
-            end
+        -- 达目标/本局有货：留下，不 rejoin
+        if reachedFragTarget() or foundThisRound or myF > 0 or gotG then
+            N("本局已达目标或已有碎片 → 留下不换服")
+            return
+        end
+        pcall(fullScan)
+        if liveScanHasLoot() or stillHasLoot() then
+            sawLootThisRound = true
+            N("地图上还有碎片/眼镜 → 取消换服")
+            return
+        end
+        if sawLootThisRound then
+            N("本局曾发现过物资 → 不换服")
+            return
         end
     end
     pendingHop = true
@@ -1336,7 +1343,7 @@ if SmH_tr then
         setTog(SmH_tr, SmH_th, C.AutoHop)
         N(C.AutoHop and "自动换服 ON" or "自动换服 OFF")
         if HopHint then
-            HopHint.Text = C.AutoHop and "自动换服: 70秒空图重建 | 捡够目标可换" or "自动换服: 已关闭"
+            HopHint.Text = C.AutoHop and "仅空图才重建 | 捡够目标留下" or "自动换服: 已关闭"
         end
     end)
 end
@@ -1434,18 +1441,10 @@ task.spawn(function()
                     end
                 elseif shouldAutoHop() then
                     if HopHint then
-                        if reachedFragTarget() and myF > 0 then
-                            HopHint.Text = string.format("已达目标%d → 换服", C.TargetFrag)
-                        else
-                            HopHint.Text = "自动换服: 空图重建"
-                        end
+                        HopHint.Text = "自动换服: 空图 → 重建"
                         HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
                     end
-                    if reachedFragTarget() and myF > 0 then
-                        N(string.format("已达目标 %d → 换服", C.TargetFrag))
-                    else
-                        N("70秒后仍无碎片/眼镜 → 重建")
-                    end
+                    N("70秒空图无货 → 重建")
                     hop(false)
                 elseif HopHint and C.AutoHop then
                     local left = MIN_STAY - (tick() - serverJoinTime)
