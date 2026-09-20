@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true, TargetFrag = 1, LootMode = "frag",
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true, LootMode = "frag",
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "BloodMoon Fragment", "blood moon fragment"}
@@ -366,14 +366,12 @@ local P3 = mkPage("Farm")
 mkLabel(P3, 0, "=== Auto Farm 设置 ===", Color3.fromRGB(255, 200, 100))
 local Auto_tr, Auto_th = mkTog(P3, 22, "Auto 总开关", false)
 local LootModeB = mkBtn(P3, 50, "捡取: 仅碎片 (点切换)", Color3.fromRGB(70, 55, 90))
-local TargetB = mkBtn(P3, 80, "目标碎片: 1 (点切换 1~5)", Color3.fromRGB(70, 55, 90))
-local SmH_tr, SmH_th = mkTog(P3, 110, "自动换服(空图/达目标)", true)
-local ShelA_tr, ShelA_th = mkTog(P3, 136, "定时去避难所", false)
-local Vote_tr, Vote_th = mkTog(P3, 162, "自动投票 Beginnings/Islands", true)
-local ShelB = mkBtn(P3, 192, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopHint = mkLabel(P3, 224, "Farm: 仅空图才重建 | 捡够目标留下", Color3.fromRGB(140, 200, 255))
-mkLabel(P3, 244, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
-mkLabel(P3, 262, "目标: 本局捡够 N 块后停止，留下不换服", Color3.fromRGB(140, 140, 155))
+local SmH_tr, SmH_th = mkTog(P3, 80, "自动换服(仅空图重建)", true)
+local ShelA_tr, ShelA_th = mkTog(P3, 106, "定时去避难所", false)
+local Vote_tr, Vote_th = mkTog(P3, 132, "自动投票 Beginnings/Islands", true)
+local ShelB = mkBtn(P3, 162, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopHint = mkLabel(P3, 194, "Farm: 仅空图约70秒才重建", Color3.fromRGB(140, 200, 255))
+mkLabel(P3, 214, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
 local Only_tr, Only_th = mkTog(P3, 280, "只有碎片(旧兼容)", true)
 Only_tr.Visible = false
 Only_th.Visible = false
@@ -646,18 +644,8 @@ local function wantGlass()
     local m = C.LootMode or "frag"
     return m == "glass" or m == "both"
 end
-local function updateTargetBtn()
-    local n = tonumber(C.TargetFrag) or 1
-    if n < 1 then n = 1 end
-    if n > 5 then n = 5 end
-    C.TargetFrag = n
-    if TargetB then
-        TargetB.Text = string.format("目标碎片: %d (点切换 1~5)", n)
-    end
-end
 local function reachedFragTarget()
-    local need = tonumber(C.TargetFrag) or 1
-    return myF >= need
+    return false
 end
 local function applyToggles()
     setTog(Auto_tr, Auto_th, C.Auto)
@@ -669,8 +657,7 @@ local function applyToggles()
     C.SmartHop = C.AutoHop
     if SmH_tr then setTog(SmH_tr, SmH_th, C.AutoHop) end
     if Vote_tr then setTog(Vote_tr, Vote_th, C.AutoVote) end
-    pcall(updateTargetBtn)
-    pcall(updateLootModeBtn)
+        pcall(updateLootModeBtn)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -870,13 +857,6 @@ local function creditFragment(src)
     myF = math.min(NEED_FRAG, myF + 1)
     serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
     N(string.format("碎片 +1 → 本局进度 %d/%d（显示用，全服以大厅为准）", myF, NEED_FRAG))
-    if reachedFragTarget() then
-        N(string.format("已达目标 %d 块 → 停止捡取，留下不换服", C.TargetFrag))
-        if HopHint then
-            HopHint.Text = string.format("已达目标%d → 留下", C.TargetFrag)
-            HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
-        end
-    end
 end
 local function pickup(o, typ)
     if not o or not o.Parent then return end
@@ -1177,7 +1157,7 @@ local function shouldAutoHop()
     local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
     if inRest then return false end
     -- 已达目标 / 本局捡过 → 留下，绝不因为目标达成而 rejoin
-    if reachedFragTarget() or foundThisRound or myF > 0 or gotG then
+    if foundThisRound or myF > 0 or gotG then
         return false
     end
     if (tick() - serverJoinTime) < MIN_STAY then return false end
@@ -1231,8 +1211,8 @@ local function hop(force)
     -- 非强制：有碎片就绝对不换
     if not force then
         -- 达目标/本局有货：留下，不 rejoin
-        if reachedFragTarget() or foundThisRound or myF > 0 or gotG then
-            N("本局已达目标或已有碎片 → 留下不换服")
+        if foundThisRound or myF > 0 or gotG then
+            N("本局已有碎片/眼镜 → 留下不换服")
             return
         end
         pcall(fullScan)
@@ -1347,16 +1327,6 @@ if SmH_tr then
         end
     end)
 end
-if TargetB then
-    TargetB.MouseButton1Click:Connect(function()
-        local n = (tonumber(C.TargetFrag) or 1) + 1
-        if n > 5 then n = 1 end
-        C.TargetFrag = n
-        updateTargetBtn()
-        N("本局目标碎片: " .. tostring(n))
-    end)
-end
-pcall(updateTargetBtn)
 RefPlrB.MouseButton1Click:Connect(refPlrList)
 RefItemB.MouseButton1Click:Connect(refItemList)
 AddMusicB.MouseButton1Click:Connect(function()
@@ -1459,7 +1429,7 @@ task.spawn(function()
                 local h = HRP()
                 local pos = h and h.Position or Vector3.zero
                 -- 碎片
-                if wantFrag() and not reachedFragTarget() then
+                if wantFrag() then
                     local list = {}
                     for o in pairs(kF) do
                         if o and o.Parent then
@@ -1471,7 +1441,6 @@ task.spawn(function()
                     local n = 0
                     for _, d in ipairs(list) do
                         if n >= 3 then break end
-                        if reachedFragTarget() then break end
                         pickup(d.o, "Fragment")
                         n = n + 1
                         task.wait(0.05)
