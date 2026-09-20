@@ -49,6 +49,21 @@ local serverJoinTime = tick()
 local MIN_STAY = 70 -- 实测约70秒后无碎片可重建
 local didEarlyScan = false
 local foundThisRound = false -- 本局已捡到碎片/眼镜则不自动重建
+local lockNoHop = false -- 本局一旦有碎片：永久禁止自动换服/AutoHop重进
+local rejoining = false
+local pendingHop = false
+local kickHandled = false
+local function markHasFrag(reason)
+    foundThisRound = true
+    sawLootThisRound = true
+    lockNoHop = true
+    pcall(function()
+        if pendingHop then
+            pendingHop = false
+            N("取消换服: " .. tostring(reason or "已有碎片"))
+        end
+    end)
+end
 local sawLootThisRound = false -- 本局曾扫到过碎片/眼镜
 local countedFragKeys = {} -- 防止同一碎片加两次进度
 
@@ -824,7 +839,8 @@ local function fullScan()
     end
     lastFullScan = tick()
     local fc, gc = countKnown()
-    if fc > 0 or gc > 0 then sawLootThisRound = true end
+    if fc > 0 then markHasFrag("fullScan碎片") end
+    if gc > 0 then sawLootThisRound = true end
     return fc, gc
 end
 
@@ -852,8 +868,7 @@ local function creditFragment(src)
     if posKey and countedFragKeys[posKey] then return end
     countedFragKeys[key] = true
     if posKey then countedFragKeys[posKey] = true end
-    foundThisRound = true
-    sawLootThisRound = true
+    markHasFrag("creditFragment")
     myF = math.min(NEED_FRAG, myF + 1)
     serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
     N(string.format("碎片 +1 → 本局进度 %d/%d（显示用，全服以大厅为准）", myF, NEED_FRAG))
@@ -865,7 +880,7 @@ local function pickup(o, typ)
     tried[key] = tick()
     -- 一开始捡就标记：避免捡完地图变0后误判为空图去重建
     if typ == "Fragment" or typ == "Glasses" then
-        foundThisRound = true
+        markHasFrag("pickup:" .. tostring(typ))
     end
     local h = HRP()
     if not h then return end
@@ -1059,9 +1074,7 @@ local function toShel()
     N("没找到避难所")
 end
 
-local rejoining = false
-local pendingHop = false
-local kickHandled = false
+-- rejoining/pendingHop 已提前声明
 
 local function queueScript()
     pcall(function()
@@ -1084,6 +1097,15 @@ end
 -- 先处理 kick，再 rejoin
 local function rejoin(reason)
     if rejoining then return end
+    local rs = tostring(reason or "")
+    -- 本局有碎片时：禁止 AutoHop 相关重进
+    if lockNoHop or foundThisRound or myF > 0 then
+        if string.find(rs, "AutoHop") or string.find(rs, "Hop") or pendingHop then
+            N("本局已有碎片 → 取消自动重进")
+            pendingHop = false
+            return
+        end
+    end
     if not C.Rejoin and not pendingHop then return end
     rejoining = true
     N("重进中: " .. tostring(reason or "?"))
@@ -1154,12 +1176,11 @@ end
 local function shouldAutoHop()
     if not C.AutoHop or not C.Auto then return false end
     if pendingHop or rejoining then return false end
-    local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
-    if inRest then return false end
-    -- 已达目标 / 本局捡过 → 留下，绝不因为目标达成而 rejoin
-    if foundThisRound or myF > 0 or gotG then
+    if lockNoHop or foundThisRound or myF > 0 or gotG then
         return false
     end
+    local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
+    if inRest then return false end
     if (tick() - serverJoinTime) < MIN_STAY then return false end
     -- 仅：空图且本局从未见过货 → 重建
     if sawLootThisRound then
@@ -1208,13 +1229,12 @@ end
 
 local function hop(force)
     if pendingHop or rejoining then return end
-    -- 非强制：有碎片就绝对不换
+    if lockNoHop or foundThisRound or myF > 0 or gotG then
+        N("本局已有碎片 → 禁止换服/重进")
+        pendingHop = false
+        return
+    end
     if not force then
-        -- 达目标/本局有货：留下，不 rejoin
-        if foundThisRound or myF > 0 or gotG then
-            N("本局已有碎片/眼镜 → 留下不换服")
-            return
-        end
         pcall(fullScan)
         if liveScanHasLoot() or stillHasLoot() then
             sawLootThisRound = true
@@ -1239,6 +1259,11 @@ local function hop(force)
         kickHandled = true
         task.wait(1.0)
         if pendingHop then
+            if lockNoHop or foundThisRound or myF > 0 then
+                pendingHop = false
+                N("换服前发现已有碎片 → 中止")
+                return
+            end
             rejoining = false
             rejoin("AutoHop")
         end
@@ -1347,26 +1372,23 @@ workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
         if isF(o) then
             kF[o] = true
-            sawLootThisRound = true
+            markHasFrag("地图出现碎片")
         elseif isG(o) then
             kG[o] = true
-            sawLootThisRound = true
+            if wantGlass and wantGlass() then markHasFrag("地图出现眼镜") else sawLootThisRound = true end
         end
     end)
 end)
 workspace.DescendantRemoving:Connect(function(o)
     if kF[o] then
-        -- 只标记本局有货，进度只由 creditFragment 加一次，避免 +2
-        foundThisRound = true
-        sawLootThisRound = true
+        markHasFrag("碎片消失")
         creditFragment(o)
-        N("检测到碎片消失，本局不自动重建")
+        N("碎片已处理 → 本局禁止自动重进")
     end
     if kG[o] then
-        foundThisRound = true
-        sawLootThisRound = true
+        markHasFrag("眼镜消失")
         gotG = true
-        N("检测到眼镜消失，本局不自动重建")
+        N("眼镜已处理 → 本局禁止自动重进")
     end
     kF[o] = nil
     kG[o] = nil
@@ -1515,10 +1537,19 @@ pcall(function()
     Players.PlayerRemoving:Connect(function(pl)
         if pl == LP then
             kickHandled = true
-            N("检测到离开/kick，准备 rejoin")
-            -- 必须先 kick 处理完，再 rejoin
+            if (lockNoHop or foundThisRound or myF > 0) and pendingHop then
+                pendingHop = false
+                N("本局有碎片 → 不自动重进")
+                return
+            end
+            if pendingHop then
+                N("换服离开，准备 rejoin")
+            else
+                N("检测到离开/kick，准备 rejoin")
+            end
             task.defer(function()
                 task.wait(0.5)
+                if lockNoHop and not pendingHop then return end
                 rejoin(pendingHop and "HopKick" or "PlayerRemoving")
             end)
         end
