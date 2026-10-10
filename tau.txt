@@ -1,5 +1,5 @@
 -- tau simple+ TAB版 (Arceus X)
--- 顶部一排 Tab：主页 / 传送 / Farm / 音乐 / 储存
+-- 顶部一排 Tab：主页 / 传送 / Farm / Troll / 音乐 / 储存 (bugfix scope/rejoin)
 
 print("[tau] simple tab start")
 
@@ -24,7 +24,7 @@ local PLACE = 2313058949
 local SAVE_FILE = "tau_simple_save.json"
 
 local C = {
-    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, AutoVote = true, LootMode = "frag",
+    Auto = false, OnlyFrag = true, ESP = true, AFK = true, ShelAuto = false, Rejoin = true, SmartHop = true, AutoHop = true, HopWait = 0, LootMode = "frag", AutoHelp = true, ParaWatch = true,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "BloodMoon Fragment", "blood moon fragment"}
@@ -33,7 +33,6 @@ local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", 
 local KeyN = {"Shelter Key", "ShelterKey", "避难所钥匙"}
 local ExtN = {"Fire Extinguisher", "Extinguisher", "灭火器"}
 local BatN = {"Baseball Bat", "BaseballBat", "棒球棒"}
-local VoteMaps = {"Beginnings", "Islands", "Island"} -- 优先投票
 local kF, kG = {}, {}
 local myF, gotG = 0, false
 local serverFrag = 0 -- 大厅/服务器已收集进度 0~5
@@ -48,23 +47,13 @@ local MAX_MUSIC = 20
 local serverJoinTime = tick()
 local MIN_STAY = 70 -- 实测约70秒后无碎片可重建
 local didEarlyScan = false
+local emptyScanStreak = 0 -- 连续空图次数，防误判
 local foundThisRound = false -- 本局已捡到碎片/眼镜则不自动重建
+local sawLootThisRound = false -- 本局曾扫到过碎片/眼镜（必须在 markHasFrag 之前声明）
 local lockNoHop = false -- 本局一旦有碎片：永久禁止自动换服/AutoHop重进
 local rejoining = false
 local pendingHop = false
 local kickHandled = false
-local function markHasFrag(reason)
-    foundThisRound = true
-    sawLootThisRound = true
-    lockNoHop = true
-    pcall(function()
-        if pendingHop then
-            pendingHop = false
-            N("取消换服: " .. tostring(reason or "已有碎片"))
-        end
-    end)
-end
-local sawLootThisRound = false -- 本局曾扫到过碎片/眼镜
 local countedFragKeys = {} -- 防止同一碎片加两次进度
 
 local function N(msg)
@@ -73,6 +62,17 @@ local function N(msg)
     end)
     print("[tau]", msg)
 end
+
+local function markHasFrag(reason)
+    foundThisRound = true
+    sawLootThisRound = true
+    lockNoHop = true
+    if pendingHop then
+        pendingHop = false
+        N("取消换服: " .. tostring(reason or "已有碎片"))
+    end
+end
+
 
 local function inL(name, list)
     local n = string.lower(tostring(name or ""))
@@ -220,7 +220,7 @@ tabLay.Parent = TabBar
 
 local function mkTab(name)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 54, 1, -4)
+    b.Size = UDim2.new(0, 46, 1, -4)
     b.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     b.Text = name
     b.TextColor3 = Color3.fromRGB(160, 160, 175)
@@ -234,8 +234,9 @@ end
 local T1 = mkTab("主页")
 local T2 = mkTab("传送")
 local T3 = mkTab("Farm")
-local T4 = mkTab("音乐")
-local T5 = mkTab("储存")
+local T4 = mkTab("Troll")
+local T5 = mkTab("音乐")
+local T6 = mkTab("储存")
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -12, 1, -72)
@@ -383,29 +384,38 @@ local Auto_tr, Auto_th = mkTog(P3, 22, "Auto 总开关", false)
 local LootModeB = mkBtn(P3, 50, "捡取: 仅碎片 (点切换)", Color3.fromRGB(70, 55, 90))
 local SmH_tr, SmH_th = mkTog(P3, 80, "自动换服(仅空图重建)", true)
 local ShelA_tr, ShelA_th = mkTog(P3, 106, "定时去避难所", false)
-local Vote_tr, Vote_th = mkTog(P3, 132, "自动投票 Beginnings/Islands", true)
-local ShelB = mkBtn(P3, 162, "传送避难所", Color3.fromRGB(45, 45, 58))
-local HopHint = mkLabel(P3, 194, "Farm: 仅空图约70秒才重建", Color3.fromRGB(140, 200, 255))
-mkLabel(P3, 214, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
+local ShelB = mkBtn(P3, 136, "传送避难所", Color3.fromRGB(45, 45, 58))
+local HopHint = mkLabel(P3, 168, "Farm: 仅空图约70秒才重建", Color3.fromRGB(140, 200, 255))
+mkLabel(P3, 188, "捡取: 仅碎片 / 仅眼镜 / 碎片+眼镜", Color3.fromRGB(140, 140, 155))
 local Only_tr, Only_th = mkTog(P3, 280, "只有碎片(旧兼容)", true)
 Only_tr.Visible = false
 Only_th.Visible = false
 
-local P4 = mkPage("音乐")
-mkLabel(P4, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
-local MusicIdBox = mkBox(P4, 22, "音乐 ID (数字)")
-local MusicNameBox = mkBox(P4, 52, "歌名（可选）")
-local AddMusicB = mkBtn(P4, 84, "更换音乐", Color3.fromRGB(50, 120, 80))
-local RestoreMusicB = mkBtn(P4, 116, "恢复原音乐", Color3.fromRGB(90, 70, 50))
-mkLabel(P4, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
+local P4 = mkPage("Troll")
+mkLabel(P4, 0, "=== Troll 工具 ===", Color3.fromRGB(255, 160, 100))
+local Help_tr, Help_th = mkTog(P4, 24, "自动 CallForHelp 求救", true)
+local Para_tr, Para_th = mkTog(P4, 50, "Paralyze 监测提示", true)
+local HelpNowB = mkBtn(P4, 80, "立即发送 CallForHelp", Color3.fromRGB(90, 50, 70))
+mkLabel(P4, 114, "被困/麻痹时自动 FireServer 求救", Color3.fromRGB(140, 140, 155))
+mkLabel(P4, 132, "Remote: Assets.Signals.CallForHelp", Color3.fromRGB(120, 120, 140))
+mkLabel(P4, 150, "Remote: Assets.Signals.Paralyze", Color3.fromRGB(120, 120, 140))
+local TrollHint = mkLabel(P4, 176, "Troll: 待命", Color3.fromRGB(140, 200, 255))
 
-local P5 = mkPage("储存")
-mkLabel(P5, 0, "保存开关 / 音乐设置", Color3.fromRGB(140, 200, 255))
-local SaveB = mkBtn(P5, 28, "保存设置", Color3.fromRGB(50, 100, 140))
-local LoadB = mkBtn(P5, 60, "读取储存", Color3.fromRGB(45, 70, 100))
-local SaveL = mkLabel(P5, 96, "储存: 未操作")
-mkLabel(P5, 120, "文件: tau_simple_save.json", Color3.fromRGB(140, 140, 155))
-mkLabel(P5, 140, "需执行器支持 writefile", Color3.fromRGB(140, 140, 155))
+local P5 = mkPage("音乐")
+mkLabel(P5, 0, "自定义游戏音乐", Color3.fromRGB(140, 200, 255))
+local MusicIdBox = mkBox(P5, 22, "音乐 ID (数字)")
+local MusicNameBox = mkBox(P5, 52, "歌名（可选）")
+local AddMusicB = mkBtn(P5, 84, "更换音乐", Color3.fromRGB(50, 120, 80))
+local RestoreMusicB = mkBtn(P5, 116, "恢复原音乐", Color3.fromRGB(90, 70, 50))
+mkLabel(P5, 152, "提示: 部分模式音乐可能被覆盖", Color3.fromRGB(140, 140, 155))
+
+local P6 = mkPage("储存")
+mkLabel(P6, 0, "保存开关 / 音乐设置", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(P6, 28, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(P6, 60, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkLabel(P6, 96, "储存: 未操作")
+mkLabel(P6, 120, "文件: tau_simple_save.json", Color3.fromRGB(140, 140, 155))
+mkLabel(P6, 140, "需执行器支持 writefile", Color3.fromRGB(140, 140, 155))
 
 local function swTab(name)
     for k, p in pairs(Pages) do
@@ -415,8 +425,8 @@ local function swTab(name)
         pcall(refPlrList)
         pcall(refItemList)
     end
-    local map = {["主页"] = T1, ["传送"] = T2, ["Farm"] = T3, ["音乐"] = T4, ["储存"] = T5}
-    for _, tb in pairs({T1, T2, T3, T4, T5}) do
+    local map = {["主页"] = T1, ["传送"] = T2, ["Farm"] = T3, ["Troll"] = T4, ["音乐"] = T5, ["储存"] = T6}
+    for _, tb in pairs({T1, T2, T3, T4, T5, T6}) do
         tb.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
         tb.TextColor3 = Color3.fromRGB(160, 160, 175)
     end
@@ -429,8 +439,9 @@ end
 T1.MouseButton1Click:Connect(function() swTab("主页") end)
 T2.MouseButton1Click:Connect(function() swTab("传送") end)
 T3.MouseButton1Click:Connect(function() swTab("Farm") end)
-T4.MouseButton1Click:Connect(function() swTab("音乐") end)
-T5.MouseButton1Click:Connect(function() swTab("储存") end)
+T4.MouseButton1Click:Connect(function() swTab("Troll") end)
+T5.MouseButton1Click:Connect(function() swTab("音乐") end)
+T6.MouseButton1Click:Connect(function() swTab("储存") end)
 swTab("主页")
 
 N("UI 已加载")
@@ -467,55 +478,6 @@ ClB.MouseButton1Click:Connect(function() Gui:Destroy() end)
 
 
 
-local lastVoteTry = 0
-local function preferMapName(name)
-    local n = string.lower(tostring(name or ""))
-    for _, m in ipairs(VoteMaps) do
-        if string.find(n, string.lower(m), 1, true) then return true end
-    end
-    return false
-end
-
-local function tryClick(gui)
-    if not gui then return false end
-    local ok = false
-    pcall(function()
-        if not (gui:IsA("TextButton") or gui:IsA("ImageButton") or gui:IsA("GuiButton")) then
-            return
-        end
-        -- 不要用 :Fire()，部分执行器上是 nil 会报 attempt to call a nil value
-        if typeof(firesignal) == "function" then
-            pcall(firesignal, gui.MouseButton1Click)
-            pcall(firesignal, gui.Activated)
-            ok = true
-        end
-        if typeof(getconnections) == "function" then
-            pcall(function()
-                for _, c in ipairs(getconnections(gui.MouseButton1Click)) do
-                    if c.Function then pcall(c.Function) end
-                end
-                for _, c in ipairs(getconnections(gui.Activated)) do
-                    if c.Function then pcall(c.Function) end
-                end
-                ok = true
-            end)
-        end
-        -- 退化：虚拟点击位置
-        pcall(function()
-            local pos = gui.AbsolutePosition + gui.AbsoluteSize / 2
-            local vim = game:GetService("VirtualInputManager")
-            if vim then
-                vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-                vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-                ok = true
-            end
-        end)
-    end)
-    return ok
-end
-
-local function autoVoteMaps()
-    if not C.AutoVote then return end
     if tick() - lastVoteTry < 1.2 then return end
     lastVoteTry = tick()
     local pg = LP:FindFirstChild("PlayerGui")
@@ -668,11 +630,12 @@ local function applyToggles()
     setTog(ESP_tr, ESP_th, C.ESP)
     setTog(AFK_tr, AFK_th, C.AFK)
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
+    if Help_tr then setTog(Help_tr, Help_th, C.AutoHelp) end
+    if Para_tr then setTog(Para_tr, Para_th, C.ParaWatch) end
     setTog(Rej_tr, Rej_th, C.Rejoin)
     C.SmartHop = C.AutoHop
     if SmH_tr then setTog(SmH_tr, SmH_th, C.AutoHop) end
-    if Vote_tr then setTog(Vote_tr, Vote_th, C.AutoVote) end
-        pcall(updateLootModeBtn)
+    pcall(updateLootModeBtn)
     StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
     StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
 end
@@ -1095,16 +1058,19 @@ local function doTeleport()
 end
 
 -- 先处理 kick，再 rejoin
+local function hasFragLock()
+    return lockNoHop or foundThisRound or (myF and myF > 0) or gotG
+end
+
 local function rejoin(reason)
     if rejoining then return end
     local rs = tostring(reason or "")
-    -- 本局有碎片时：禁止 AutoHop 相关重进
-    if lockNoHop or foundThisRound or myF > 0 then
-        if string.find(rs, "AutoHop") or string.find(rs, "Hop") or pendingHop then
-            N("本局已有碎片 → 取消自动重进")
-            pendingHop = false
-            return
-        end
+    -- 本局有碎片/眼镜：屏蔽一切自动重进（含被踢、277、传送失败）
+    if hasFragLock() then
+        pendingHop = false
+        N("本局有碎片 → 屏蔽自动重进 (" .. rs .. ")")
+        print("[tau] rejoin blocked:", rs, "myF=", myF, "lock=", lockNoHop)
+        return
     end
     if not C.Rejoin and not pendingHop then return end
     rejoining = true
@@ -1176,10 +1142,10 @@ end
 local function shouldAutoHop()
     if not C.AutoHop or not C.Auto then return false end
     if pendingHop or rejoining then return false end
-    if lockNoHop or foundThisRound or myF > 0 or gotG then
+    if hasFragLock() then
         return false
     end
-    local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
+    local inRest = (currentMode == "Intermission")
     if inRest then return false end
     if (tick() - serverJoinTime) < MIN_STAY then return false end
     -- 仅：空图且本局从未见过货 → 重建
@@ -1229,7 +1195,7 @@ end
 
 local function hop(force)
     if pendingHop or rejoining then return end
-    if lockNoHop or foundThisRound or myF > 0 or gotG then
+    if hasFragLock() then
         N("本局已有碎片 → 禁止换服/重进")
         pendingHop = false
         return
@@ -1259,7 +1225,7 @@ local function hop(force)
         kickHandled = true
         task.wait(1.0)
         if pendingHop then
-            if lockNoHop or foundThisRound or myF > 0 then
+            if hasFragLock() then
                 pendingHop = false
                 N("换服前发现已有碎片 → 中止")
                 return
@@ -1269,6 +1235,101 @@ local function hop(force)
         end
     end)
 end
+
+
+-- ===== Troll 相关: CallForHelp / Paralyze =====
+local lastHelpFire = 0
+local function fireCallForHelp(why)
+    if not C.AutoHelp then return end
+    if tick() - lastHelpFire < 2 then return end
+    lastHelpFire = tick()
+    pcall(function()
+        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
+        local ev = Signals and Signals:FindFirstChild("CallForHelp")
+        if ev and ev:IsA("RemoteEvent") then
+            ev:FireServer()
+            N("CallForHelp 已发送" .. (why and (" (" .. tostring(why) .. ")") or ""))
+            if TrollHint then
+                TrollHint.Text = "Troll: 已求救 " .. tostring(why or "")
+                TrollHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+            end
+        end
+    end)
+end
+
+local function tryClickHelpGui()
+    if not C.AutoHelp then return end
+    pcall(function()
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then return end
+        local obs = pg:FindFirstChild("Obstructions")
+        local root = obs or pg
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("GuiButton") then
+                local n = string.lower(tostring(d.Name) .. " " .. tostring(d.Text or ""))
+                if string.find(n, "help", 1, true) or string.find(n, "求救", 1, true) then
+                    if typeof(firesignal) == "function" then
+                        pcall(firesignal, d.MouseButton1Click)
+                        pcall(firesignal, d.Activated)
+                    end
+                    if typeof(getconnections) == "function" then
+                        pcall(function()
+                            for _, c in ipairs(getconnections(d.MouseButton1Click)) do
+                                if c.Function then pcall(c.Function) end
+                            end
+                        end)
+                    end
+                    fireCallForHelp("UI")
+                    return
+                end
+            end
+        end
+    end)
+end
+
+local function hookTrollRemotes()
+    pcall(function()
+        local Signals = RPS:WaitForChild("Assets", 5) and RPS.Assets:WaitForChild("Signals", 5)
+        if not Signals then return end
+        local initEv = Signals:FindFirstChild("CallForHelpGuiInit")
+        if initEv and initEv:IsA("RemoteEvent") and not initEv:GetAttribute("tauHelpHook") then
+            initEv:SetAttribute("tauHelpHook", true)
+            initEv.OnClientEvent:Connect(function()
+                if C.AutoHelp then
+                    N("检测到求救 GUI")
+                    task.defer(function()
+                        fireCallForHelp("GuiInit")
+                        task.wait(0.15)
+                        tryClickHelpGui()
+                    end)
+                end
+            end)
+        end
+        local para = Signals:FindFirstChild("Paralyze")
+        if para and not para:GetAttribute("tauParaHook") then
+            para:SetAttribute("tauParaHook", true)
+            if para:IsA("RemoteEvent") then
+                para.OnClientEvent:Connect(function(...)
+                    if C.ParaWatch then
+                        N("Paralyze 事件触发")
+                        print("[tau] Paralyze", ...)
+                        if TrollHint then
+                            TrollHint.Text = "Troll: Paralyze!"
+                            TrollHint.TextColor3 = Color3.fromRGB(255, 160, 100)
+                        end
+                    end
+                    if C.AutoHelp then
+                        task.defer(function()
+                            fireCallForHelp("Paralyze")
+                            tryClickHelpGui()
+                        end)
+                    end
+                end)
+            end
+        end
+    end)
+end
+task.spawn(hookTrollRemotes)
 
 local function afk()
     pcall(function()
@@ -1328,19 +1389,31 @@ ShelA_tr.MouseButton1Click:Connect(function()
     C.ShelAuto = not C.ShelAuto
     setTog(ShelA_tr, ShelA_th, C.ShelAuto)
 end)
+if Help_tr then
+    Help_tr.MouseButton1Click:Connect(function()
+        C.AutoHelp = not C.AutoHelp
+        setTog(Help_tr, Help_th, C.AutoHelp)
+        N(C.AutoHelp and "自动求救 ON" or "自动求救 OFF")
+    end)
+end
+if Para_tr then
+    Para_tr.MouseButton1Click:Connect(function()
+        C.ParaWatch = not C.ParaWatch
+        setTog(Para_tr, Para_th, C.ParaWatch)
+        N(C.ParaWatch and "Paralyze监测 ON" or "Paralyze监测 OFF")
+    end)
+end
+if HelpNowB then
+    HelpNowB.MouseButton1Click:Connect(function()
+        fireCallForHelp("手动")
+    end)
+end
 Rej_tr.MouseButton1Click:Connect(function()
     C.Rejoin = not C.Rejoin
     setTog(Rej_tr, Rej_th, C.Rejoin)
     N(C.Rejoin and "自动重进 ON" or "自动重进 OFF")
 end)
 ShelB.MouseButton1Click:Connect(toShel)
-if Vote_tr then
-    Vote_tr.MouseButton1Click:Connect(function()
-        C.AutoVote = not C.AutoVote
-        setTog(Vote_tr, Vote_th, C.AutoVote)
-        N(C.AutoVote and "自动投票 ON" or "自动投票 OFF")
-    end)
-end
 if SmH_tr then
     SmH_tr.MouseButton1Click:Connect(function()
         C.AutoHop = not C.AutoHop
@@ -1375,7 +1448,7 @@ workspace.DescendantAdded:Connect(function(o)
             markHasFrag("地图出现碎片")
         elseif isG(o) then
             kG[o] = true
-            if wantGlass and wantGlass() then markHasFrag("地图出现眼镜") else sawLootThisRound = true end
+            if wantGlass() then markHasFrag("地图出现眼镜") else sawLootThisRound = true end
         end
     end)
 end)
@@ -1394,7 +1467,7 @@ workspace.DescendantRemoving:Connect(function(o)
     kG[o] = nil
 end)
 
-local tScan, tShel, tEsp, tAfk, tMode, tLoot = 0, 0, 0, 0, 0, 0
+local tScan, tShel, tEsp, tAfk, tMode, tLoot, tHelp = 0, 0, 0, 0, 0, 0, 0
 local lastEspKey = ""
 task.spawn(function()
     -- 启动时扫一次
@@ -1404,6 +1477,10 @@ task.spawn(function()
     while Gui and Gui.Parent do
         pcall(function()
             local now = tick()
+            -- 有碎片时持续清换服标记，防止晚点偷偷 hop
+            if hasFragLock() then
+                pendingHop = false
+            end
             -- UI 数字：1 秒更新
             -- 地图数量 2 秒刷新；大厅进度在 updFragUI 内最多 5 秒读一次
             if now - tScan >= 2 then
@@ -1413,14 +1490,23 @@ task.spawn(function()
                 GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 未找到"
                 -- 地图出来后：没碎片就短确认再换（不等90秒）
                 -- 休息/投票中不换
-                local inRest = (currentMode == "Intermission" or currentMode == "Unknown")
+                local inRest = (currentMode == "Intermission")
                 if (tick() - serverJoinTime) >= MIN_STAY and not didEarlyScan then
                     didEarlyScan = true
                     pcall(fullScan)
                     fc = select(1, countKnown())
                 end
                 local hasLoot = stillHasLoot()
-                if hasLoot or inRest or not C.Auto then
+                if hasFragLock() then
+                    emptyScanStreak = 0
+                    zeroFragSince = nil
+                    pendingHop = false
+                    if HopHint and C.AutoHop then
+                        HopHint.Text = "有碎片 → 禁止自动重进"
+                        HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+                    end
+                elseif hasLoot or inRest or not C.Auto then
+                    emptyScanStreak = 0
                     zeroFragSince = nil
                     if HopHint and C.AutoHop then
                         if inRest then
@@ -1431,17 +1517,23 @@ task.spawn(function()
                             HopHint.Text = "自动换服: 请开 Auto"
                         end
                     end
-                elseif shouldAutoHop() then
-                    if HopHint then
-                        HopHint.Text = "自动换服: 空图 → 重建"
-                        HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
-                    end
-                    N("70秒空图无货 → 重建")
-                    hop(false)
-                elseif HopHint and C.AutoHop then
-                    local left = MIN_STAY - (tick() - serverJoinTime)
-                    if left > 0 then
-                        HopHint.Text = string.format("自动换服: 进图等待 %.0fs", left)
+                else
+                    emptyScanStreak = emptyScanStreak + 1
+                    -- 至少连续 3 次扫到空，且 shouldAutoHop，才重建（防偶发漏扫）
+                    if emptyScanStreak >= 3 and shouldAutoHop() then
+                        if HopHint then
+                            HopHint.Text = "自动换服: 确认空图 → 重建"
+                            HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
+                        end
+                        N("确认空图 → 重建")
+                        hop(false)
+                    elseif HopHint and C.AutoHop then
+                        local left = MIN_STAY - (tick() - serverJoinTime)
+                        if left > 0 then
+                            HopHint.Text = string.format("自动换服: 进图等待 %.0fs", left)
+                        else
+                            HopHint.Text = string.format("空图确认中 %d/3", emptyScanStreak)
+                        end
                     end
                 end
             end
@@ -1465,7 +1557,6 @@ task.spawn(function()
                         if n >= 3 then break end
                         pickup(d.o, "Fragment")
                         n = n + 1
-                        task.wait(0.05)
                     end
                 end
                 -- 眼镜
@@ -1510,6 +1601,10 @@ task.spawn(function()
                 tAfk = now
                 afk()
             end
+            if C.AutoHelp and now - tHelp >= 4 then
+                tHelp = now
+                tryClickHelpGui()
+            end
             if now - tMode >= 2.5 then
                 tMode = now
                 detectMode()
@@ -1537,9 +1632,9 @@ pcall(function()
     Players.PlayerRemoving:Connect(function(pl)
         if pl == LP then
             kickHandled = true
-            if (lockNoHop or foundThisRound or myF > 0) and pendingHop then
+            if hasFragLock() then
                 pendingHop = false
-                N("本局有碎片 → 不自动重进")
+                N("本局有碎片 → 离开也不自动重进")
                 return
             end
             if pendingHop then
@@ -1549,7 +1644,7 @@ pcall(function()
             end
             task.defer(function()
                 task.wait(0.5)
-                if lockNoHop and not pendingHop then return end
+                if hasFragLock() then return end
                 rejoin(pendingHop and "HopKick" or "PlayerRemoving")
             end)
         end
@@ -1560,6 +1655,10 @@ end)
 pcall(function()
     TS.TeleportInitFailed:Connect(function(player, result, err)
         if player == LP and C.Rejoin then
+            if hasFragLock() then
+                N("有碎片 → 传送失败也不重进")
+                return
+            end
             N("传送失败，重试...")
             task.wait(2)
             rejoining = false
@@ -1575,6 +1674,7 @@ pcall(function()
         local msg = tostring(GuiService:GetErrorMessage() or "")
         if msg ~= "" and C.Rejoin then
             print("[tau] error msg:", msg)
+            if hasFragLock() then return end
             if string.find(msg:lower(), "277") or string.find(msg:lower(), "connection")
                 or string.find(msg:lower(), "disconnect") or string.find(msg:lower(), "lost") then
                 task.wait(1)
@@ -1594,5 +1694,5 @@ task.spawn(function()
     end
 end)
 
-print("[tau] TAB ready - 主页/传送/Farm/音乐/储存")
+print("[tau] TAB ready - 主页/传送/Farm/Troll/音乐/储存")
 N("防踢/重进已开")
