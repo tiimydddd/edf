@@ -114,10 +114,15 @@ local function HRP()
 end
 
 local function best(o)
-    if o:IsA("BasePart") then return o end
-    local p = o:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if p and p.Parent and p.Parent:IsA("BasePart") then return p.Parent end
-    return o:FindFirstChildWhichIsA("BasePart", true)
+    if not o then return nil end
+    local ok, res = pcall(function()
+        if o:IsA("BasePart") then return o end
+        local pr = o:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if pr and pr.Parent and pr.Parent:IsA("BasePart") then return pr.Parent end
+        return o:FindFirstChildWhichIsA("BasePart", true)
+    end)
+    if ok then return res end
+    return nil
 end
 
 pcall(function()
@@ -1219,7 +1224,9 @@ local function hop(force)
     queueScript()
     task.spawn(function()
         pcall(function()
-            if typeof(LP.Kick) == "function" then LP:Kick("tau auto hop") end
+            if LP and typeof(LP.Kick) == "function" then
+                pcall(function() LP:Kick("tau auto hop") end)
+            end
         end)
         task.wait(2.5)
         kickHandled = true
@@ -1246,8 +1253,8 @@ local function fireCallForHelp(why)
     pcall(function()
         local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
         local ev = Signals and Signals:FindFirstChild("CallForHelp")
-        if ev and ev:IsA("RemoteEvent") then
-            ev:FireServer()
+        if ev and ev:IsA("RemoteEvent") and typeof(ev.FireServer) == "function" then
+            pcall(function() ev:FireServer() end)
             N("CallForHelp 已发送" .. (why and (" (" .. tostring(why) .. ")") or ""))
             if TrollHint then
                 TrollHint.Text = "Troll: 已求救 " .. tostring(why or "")
@@ -1269,13 +1276,17 @@ local function tryClickHelpGui()
                 local n = string.lower(tostring(d.Name) .. " " .. tostring(d.Text or ""))
                 if string.find(n, "help", 1, true) or string.find(n, "求救", 1, true) then
                     if typeof(firesignal) == "function" then
-                        pcall(firesignal, d.MouseButton1Click)
-                        pcall(firesignal, d.Activated)
+                        if d.MouseButton1Click then pcall(firesignal, d.MouseButton1Click) end
+                        if d.Activated then pcall(firesignal, d.Activated) end
                     end
                     if typeof(getconnections) == "function" then
                         pcall(function()
-                            for _, c in ipairs(getconnections(d.MouseButton1Click)) do
-                                if c.Function then pcall(c.Function) end
+                            local cons = getconnections(d.MouseButton1Click)
+                            if type(cons) ~= "table" then return end
+                            for _, c in ipairs(cons) do
+                                if c and typeof(c.Function) == "function" then
+                                    pcall(c.Function)
+                                end
                             end
                         end)
                     end
@@ -1333,8 +1344,12 @@ task.spawn(hookTrollRemotes)
 
 local function afk()
     pcall(function()
-        VU:CaptureController()
-        VU:ClickButton2(Vector2.new())
+        if VU and typeof(VU.CaptureController) == "function" then
+            VU:CaptureController()
+        end
+        if VU and typeof(VU.ClickButton2) == "function" then
+            VU:ClickButton2(Vector2.new())
+        end
     end)
     pcall(function()
         local h = HRP()
@@ -1443,28 +1458,32 @@ LoadB.MouseButton1Click:Connect(loadConfig)
 
 workspace.DescendantAdded:Connect(function(o)
     task.defer(function()
-        if isF(o) then
-            kF[o] = true
-            markHasFrag("地图出现碎片")
-        elseif isG(o) then
-            kG[o] = true
-            if wantGlass() then markHasFrag("地图出现眼镜") else sawLootThisRound = true end
-        end
+        pcall(function()
+            if isF(o) then
+                kF[o] = true
+                markHasFrag("地图出现碎片")
+            elseif isG(o) then
+                kG[o] = true
+                if wantGlass() then markHasFrag("地图出现眼镜") else sawLootThisRound = true end
+            end
+        end)
     end)
 end)
 workspace.DescendantRemoving:Connect(function(o)
-    if kF[o] then
-        markHasFrag("碎片消失")
-        creditFragment(o)
-        N("碎片已处理 → 本局禁止自动重进")
-    end
-    if kG[o] then
-        markHasFrag("眼镜消失")
-        gotG = true
-        N("眼镜已处理 → 本局禁止自动重进")
-    end
-    kF[o] = nil
-    kG[o] = nil
+    pcall(function()
+        if kF[o] then
+            markHasFrag("碎片消失")
+            creditFragment(o)
+            N("碎片已处理 → 本局禁止自动重进")
+        end
+        if kG[o] then
+            markHasFrag("眼镜消失")
+            gotG = true
+            N("眼镜已处理 → 本局禁止自动重进")
+        end
+        kF[o] = nil
+        kG[o] = nil
+    end)
 end)
 
 local tScan, tShel, tEsp, tAfk, tMode, tLoot, tHelp = 0, 0, 0, 0, 0, 0, 0
@@ -1475,7 +1494,7 @@ task.spawn(function()
     pcall(readLobbyFrag)
     lastLobbyRead = tick()
     while Gui and Gui.Parent do
-        pcall(function()
+        local okLoop, errLoop = pcall(function()
             local now = tick()
             -- 有碎片时持续清换服标记，防止晚点偷偷 hop
             if hasFragLock() then
@@ -1526,7 +1545,7 @@ task.spawn(function()
                             HopHint.TextColor3 = Color3.fromRGB(100, 255, 140)
                         end
                         N("确认空图 → 重建")
-                        hop(false)
+                        pcall(hop, false)
                     elseif HopHint and C.AutoHop then
                         local left = MIN_STAY - (tick() - serverJoinTime)
                         if left > 0 then
@@ -1610,6 +1629,9 @@ task.spawn(function()
                 detectMode()
             end
         end)
+        if not okLoop and errLoop then
+            warn("[tau] loop err:", errLoop)
+        end
         task.wait(0.25)
     end
 end)
@@ -1623,7 +1645,7 @@ end)
 -- ===== 防踢 / 277 重进 =====
 pcall(function()
     LP.Idled:Connect(function()
-        if C.AFK then afk() end
+        if C.AFK then pcall(afk) end
     end)
 end)
 
