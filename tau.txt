@@ -1,6 +1,6 @@
--- tau mini (Arceus X) — 精简版：少 UI、少报错
--- 功能：Auto捡碎片/眼镜 · ESP · 空图换服 · 有碎片禁止重进 · 避难所 · AFK
-print("[tau] mini start")
+-- tau mini+ (Arceus X)
+-- Tab: 主页 / 传送 / 求救 / 储存
+print("[tau] mini+ start")
 
 pcall(function()
     if not game:IsLoaded() then game.Loaded:Wait() end
@@ -12,7 +12,10 @@ local SG = game:GetService("StarterGui")
 local UIS = game:GetService("UserInputService")
 local VU = game:GetService("VirtualUser")
 local TS = game:GetService("TeleportService")
+local HS = game:GetService("HttpService")
+local RPS = game:GetService("ReplicatedStorage")
 local PLACE = 2313058949
+local SAVE_FILE = "tau_mini_save.json"
 
 local C = {
     Auto = false,
@@ -21,6 +24,7 @@ local C = {
     AFK = true,
     AutoHop = true,
     Rejoin = true,
+    AutoHelp = true,
 }
 
 local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "BloodMoon Fragment"}
@@ -41,10 +45,11 @@ local rejoining = false
 local pendingHop = false
 local kickHandled = false
 local lastFullScan = 0
+local lastHelpFire = 0
 
 local function N(msg)
     pcall(function()
-        SG:SetCore("SendNotification", {Title = "tau mini", Text = tostring(msg), Duration = 2})
+        SG:SetCore("SendNotification", {Title = "tau mini+", Text = tostring(msg), Duration = 2})
     end)
     print("[tau]", msg)
 end
@@ -112,6 +117,7 @@ local function hasFragLock()
     return lockNoHop or foundThisRound or myF > 0 or gotG
 end
 
+-- ===== UI =====
 pcall(function()
     local pg = LP:FindFirstChild("PlayerGui")
     if pg then
@@ -142,11 +148,10 @@ if not Gui.Parent then
     N("UI挂载失败")
     return
 end
-print("[tau] UI parent", tostring(Gui.Parent))
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 260, 0, 320)
-Main.Position = UDim2.new(0, 12, 0.28, 0)
+Main.Size = UDim2.new(0, 280, 0, 360)
+Main.Position = UDim2.new(0, 12, 0.22, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -164,7 +169,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -56, 1, 0)
 Title.Position = UDim2.new(0, 8, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "tau mini"
+Title.Text = "tau mini+"
 Title.TextColor3 = Color3.fromRGB(240, 240, 245)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 13
@@ -193,13 +198,55 @@ ClB.TextSize = 14
 ClB.Parent = TB
 Instance.new("UICorner", ClB).CornerRadius = UDim.new(0, 5)
 
-local Body = Instance.new("Frame")
-Body.Size = UDim2.new(1, -12, 1, -38)
-Body.Position = UDim2.new(0, 6, 0, 34)
-Body.BackgroundTransparency = 1
-Body.Parent = Main
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -12, 0, 26)
+TabBar.Position = UDim2.new(0, 6, 0, 34)
+TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 6)
+local tabLay = Instance.new("UIListLayout")
+tabLay.FillDirection = Enum.FillDirection.Horizontal
+tabLay.Padding = UDim.new(0, 3)
+tabLay.Parent = TabBar
 
-local function mkL(y, text, col)
+local function mkTab(name)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 62, 1, -4)
+    b.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    b.Text = name
+    b.TextColor3 = Color3.fromRGB(160, 160, 175)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.Parent = TabBar
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    return b
+end
+
+local T1 = mkTab("主页")
+local T2 = mkTab("传送")
+local T3 = mkTab("求救")
+local T4 = mkTab("储存")
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -12, 1, -68)
+Content.Position = UDim2.new(0, 6, 0, 64)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Pages = {}
+local function mkPage(name)
+    local p = Instance.new("Frame")
+    p.Name = name
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.BackgroundTransparency = 1
+    p.Visible = false
+    p.Parent = Content
+    Pages[name] = p
+    return p
+end
+
+local function mkL(par, y, text, col)
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(1, 0, 0, 16)
     l.Position = UDim2.new(0, 0, 0, y)
@@ -209,16 +256,16 @@ local function mkL(y, text, col)
     l.Font = Enum.Font.Gotham
     l.TextSize = 11
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Parent = Body
+    l.Parent = par
     return l
 end
 
-local function mkTog(y, text, on)
+local function mkTog(par, y, text, on)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 22)
     row.Position = UDim2.new(0, 0, 0, y)
     row.BackgroundTransparency = 1
-    row.Parent = Body
+    row.Parent = par
     local lb = Instance.new("TextLabel")
     lb.Size = UDim2.new(1, -44, 1, 0)
     lb.BackgroundTransparency = 1
@@ -245,11 +292,12 @@ local function mkTog(y, text, on)
 end
 
 local function setTog(btn, kn, on)
+    if not btn or not kn then return end
     btn.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
     kn.Position = on and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
 end
 
-local function mkBtn(y, text, col)
+local function mkBtn(par, y, text, col)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, 0, 0, 24)
     b.Position = UDim2.new(0, 0, 0, y)
@@ -258,25 +306,84 @@ local function mkBtn(y, text, col)
     b.TextColor3 = Color3.new(1, 1, 1)
     b.Font = Enum.Font.GothamBold
     b.TextSize = 11
-    b.Parent = Body
+    b.Parent = par
     Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
     return b
 end
 
-local StatusL = mkL(0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
-local FragL = mkL(18, "碎片: 地图0 | 本局0")
-local GlassL = mkL(34, "眼镜: 无")
-local HopL = mkL(50, "换服: 待命", Color3.fromRGB(140, 200, 255))
+-- 主页
+local P1 = mkPage("主页")
+local StatusL = mkL(P1, 0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
+local FragL = mkL(P1, 18, "碎片: 地图0 | 本局0")
+local GlassL = mkL(P1, 34, "眼镜: 无")
+local HopL = mkL(P1, 50, "换服: 待命", Color3.fromRGB(140, 200, 255))
+local Auto_tr, Auto_th = mkTog(P1, 72, "Auto 捡取", false)
+local Only_tr, Only_th = mkTog(P1, 96, "只捡碎片(关=也捡眼镜)", true)
+local ESP_tr, ESP_th = mkTog(P1, 120, "ESP", true)
+local Hop_tr, Hop_th = mkTog(P1, 144, "空图自动换服", true)
+local AFK_tr, AFK_th = mkTog(P1, 168, "Anti-AFK", true)
+local Rej_tr, Rej_th = mkTog(P1, 192, "断线重进(有碎片会锁)", true)
+local ShelB = mkBtn(P1, 220, "传送避难所", Color3.fromRGB(45, 45, 58))
+mkL(P1, 250, "有碎片 → 禁止自动重进", Color3.fromRGB(140, 140, 155))
 
-local Auto_tr, Auto_th = mkTog(72, "Auto 捡取", false)
-local Only_tr, Only_th = mkTog(96, "只捡碎片(关=也捡眼镜)", true)
-local ESP_tr, ESP_th = mkTog(120, "ESP", true)
-local Hop_tr, Hop_th = mkTog(144, "空图自动换服", true)
-local AFK_tr, AFK_th = mkTog(168, "Anti-AFK", true)
-local Rej_tr, Rej_th = mkTog(192, "断线重进(有碎片会锁)", true)
-local ShelB = mkBtn(220, "传送避难所", Color3.fromRGB(45, 45, 58))
-mkL(250, "有碎片 → 禁止自动重进", Color3.fromRGB(140, 140, 155))
-mkL(266, "空图约70秒+确认3次才换服", Color3.fromRGB(140, 140, 155))
+-- 传送
+local P2 = mkPage("传送")
+mkL(P2, 0, "玩家 (点击传送)", Color3.fromRGB(200, 180, 100))
+local PlrF = Instance.new("ScrollingFrame")
+PlrF.Size = UDim2.new(1, 0, 0, 220)
+PlrF.Position = UDim2.new(0, 0, 0, 20)
+PlrF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+PlrF.BorderSizePixel = 0
+PlrF.ScrollBarThickness = 3
+PlrF.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlrF.Parent = P2
+Instance.new("UICorner", PlrF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", PlrF).Padding = UDim.new(0, 2)
+local RefPlrB = mkBtn(P2, 248, "刷新玩家列表", Color3.fromRGB(45, 45, 58))
+
+-- 求救
+local P3 = mkPage("求救")
+mkL(P3, 0, "=== CallForHelp ===", Color3.fromRGB(255, 160, 100))
+local Help_tr, Help_th = mkTog(P3, 24, "自动求救", true)
+local HelpNowB = mkBtn(P3, 54, "立即 CallForHelp", Color3.fromRGB(90, 50, 70))
+local HelpL = mkL(P3, 88, "求救: 待命", Color3.fromRGB(140, 200, 255))
+mkL(P3, 110, "被困时自动 FireServer", Color3.fromRGB(140, 140, 155))
+mkL(P3, 128, "Remote: Assets.Signals.CallForHelp", Color3.fromRGB(120, 120, 140))
+
+-- 储存
+local P4 = mkPage("储存")
+mkL(P4, 0, "保存 / 读取设置", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkL(P4, 96, "储存: 未操作")
+mkL(P4, 120, "文件: tau_mini_save.json", Color3.fromRGB(140, 140, 155))
+mkL(P4, 138, "需执行器 writefile / readfile", Color3.fromRGB(140, 140, 155))
+
+local function swTab(name)
+    for k, p in pairs(Pages) do
+        p.Visible = (k == name)
+    end
+    local map = {["主页"] = T1, ["传送"] = T2, ["求救"] = T3, ["储存"] = T4}
+    for _, tb in pairs({T1, T2, T3, T4}) do
+        tb.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        tb.TextColor3 = Color3.fromRGB(160, 160, 175)
+    end
+    if map[name] then
+        map[name].BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        map[name].TextColor3 = Color3.new(1, 1, 1)
+    end
+    if name == "传送" then
+        pcall(function()
+            if refPlrList then refPlrList() end
+        end)
+    end
+end
+
+T1.MouseButton1Click:Connect(function() swTab("主页") end)
+T2.MouseButton1Click:Connect(function() swTab("传送") end)
+T3.MouseButton1Click:Connect(function() swTab("求救") end)
+T4.MouseButton1Click:Connect(function() swTab("储存") end)
+swTab("主页")
 
 do
     local drag, d0, p0 = false, nil, nil
@@ -302,13 +409,26 @@ end
 
 MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
-    Body.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 140, 0, 30) or UDim2.new(0, 260, 0, 320)
+    TabBar.Visible = not isMin
+    Content.Visible = not isMin
+    Main.Size = isMin and UDim2.new(0, 140, 0, 30) or UDim2.new(0, 280, 0, 360)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function()
     Gui:Destroy()
 end)
+
+local function applyToggles()
+    setTog(Auto_tr, Auto_th, C.Auto)
+    setTog(Only_tr, Only_th, C.OnlyFrag)
+    setTog(ESP_tr, ESP_th, C.ESP)
+    setTog(Hop_tr, Hop_th, C.AutoHop)
+    setTog(AFK_tr, AFK_th, C.AFK)
+    setTog(Rej_tr, Rej_th, C.Rejoin)
+    setTog(Help_tr, Help_th, C.AutoHelp)
+    StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
+    StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+end
 
 Auto_tr.MouseButton1Click:Connect(function()
     C.Auto = not C.Auto
@@ -320,7 +440,6 @@ end)
 Only_tr.MouseButton1Click:Connect(function()
     C.OnlyFrag = not C.OnlyFrag
     setTog(Only_tr, Only_th, C.OnlyFrag)
-    N(C.OnlyFrag and "只捡碎片" or "碎片+眼镜")
 end)
 ESP_tr.MouseButton1Click:Connect(function()
     C.ESP = not C.ESP
@@ -329,7 +448,6 @@ end)
 Hop_tr.MouseButton1Click:Connect(function()
     C.AutoHop = not C.AutoHop
     setTog(Hop_tr, Hop_th, C.AutoHop)
-    N(C.AutoHop and "空图换服 ON" or "空图换服 OFF")
 end)
 AFK_tr.MouseButton1Click:Connect(function()
     C.AFK = not C.AFK
@@ -339,7 +457,189 @@ Rej_tr.MouseButton1Click:Connect(function()
     C.Rejoin = not C.Rejoin
     setTog(Rej_tr, Rej_th, C.Rejoin)
 end)
+Help_tr.MouseButton1Click:Connect(function()
+    C.AutoHelp = not C.AutoHelp
+    setTog(Help_tr, Help_th, C.AutoHelp)
+end)
 
+-- 存档
+local function saveConfig()
+    local ok, err = pcall(function()
+        if typeof(writefile) ~= "function" then error("无 writefile") end
+        writefile(SAVE_FILE, HS:JSONEncode({C = C}))
+    end)
+    if ok then
+        SaveL.Text = "储存: 已保存"
+        SaveL.TextColor3 = Color3.fromRGB(100, 220, 140)
+        N("已保存")
+    else
+        SaveL.Text = "储存失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 120, 100)
+        N("保存失败: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local ok, err = pcall(function()
+        if typeof(readfile) ~= "function" then error("无 readfile") end
+        if typeof(isfile) == "function" and not isfile(SAVE_FILE) then error("无存档") end
+        local data = HS:JSONDecode(readfile(SAVE_FILE))
+        if typeof(data.C) == "table" then
+            for k, v in pairs(data.C) do
+                if C[k] ~= nil then C[k] = v end
+            end
+        end
+    end)
+    if ok then
+        applyToggles()
+        SaveL.Text = "储存: 已读取"
+        SaveL.TextColor3 = Color3.fromRGB(100, 200, 255)
+        N("已读取")
+    else
+        SaveL.Text = "无存档/失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 160, 100)
+    end
+end
+SaveB.MouseButton1Click:Connect(saveConfig)
+LoadB.MouseButton1Click:Connect(loadConfig)
+
+-- 传送玩家
+local function toPlr(pl)
+    if not pl or pl == LP then return end
+    local c = pl.Character
+    local th = c and c:FindFirstChild("HumanoidRootPart")
+    local h = HRP()
+    if not h then
+        N("无角色")
+        return
+    end
+    if not th then
+        N(pl.Name .. " 无角色")
+        return
+    end
+    pcall(function()
+        h.CFrame = th.CFrame + Vector3.new(0, 3, 0)
+    end)
+    N("已传到 " .. pl.Name)
+end
+
+function refPlrList()
+    for _, ch in ipairs(PlrF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    local y = 0
+    local list = {}
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LP then table.insert(list, pl) end
+    end
+    table.sort(list, function(a, b)
+        return a.Name:lower() < b.Name:lower()
+    end)
+    for _, pl in ipairs(list) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 22)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        b.Text = "  " .. pl.Name
+        b.TextColor3 = Color3.fromRGB(220, 220, 230)
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 11
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = PlrF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        local target = pl
+        b.MouseButton1Click:Connect(function()
+            toPlr(target)
+        end)
+        y = y + 24
+    end
+    PlrF.CanvasSize = UDim2.new(0, 0, 0, math.max(y, 1))
+end
+RefPlrB.MouseButton1Click:Connect(function()
+    pcall(refPlrList)
+end)
+
+-- CallForHelp
+local function fireCallForHelp(why)
+    if not C.AutoHelp and why ~= "手动" then return end
+    if tick() - lastHelpFire < 2 then return end
+    lastHelpFire = tick()
+    pcall(function()
+        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
+        local ev = Signals and Signals:FindFirstChild("CallForHelp")
+        if ev and ev:IsA("RemoteEvent") then
+            pcall(function()
+                ev:FireServer()
+            end)
+            N("CallForHelp " .. tostring(why or ""))
+            if HelpL then
+                HelpL.Text = "求救: 已发送 " .. tostring(why or "")
+                HelpL.TextColor3 = Color3.fromRGB(100, 255, 140)
+            end
+        else
+            N("未找到 CallForHelp")
+        end
+    end)
+end
+
+local function tryClickHelpGui()
+    if not C.AutoHelp then return end
+    pcall(function()
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then return end
+        local root = pg:FindFirstChild("Obstructions") or pg
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("GuiButton") then
+                local n = string.lower(tostring(d.Name) .. " " .. tostring(d.Text or ""))
+                if string.find(n, "help", 1, true) or string.find(n, "求救", 1, true) then
+                    if typeof(firesignal) == "function" then
+                        if d.MouseButton1Click then pcall(firesignal, d.MouseButton1Click) end
+                        if d.Activated then pcall(firesignal, d.Activated) end
+                    end
+                    fireCallForHelp("UI")
+                    return
+                end
+            end
+        end
+    end)
+end
+
+pcall(function()
+    local Signals = RPS:WaitForChild("Assets", 5)
+    Signals = Signals and Signals:WaitForChild("Signals", 5)
+    if not Signals then return end
+    local initEv = Signals:FindFirstChild("CallForHelpGuiInit")
+    if initEv and initEv:IsA("RemoteEvent") then
+        initEv.OnClientEvent:Connect(function()
+            if C.AutoHelp then
+                task.defer(function()
+                    fireCallForHelp("GuiInit")
+                    task.wait(0.15)
+                    tryClickHelpGui()
+                end)
+            end
+        end)
+    end
+    local para = Signals:FindFirstChild("Paralyze")
+    if para and para:IsA("RemoteEvent") then
+        para.OnClientEvent:Connect(function()
+            if C.AutoHelp then
+                task.defer(function()
+                    fireCallForHelp("Paralyze")
+                    tryClickHelpGui()
+                end)
+            end
+        end)
+    end
+end)
+
+HelpNowB.MouseButton1Click:Connect(function()
+    local old = C.AutoHelp
+    C.AutoHelp = true
+    fireCallForHelp("手动")
+    C.AutoHelp = old
+end)
+
+-- 核心逻辑
 local espFolder = Instance.new("Folder")
 espFolder.Name = "tau_esp"
 espFolder.Parent = Gui
@@ -592,11 +892,13 @@ workspace.DescendantRemoving:Connect(function(o)
     end)
 end)
 
-local tScan, tLoot, tEsp, tAfk = 0, 0, 0, 0
+local tScan, tLoot, tEsp, tAfk, tHelp = 0, 0, 0, 0, 0
 local lastEspKey = ""
 
 task.spawn(function()
     pcall(fullScan)
+    task.wait(0.3)
+    pcall(loadConfig)
     while Gui and Gui.Parent do
         local ok, err = pcall(function()
             local now = tick()
@@ -698,6 +1000,11 @@ task.spawn(function()
                 tAfk = now
                 afk()
             end
+
+            if C.AutoHelp and now - tHelp >= 4 then
+                tHelp = now
+                tryClickHelpGui()
+            end
         end)
         if not ok and err then
             warn("[tau] loop:", err)
@@ -742,5 +1049,5 @@ pcall(function()
     end)
 end)
 
-N("tau mini 已加载")
-print("[tau] mini ready")
+N("tau mini+ 已加载")
+print("[tau] mini+ ready")
