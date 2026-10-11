@@ -1,6 +1,7 @@
 -- 灾难警告之VIP版本 FULL
 -- Tabs: Farm | Extra | Tool | Save | Music
 -- 排队仅 3.1 有效 | 只到门 | Blue Moon Mall才找卡 | 沙尘暴→Flares→门
+-- 重进倒數 30 秒 | 当前灾难持续刷新
 -- PlaceId: 7479931846
 
 local Players = game:GetService("Players")
@@ -40,6 +41,7 @@ local lastAutoFarm = 0
 local lastDangerAuto = 0
 local lastCardCheck = 0
 local lastRejoin = 0
+local rejoinCountdown = 0
 local gotCard = false
 local pointsAmount = 10000
 local savedCFrame = nil
@@ -47,7 +49,7 @@ local savedCFrame = nil
 local AUTO_FARM_INTERVAL = 10
 local DANGER_AUTO_CD = 12
 local CARD_INTERVAL = 3
-local REJOIN_CD = 8
+local REJOIN_CD = 30
 
 local ShelterDoorNames = {
     "ShelterDoor", "ShelterEntrance", "Entrance", "Door",
@@ -817,18 +819,39 @@ local function autoFarmFlow()
 end
 
 local function rejoinUntilDanger()
-    if not Settings.RejoinUntilDanger then return end
+    if not Settings.RejoinUntilDanger then
+        rejoinCountdown = 0
+        return
+    end
+
     if isDangerAlertOn() then
         Settings.RejoinUntilDanger = false
+        rejoinCountdown = 0
         RejoinDangerBtn.Text = "重进直到危险警报 ON"
         RejoinDangerBtn.BackgroundColor3 = T.Off
+        StatusLabel.Text = "  Status: Danger Alert 已开，停止重进"
         Notify("Danger Alert 已开，停止重进")
         return
     end
+
     local now = tick()
-    if now - lastRejoin < REJOIN_CD then return end
+
+    if rejoinCountdown <= 0 then
+        rejoinCountdown = now + REJOIN_CD
+    end
+
+    local left = math.ceil(rejoinCountdown - now)
+
+    if left > 0 then
+        RejoinDangerBtn.Text = "重进倒數 " .. left .. " 秒（再点停止）"
+        StatusLabel.Text = "  Status: 危险警报未开，" .. left .. " 秒后重进"
+        return
+    end
+
+    rejoinCountdown = 0
     lastRejoin = now
-    Notify("危险警报未开，重进中...")
+    Notify("倒數结束，重进中...")
+    StatusLabel.Text = "  Status: 正在重进..."
     pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
     pcall(function() TeleportService:TeleportAsync(PLACE_ID, {LocalPlayer}) end)
 end
@@ -957,7 +980,9 @@ task.spawn(function()
         updateDisasterFromValues()
         local onMall = isBlueMoonMall()
 
-        StatusLabel.Text = "  Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or (Settings.RejoinUntilDanger and "重进中..." or "Ready"))
+        if not Settings.RejoinUntilDanger then
+            StatusLabel.Text = "  Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or "Ready")
+        end
         DisasterLabel.Text = "当前灾难: " .. tostring(currentDisaster)
         MapLabel.Text = "地图: " .. (onMall and "Blue Moon Mall ✓" or "非商场")
         MapLabel.TextColor3 = onMall and T.Green or T.Sub
@@ -1027,14 +1052,16 @@ RejoinDangerBtn.MouseButton1Click:Connect(function()
     if Settings.RejoinUntilDanger then
         if isDangerAlertOn() then
             Settings.RejoinUntilDanger = false
+            rejoinCountdown = 0
             Notify("Danger Alert 已经是开的")
         else
-            RejoinDangerBtn.Text = "重进中...（再点停止）"
+            rejoinCountdown = tick() + REJOIN_CD
+            RejoinDangerBtn.Text = "重进倒數 30 秒（再点停止）"
             RejoinDangerBtn.BackgroundColor3 = T.On
-            Notify("开始重进直到危险警报开启")
-            rejoinUntilDanger()
+            Notify("危险警报未开，30 秒后重进")
         end
     else
+        rejoinCountdown = 0
         RejoinDangerBtn.Text = "重进直到危险警报 ON"
         RejoinDangerBtn.BackgroundColor3 = T.Off
         Notify("已停止重进")
@@ -1202,5 +1229,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP 已加载（排队仅3.1）")
-print("Disaster Warning VIP FULL - Queue 3.1 only | Farm/Extra/Tool/Save/Music")
+Notify("灾难警告 VIP 已加载（排队仅3.1 / 重进30秒）")
+print("Disaster Warning VIP FULL - Rejoin 30s countdown | Queue 3.1 only")
