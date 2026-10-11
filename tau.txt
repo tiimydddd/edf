@@ -1,1274 +1,1144 @@
--- 灾难警告之VIP版本 FULL
--- Tabs: Farm | Extra | Tool | Save | Music
--- 排队仅 3.1 有效 | 只到门 | Blue Moon Mall才找卡 | 沙尘暴→Flares→门
--- 重进：危险警报没开则重进；被踢后等服务器重开再传
--- PlaceId: 7479931846
-
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local LocalPlayer = Players.LocalPlayer
-local CoreGui = game:GetService("CoreGui")
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local SoundService = game:GetService("SoundService")
-local Workspace = game:GetService("Workspace")
-local PLACE_ID = 7479931846
-
-local Settings = {
-    AutoFarm = false,
-    AntiAFK = false,
-    ChestESP = false,
-    DangerAuto = false,
-    CardESP = false,
-    AutoCard = false,
-    SpdOn = false,
-    Spd = 24,
-    JumpOn = false,
-    Jump = 70,
-    God = false,
-    RejoinUntilDanger = false,
-    MusicMuted = false,
-    MusicVolume = 0.5,
-}
-
-local currentDisaster = "Unknown"
-local dangerAlerts = false
-local theEndActive = false
-local isMinimized = false
-local lastAutoFarm = 0
-local lastDangerAuto = 0
-local lastCardCheck = 0
-local lastKickTime = 0
-local rejoinTeleporting = false
-local gotCard = false
-local pointsAmount = 10000
-local savedCFrame = nil
-
-local AUTO_FARM_INTERVAL = 10
-local DANGER_AUTO_CD = 12
-local CARD_INTERVAL = 3
-local REJOIN_AFTER_KICK_WAIT = 45
-
-local ShelterDoorNames = {
-    "ShelterDoor", "ShelterEntrance", "Entrance", "Door",
-    "Shelter", "Bunker", "Underground", "避难所"
-}
-local ChestNames = {"Chest","Treasure","TreasureChest","Box","Crate","Loot","宝箱"}
-local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
-local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
-local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare","Dust Bowl"}
-local DustBowlNames = {"Dust Bowl", "DustBowl", "沙尘暴", "dust bowl"}
-local FlareKeywords = {"flares", "flare", "flaers", "solarflare", "solar flare"}
-
-local DisasterList = {
-    {"Meteors", "Meteors"}, {"Hurricane", "Hurricane"}, {"Tornado", "Tornado"},
-    {"Solar Flares", "SolarFlares"}, {"Hostile Planes", "HostilePlanes"},
-    {"Volcano", "Volcano"}, {"Tsunamis", "Tsunamis"}, {"Limnic Eruptions", "LimnicEruptions"},
-    {"Avalanche", "Avalanche"}, {"Dust Bowl", "DustBowl"}, {"Gamma Rays", "GammaRays"},
-    {"Blizzard", "Blizzard"}, {"Krampus", "Krampus"}, {"Krampus 2021", "Krampus2021"},
-    {"Nian", "Nian"}, {"Jellybean", "Jellybean"}, {"Hoshi Attack", "HoshiAttack"},
-    {"Air Strikes", "AirStrikes"}, {"Acid Rain", "AcidRain"}, {"Toast Attack", "ToastAttack"},
-    {"Ritual Storm", "RitualStorm"}, {"Battleship", "Battleship"},
-    {"Chemical Storm", "ChemicalStorm"}, {"Typhoon", "Typhoon"},
-    {"Homing Rays", "HomingRays"}, {"Comet Shower", "CometShower"},
-    {"Stonenado", "Stonenado"}, {"Random", "Random"},
-}
-
-local T = {
-    Bg = Color3.fromRGB(16, 18, 26),
-    Title = Color3.fromRGB(22, 26, 38),
-    Side = Color3.fromRGB(12, 14, 22),
-    Content = Color3.fromRGB(18, 22, 32),
-    Card = Color3.fromRGB(26, 30, 44),
-    Off = Color3.fromRGB(38, 44, 62),
-    On = Color3.fromRGB(55, 120, 220),
-    Accent = Color3.fromRGB(90, 50, 180),
-    Text = Color3.fromRGB(235, 240, 250),
-    Sub = Color3.fromRGB(150, 160, 180),
-    Red = Color3.fromRGB(190, 55, 55),
-    Black = Color3.fromRGB(20, 20, 25),
-    Green = Color3.fromRGB(50, 180, 110),
-    Orange = Color3.fromRGB(255, 160, 80),
-}
+-- tau mini+ (Arceus X)
+-- Tab: 主页 / 传送 / 求救 / 储存
+print("[tau] mini+ start")
 
 pcall(function()
-    local function wipe(root)
-        if not root then return end
-        local o = root:FindFirstChild("DisasterWarning_VIP")
-        if o then o:Destroy() end
-    end
-    wipe(CoreGui)
-    wipe(LocalPlayer:FindFirstChild("PlayerGui"))
-    if typeof(gethui) == "function" then
-        local ok, h = pcall(gethui)
-        if ok and h then wipe(h) end
-    end
+    if not game:IsLoaded() then game.Loaded:Wait() end
 end)
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DisasterWarning_VIP"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999999
-ScreenGui.IgnoreGuiInset = true
-do
-    local mounted = false
-    if typeof(gethui) == "function" then
-        local s, h = pcall(gethui)
-        if s and h then mounted = pcall(function() ScreenGui.Parent = h end) and ScreenGui.Parent ~= nil end
-    end
-    if not mounted then mounted = pcall(function() ScreenGui.Parent = CoreGui end) and ScreenGui.Parent ~= nil end
-    if not mounted then
-        local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
-        if pg then pcall(function() ScreenGui.Parent = pg end) end
-    end
-end
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local SG = game:GetService("StarterGui")
+local UIS = game:GetService("UserInputService")
+local VU = game:GetService("VirtualUser")
+local TS = game:GetService("TeleportService")
+local HS = game:GetService("HttpService")
+local RPS = game:GetService("ReplicatedStorage")
+local PLACE = 2313058949
+local SAVE_FILE = "tau_mini_save.json"
 
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 420, 0, 540)
-Main.Position = UDim2.new(0, 20, 0.06, 0)
-Main.BackgroundColor3 = T.Bg
-Main.BorderSizePixel = 0
-Main.Parent = ScreenGui
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
-local stroke = Instance.new("UIStroke", Main)
-stroke.Color = Color3.fromRGB(50, 70, 120)
-stroke.Thickness = 1
-stroke.Transparency = 0.55
+local C = {
+    Auto = false,
+    OnlyFrag = true,
+    ESP = true,
+    AFK = true,
+    AutoHop = true,
+    Rejoin = true,
+    AutoHelp = true,
+}
 
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 42)
-TitleBar.BackgroundColor3 = T.Title
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = Main
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 14)
-local titleFix = Instance.new("Frame")
-titleFix.Size = UDim2.new(1, 0, 0, 14)
-titleFix.Position = UDim2.new(0, 0, 1, -14)
-titleFix.BackgroundColor3 = T.Title
-titleFix.BorderSizePixel = 0
-titleFix.Parent = TitleBar
+local FragN = {"Blood Moon Fragment", "BloodMoonFragment", "血月碎片", "BloodMoon Fragment"}
+local GlassN = {"Mysterious Sunglasses", "Mysterious Glasses", "Sunglasses", "Mysterious Shades", "神秘眼镜", "墨镜"}
+local ShelN = {"Shelter", "Bunker", "ControlRoom", "Control Room", "避难所", "ShelterEntrance"}
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -90, 1, 0)
-Title.Position = UDim2.new(0, 16, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "灾难警告  ·  VIP"
-Title.TextColor3 = T.Text
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TitleBar
+local kF, kG = {}, {}
+local myF, gotG = 0, false
+local serverFrag = 0
+local NEED_FRAG = 5
+local lastLobbyRead = 0
+local tried = {}
+local isMin = false
+local serverJoinTime = tick()
+local MIN_STAY = 50
+local emptyScanStreak = 0
+local foundThisRound = false
+local sawLootThisRound = false
+local lockNoHop = false
+local rejoining = false
+local pendingHop = false
+local kickHandled = false
+local lastFullScan = 0
+local lastHelpFire = 0
 
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 28, 0, 28)
-MinBtn.Position = UDim2.new(1, -66, 0, 7)
-MinBtn.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
-MinBtn.Text = "–"
-MinBtn.TextColor3 = T.Text
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 18
-MinBtn.Parent = TitleBar
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
-
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-CloseBtn.Position = UDim2.new(1, -32, 0, 7)
-CloseBtn.BackgroundColor3 = T.Red
-CloseBtn.Text = "×"
-CloseBtn.TextColor3 = T.Text
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 16
-CloseBtn.Parent = TitleBar
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
-
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 108, 1, -42)
-Sidebar.Position = UDim2.new(0, 0, 0, 42)
-Sidebar.BackgroundColor3 = T.Side
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = Main
-
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -108, 1, -42)
-Content.Position = UDim2.new(0, 108, 0, 42)
-Content.BackgroundColor3 = T.Content
-Content.BorderSizePixel = 0
-Content.Parent = Main
-
-local function makeTab(name, text, y)
-    local btn = Instance.new("TextButton")
-    btn.Name = name
-    btn.Size = UDim2.new(1, -12, 0, 36)
-    btn.Position = UDim2.new(0, 6, 0, y)
-    btn.BackgroundColor3 = T.Side
-    btn.Text = "  " .. text
-    btn.TextColor3 = T.Sub
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 12
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Parent = Sidebar
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    return btn
-end
-
-local TabFarm  = makeTab("Farm",  "Farm",  10)
-local TabExtra = makeTab("Extra", "Extra", 52)
-local TabTool  = makeTab("Tool",  "Tool",  94)
-local TabSave  = makeTab("Save",  "Save", 136)
-local TabMusic = makeTab("Music", "Music", 178)
-
-local Pages = {}
-local function createPage(name)
-    local page = Instance.new("ScrollingFrame")
-    page.Name = name
-    page.Size = UDim2.new(1, 0, 1, 0)
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel = 0
-    page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 520)
-    page.Visible = false
-    page.Parent = Content
-    Pages[name] = page
-    return page
-end
-
-local function makeSection(parent, title, y)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -24, 0, 20)
-    label.Position = UDim2.new(0, 14, 0, y)
-    label.BackgroundTransparency = 1
-    label.Text = title
-    label.TextColor3 = T.Sub
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 12
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = parent
-    return label
-end
-
-local function makeBtn(parent, text, y, on)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -28, 0, 34)
-    btn.Position = UDim2.new(0, 14, 0, y)
-    btn.BackgroundColor3 = on and T.On or T.Off
-    btn.Text = text
-    btn.TextColor3 = T.Text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.AutoButtonColor = false
-    btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    return btn
-end
-
-local function Notify(msg)
+local function N(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "灾难警告 VIP",
-            Text = tostring(msg),
-            Duration = 3
-        })
+        SG:SetCore("SendNotification", {Title = "tau mini+", Text = tostring(msg), Duration = 2})
     end)
+    print("[tau]", msg)
 end
 
-local PageFarm = createPage("Farm")
-PageFarm.CanvasSize = UDim2.new(0, 0, 0, 480)
-
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -28, 0, 28)
-StatusLabel.Position = UDim2.new(0, 14, 0, 10)
-StatusLabel.BackgroundColor3 = T.Card
-StatusLabel.Text = "  Status: Ready"
-StatusLabel.TextColor3 = T.Text
-StatusLabel.Font = Enum.Font.GothamBold
-StatusLabel.TextSize = 13
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.Parent = PageFarm
-Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 8)
-
-local DisasterLabel = Instance.new("TextLabel")
-DisasterLabel.Size = UDim2.new(1, -28, 0, 20)
-DisasterLabel.Position = UDim2.new(0, 14, 0, 46)
-DisasterLabel.BackgroundTransparency = 1
-DisasterLabel.Text = "当前灾难: Unknown"
-DisasterLabel.TextColor3 = T.Text
-DisasterLabel.Font = Enum.Font.Gotham
-DisasterLabel.TextSize = 12
-DisasterLabel.TextXAlignment = Enum.TextXAlignment.Left
-DisasterLabel.Parent = PageFarm
-
-local DangerLabel = Instance.new("TextLabel")
-DangerLabel.Size = UDim2.new(1, -28, 0, 20)
-DangerLabel.Position = UDim2.new(0, 14, 0, 68)
-DangerLabel.BackgroundTransparency = 1
-DangerLabel.Text = "Danger Alert: 未开启"
-DangerLabel.TextColor3 = T.Sub
-DangerLabel.Font = Enum.Font.Gotham
-DangerLabel.TextSize = 12
-DangerLabel.TextXAlignment = Enum.TextXAlignment.Left
-DangerLabel.Parent = PageFarm
-
-local MapLabel = Instance.new("TextLabel")
-MapLabel.Size = UDim2.new(1, -28, 0, 20)
-MapLabel.Position = UDim2.new(0, 14, 0, 90)
-MapLabel.BackgroundTransparency = 1
-MapLabel.Text = "地图: Unknown"
-MapLabel.TextColor3 = T.Sub
-MapLabel.Font = Enum.Font.Gotham
-MapLabel.TextSize = 12
-MapLabel.TextXAlignment = Enum.TextXAlignment.Left
-MapLabel.Parent = PageFarm
-
-makeSection(PageFarm, "自动", 118)
-local AutoFarmBtn = makeBtn(PageFarm, "★ Auto Farm", 142, false)
-local DangerAutoBtn = makeBtn(PageFarm, "危险时自动进所", 184, false)
-local RejoinDangerBtn = makeBtn(PageFarm, "重进直到危险警报 ON", 226, false)
-
-makeSection(PageFarm, "手动", 272)
-local GetKeyBtn = makeBtn(PageFarm, "拿钥匙 → 开门（只到门）", 296, false)
-local AutoCardBtn = makeBtn(PageFarm, "自动捡卡（仅商场）", 338, false)
-
-local PageExtra = createPage("Extra")
-PageExtra.CanvasSize = UDim2.new(0, 0, 0, 420)
-makeSection(PageExtra, "基础", 10)
-local AFKBtn = makeBtn(PageExtra, "Anti-AFK", 34, false)
-local GodBtn = makeBtn(PageExtra, "God / 锁血", 76, false)
-local ChestESPBtn = makeBtn(PageExtra, "宝箱 ESP", 118, false)
-local CardESPBtn = makeBtn(PageExtra, "卡牌 ESP", 160, false)
-
-makeSection(PageExtra, "移动", 206)
-local SpdBtn = makeBtn(PageExtra, "WalkSpeed", 230, false)
-local SpdLabel = Instance.new("TextLabel")
-SpdLabel.Size = UDim2.new(1, -28, 0, 18)
-SpdLabel.Position = UDim2.new(0, 14, 0, 270)
-SpdLabel.BackgroundTransparency = 1
-SpdLabel.Text = "Speed: 24"
-SpdLabel.TextColor3 = T.Sub
-SpdLabel.Font = Enum.Font.Gotham
-SpdLabel.TextSize = 12
-SpdLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpdLabel.Parent = PageExtra
-
-local SpdDn = Instance.new("TextButton")
-SpdDn.Size = UDim2.new(0, 120, 0, 30)
-SpdDn.Position = UDim2.new(0, 14, 0, 292)
-SpdDn.BackgroundColor3 = T.Off
-SpdDn.Text = "-4"
-SpdDn.TextColor3 = T.Text
-SpdDn.Font = Enum.Font.GothamBold
-SpdDn.TextSize = 13
-SpdDn.AutoButtonColor = false
-SpdDn.Parent = PageExtra
-Instance.new("UICorner", SpdDn).CornerRadius = UDim.new(0, 8)
-
-local SpdUp = Instance.new("TextButton")
-SpdUp.Size = UDim2.new(0, 120, 0, 30)
-SpdUp.Position = UDim2.new(0, 150, 0, 292)
-SpdUp.BackgroundColor3 = T.Off
-SpdUp.Text = "+4"
-SpdUp.TextColor3 = T.Text
-SpdUp.Font = Enum.Font.GothamBold
-SpdUp.TextSize = 13
-SpdUp.AutoButtonColor = false
-SpdUp.Parent = PageExtra
-Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 8)
-
-local JumpBtn = makeBtn(PageExtra, "Jump", 336, false)
-
-local PageTool = createPage("Tool")
-PageTool.CanvasSize = UDim2.new(0, 0, 0, 1000)
-makeSection(PageTool, "Remote", 10)
-local KeyOnlyBtn = makeBtn(PageTool, "只拿钥匙", 34, false)
-local FirstAidBtn = makeBtn(PageTool, "拿急救包", 76, false)
-
-makeSection(PageTool, "积分", 122)
-local PointsBox = Instance.new("TextBox")
-PointsBox.Size = UDim2.new(1, -28, 0, 32)
-PointsBox.Position = UDim2.new(0, 14, 0, 146)
-PointsBox.BackgroundColor3 = T.Card
-PointsBox.Text = "10000"
-PointsBox.PlaceholderText = "输入积分数量"
-PointsBox.TextColor3 = T.Text
-PointsBox.PlaceholderColor3 = T.Sub
-PointsBox.Font = Enum.Font.Gotham
-PointsBox.TextSize = 14
-PointsBox.ClearTextOnFocus = false
-PointsBox.Parent = PageTool
-Instance.new("UICorner", PointsBox).CornerRadius = UDim.new(0, 8)
-local PointsBtn = makeBtn(PageTool, "加积分", 188, false)
-
-makeSection(PageTool, "排队灾难（仅VIP / 3.1才有用）", 234)
-local QueueNote = Instance.new("TextLabel")
-QueueNote.Size = UDim2.new(1, -28, 0, 18)
-QueueNote.Position = UDim2.new(0, 14, 0, 256)
-QueueNote.BackgroundTransparency = 1
-QueueNote.Text = "⚠ 排队功能仅 3.1 有效"
-QueueNote.TextColor3 = T.Orange
-QueueNote.Font = Enum.Font.GothamBold
-QueueNote.TextSize = 12
-QueueNote.TextXAlignment = Enum.TextXAlignment.Left
-QueueNote.Parent = PageTool
-
-local queueY = 278
-for _, data in ipairs(DisasterList) do
-    local displayName, remoteName = data[1], data[2]
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -28, 0, 28)
-    btn.Position = UDim2.new(0, 14, 0, queueY)
-    btn.BackgroundColor3 = T.Off
-    btn.Text = displayName
-    btn.TextColor3 = T.Text
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.AutoButtonColor = false
-    btn.Parent = PageTool
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    btn.MouseButton1Down:Connect(function() btn.BackgroundColor3 = T.Black end)
-    btn.MouseButton1Click:Connect(function()
-        btn.BackgroundColor3 = T.Black
-        local ok = false
-        pcall(function()
-            local d = ReplicatedStorage.VIPServer.Disasters[remoteName]
-            if d then d:FireServer() ok = true end
-        end)
-        pcall(function()
-            local msg = ReplicatedStorage:FindFirstChild("DisasterMessage2")
-            if msg then
-                if msg:IsA("BindableEvent") then msg:Fire("Classic")
-                else pcall(function() msg:FireServer("Classic") end) end
-            end
-        end)
-        pcall(function() ReplicatedStorage.VIPServer.GameStyle.Classic:FireServer() end)
-        btn.BackgroundColor3 = ok and T.On or T.Red
-        Notify(ok and ("已排队: " .. displayName) or "排队失败（需 3.1 / VIP服）")
-        task.delay(0.8, function() if btn and btn.Parent then btn.BackgroundColor3 = T.Off end end)
-    end)
-    queueY = queueY + 32
-end
-PageTool.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
-
-local PageSave = createPage("Save")
-PageSave.CanvasSize = UDim2.new(0, 0, 0, 320)
-makeSection(PageSave, "位置保存", 10)
-local SavePosBtn = makeBtn(PageSave, "保存当前位置", 34, false)
-local LoadPosBtn = makeBtn(PageSave, "传送到已保存位置", 76, false)
-local ClearPosBtn = makeBtn(PageSave, "清除已保存位置", 118, false)
-
-local SaveStatusLabel = Instance.new("TextLabel")
-SaveStatusLabel.Size = UDim2.new(1, -28, 0, 36)
-SaveStatusLabel.Position = UDim2.new(0, 14, 0, 168)
-SaveStatusLabel.BackgroundColor3 = T.Card
-SaveStatusLabel.Text = "  位置: 未保存"
-SaveStatusLabel.TextColor3 = T.Sub
-SaveStatusLabel.Font = Enum.Font.Gotham
-SaveStatusLabel.TextSize = 13
-SaveStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-SaveStatusLabel.Parent = PageSave
-Instance.new("UICorner", SaveStatusLabel).CornerRadius = UDim.new(0, 8)
-
-makeSection(PageSave, "其他", 220)
-local ServerHopBtn = makeBtn(PageSave, "Server Hop（换服）", 244, false)
-
-local PageMusic = createPage("Music")
-PageMusic.CanvasSize = UDim2.new(0, 0, 0, 320)
-makeSection(PageMusic, "游戏音乐", 10)
-local MuteMusicBtn = makeBtn(PageMusic, "静音 / 取消静音", 34, false)
-local StopAllSoundBtn = makeBtn(PageMusic, "停止全部声音", 76, false)
-
-local VolLabel = Instance.new("TextLabel")
-VolLabel.Size = UDim2.new(1, -28, 0, 20)
-VolLabel.Position = UDim2.new(0, 14, 0, 122)
-VolLabel.BackgroundTransparency = 1
-VolLabel.Text = "音量: 50%"
-VolLabel.TextColor3 = T.Sub
-VolLabel.Font = Enum.Font.Gotham
-VolLabel.TextSize = 12
-VolLabel.TextXAlignment = Enum.TextXAlignment.Left
-VolLabel.Parent = PageMusic
-
-local VolDn = Instance.new("TextButton")
-VolDn.Size = UDim2.new(0, 120, 0, 32)
-VolDn.Position = UDim2.new(0, 14, 0, 148)
-VolDn.BackgroundColor3 = T.Off
-VolDn.Text = "音量 -"
-VolDn.TextColor3 = T.Text
-VolDn.Font = Enum.Font.GothamBold
-VolDn.TextSize = 13
-VolDn.AutoButtonColor = false
-VolDn.Parent = PageMusic
-Instance.new("UICorner", VolDn).CornerRadius = UDim.new(0, 8)
-
-local VolUp = Instance.new("TextButton")
-VolUp.Size = UDim2.new(0, 120, 0, 32)
-VolUp.Position = UDim2.new(0, 150, 0, 148)
-VolUp.BackgroundColor3 = T.Off
-VolUp.Text = "音量 +"
-VolUp.TextColor3 = T.Text
-VolUp.Font = Enum.Font.GothamBold
-VolUp.TextSize = 13
-VolUp.AutoButtonColor = false
-VolUp.Parent = PageMusic
-Instance.new("UICorner", VolUp).CornerRadius = UDim.new(0, 8)
-
-local MusicHint = Instance.new("TextLabel")
-MusicHint.Size = UDim2.new(1, -28, 0, 40)
-MusicHint.Position = UDim2.new(0, 14, 0, 196)
-MusicHint.BackgroundTransparency = 1
-MusicHint.Text = "静音会关闭 SoundService 主音量\n停止全部声音会 Stop 所有正在播放的 Sound"
-MusicHint.TextColor3 = T.Sub
-MusicHint.Font = Enum.Font.Gotham
-MusicHint.TextSize = 11
-MusicHint.TextXAlignment = Enum.TextXAlignment.Left
-MusicHint.Parent = PageMusic
-
-Pages["Farm"].Visible = true
-TabFarm.BackgroundColor3 = T.On
-TabFarm.TextColor3 = T.Text
-
-local function switchTab(name)
-    for n, page in pairs(Pages) do page.Visible = (n == name) end
-    for _, tab in pairs({TabFarm, TabExtra, TabTool, TabSave, TabMusic}) do
-        tab.BackgroundColor3 = T.Side
-        tab.TextColor3 = T.Sub
+local function inL(name, list)
+    local n = string.lower(tostring(name or ""))
+    for _, v in ipairs(list) do
+        local lv = string.lower(v)
+        if n == lv or string.find(n, lv, 1, true) then return true end
     end
-    local map = {Farm = TabFarm, Extra = TabExtra, Tool = TabTool, Save = TabSave, Music = TabMusic}
-    if map[name] then
-        map[name].BackgroundColor3 = T.On
-        map[name].TextColor3 = T.Text
-    end
+    return false
 end
 
-TabFarm.MouseButton1Click:Connect(function() switchTab("Farm") end)
-TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
-TabTool.MouseButton1Click:Connect(function() switchTab("Tool") end)
-TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
-TabMusic.MouseButton1Click:Connect(function() switchTab("Music") end)
-
-MinBtn.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    if isMinimized then
-        Main.Size = UDim2.new(0, 180, 0, 42)
-        Sidebar.Visible = false
-        Content.Visible = false
-        MinBtn.Text = "+"
-        Title.Text = "灾难警告 VIP"
-    else
-        Main.Size = UDim2.new(0, 420, 0, 540)
-        Sidebar.Visible = true
-        Content.Visible = true
-        MinBtn.Text = "–"
-        Title.Text = "灾难警告  ·  VIP"
+local function nameLooksFrag(name)
+    local n = string.lower(tostring(name or ""))
+    if inL(name, FragN) then return true end
+    if (string.find(n, "fragment", 1, true) or string.find(n, "碎片", 1, true))
+        and (string.find(n, "blood", 1, true) or string.find(n, "moon", 1, true) or string.find(n, "血月", 1, true)) then
+        return true
     end
-end)
+    return false
+end
 
-local function getHRP()
-    local c = LocalPlayer.Character
+local function isF(o)
+    if not o or not o.Parent then return false end
+    if not nameLooksFrag(o.Name) then return false end
+    if o.Parent and o.Parent ~= workspace and nameLooksFrag(o.Parent.Name) then return false end
+    return true
+end
+
+local function isG(o)
+    if not o or not o.Parent then return false end
+    if not inL(o.Name, GlassN) then return false end
+    if o.Parent and inL(o.Parent.Name, GlassN) then return false end
+    return true
+end
+
+local function HRP()
+    local c = LP.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function getHum()
-    local c = LocalPlayer.Character
-    return c and c:FindFirstChildOfClass("Humanoid")
-end
-
-local function nameIn(obj, list)
-    local n = (obj.Name or ""):lower()
-    for _, v in ipairs(list) do
-        if n:find(v:lower(), 1, true) then return true end
-    end
-    return false
-end
-
-local function isShelterDoor(obj) return nameIn(obj, ShelterDoorNames) end
-local function isChest(obj) return nameIn(obj, ChestNames) end
-local function isCard(obj)
-    if not nameIn(obj, CardNames) then return false end
-    if nameIn(obj, StoreNames) then return false end
-    return true
-end
-local function isStore(obj) return nameIn(obj, StoreNames) end
-
-local function bestPart(obj)
-    if obj:IsA("BasePart") then return obj end
-    return obj:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function isDangerDisaster(name)
-    if not name then return false end
-    local n = tostring(name):lower()
-    for _, d in ipairs(DangerDisasterList) do
-        if n:find(d:lower(), 1, true) then return true end
-    end
-    return false
-end
-
-local function isDustBowl(name)
-    if not name then return false end
-    local n = tostring(name):lower()
-    for _, v in ipairs(DustBowlNames) do
-        if n:find(v:lower(), 1, true) then return true end
-    end
-    return false
-end
-
-local function isBlueMoonMall()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        local n = (obj.Name or ""):lower()
-        if n:find("blue moon mall") or n:find("bluemoonmall") then return true end
-    end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isStore(obj) then return true end
-    end
-    return false
-end
-
-local function isDangerAlertOn()
-    local values = Workspace:FindFirstChild("Values")
-    if not values then return false end
-    local da = values:FindFirstChild("DangerAlert")
-    if not da then return false end
-    local val = da.Value
-    if typeof(val) == "boolean" then return val end
-    if typeof(val) == "number" then return val ~= 0 end
-    if typeof(val) == "string" then
-        local s = val:lower()
-        return s == "true" or s == "on" or s == "1" or s == "yes"
-    end
-    return val and true or false
-end
-
-local function updateDisasterFromValues()
-    local values = Workspace:FindFirstChild("Values")
-    if not values then return end
-    local cd = values:FindFirstChild("CurrentDisaster")
-    if cd then
-        local v = cd.Value
-        if typeof(v) == "string" and v ~= "" then currentDisaster = v
-        elseif v ~= nil then currentDisaster = tostring(v) end
-    end
-    dangerAlerts = isDangerAlertOn()
-    theEndActive = tostring(currentDisaster):lower():find("the end") ~= nil
-end
-
-local function getKey()
-    pcall(function() ReplicatedStorage.Misc.Key:FireServer() end)
-end
-
-local function getFirstAid()
-    pcall(function() ReplicatedStorage.Misc.FirstAid:FireServer() end)
-end
-
-local function addPoints(n)
-    local amount = tonumber(n) or pointsAmount or 10000
-    pcall(function() ReplicatedStorage.Misc.Points:FireServer(amount) end)
-    Notify("已加积分 +" .. tostring(amount))
-end
-
-local function tryInteract(obj, hrp)
-    local part = bestPart(obj)
-    if not part then return false end
-    local offsets = {
-        Vector3.new(0, 3, 0), Vector3.new(0, 2.5, 2), Vector3.new(0, 2.5, -2),
-        Vector3.new(2, 2.5, 0), Vector3.new(-2, 2.5, 0),
-    }
-    local opened = false
-    for _, offset in ipairs(offsets) do
-        pcall(function() hrp.CFrame = CFrame.new(part.Position + offset) end)
-        task.wait(0.1)
-        for _, d in ipairs(obj:GetDescendants()) do
-            if d:IsA("ProximityPrompt") then
-                for i = 1, 12 do
-                    pcall(function() fireproximityprompt(d) end)
-                    if i % 3 == 0 then task.wait(0.03) end
-                end
-                opened = true
-            elseif d:IsA("ClickDetector") then
-                for i = 1, 8 do pcall(function() fireclickdetector(d) end) end
-                opened = true
-            end
-        end
-        if opened then break end
-    end
-    return opened
-end
-
-local function findShelterDoor()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isShelterDoor(obj) then
-            local part = bestPart(obj)
-            if part then return obj, part end
-        end
-    end
-    return nil, nil
-end
-
-local function findFlares()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        local n = (obj.Name or ""):lower()
-        for _, k in ipairs(FlareKeywords) do
-            if n:find(k, 1, true) then
-                local part = bestPart(obj)
-                if part then return obj, part end
-            end
-        end
-    end
-    return nil, nil
-end
-
-local function tryGetCard()
-    local hrp = getHRP()
-    if not hrp then return false end
-    local storePart = nil
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isStore(obj) then
-            storePart = bestPart(obj)
-            if storePart then break end
-        end
-    end
-    if storePart then
-        hrp.CFrame = storePart.CFrame + Vector3.new(0, 4, 0)
-        task.wait(0.25)
-    end
-    local got = false
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isCard(obj) then
-            if tryInteract(obj, hrp) then got = true gotCard = true end
-        end
-    end
-    return got
-end
-
-local function goToShelterDoorOnly()
-    local hrp = getHRP()
-    if not hrp then return false end
-    local doorObj, doorPart = findShelterDoor()
-    if doorPart then
-        hrp.CFrame = doorPart.CFrame + Vector3.new(0, 3, 0)
-        task.wait(0.2)
-        if doorObj then tryInteract(doorObj, hrp) end
-        local insideOffset = doorPart.CFrame.LookVector * -5 + Vector3.new(0, 2, 0)
-        hrp.CFrame = doorPart.CFrame + insideOffset
-        Notify("已到避难所门")
-        return true
-    end
-    Notify("未找到避难所门")
-    return false
-end
-
-local function dustBowlFlow()
-    local hrp = getHRP()
-    if not hrp then return end
-    Notify("沙尘暴！寻找 Flares...")
-    local flObj, flPart = findFlares()
-    if flPart then
-        hrp.CFrame = flPart.CFrame + Vector3.new(0, 3, 0)
-        if flObj then tryInteract(flObj, hrp) end
-        Notify("已到 Flares")
-        task.wait(0.5)
-    else
-        Notify("未找到 Flares")
-    end
-    task.wait(0.3)
-    goToShelterDoorOnly()
-end
-
-local function keyAndEnterShelter()
-    local hrp = getHRP()
-    if not hrp then Notify("没有角色") return end
-    updateDisasterFromValues()
-    if isDustBowl(currentDisaster) then
-        getKey()
-        task.wait(0.3)
-        dustBowlFlow()
-        return
-    end
-    Notify("1. 拿钥匙...")
-    getKey()
-    task.wait(0.35)
-    if isBlueMoonMall() then
-        Notify("2. Blue Moon Mall → 找卡...")
-        tryGetCard()
-        task.wait(0.3)
-    else
-        Notify("2. 非商场，跳过找卡")
-    end
-    Notify("3. 到门并开门...")
-    goToShelterDoorOnly()
-end
-
-local function autoFarmFlow()
-    Notify("★ Auto Farm 启动")
-    keyAndEnterShelter()
-end
-
-pcall(function()
-    LocalPlayer.AncestryChanged:Connect(function()
-        if not LocalPlayer.Parent then
-            lastKickTime = tick()
-            rejoinTeleporting = false
-        end
+local function best(o)
+    if not o then return nil end
+    local ok, res = pcall(function()
+        if o:IsA("BasePart") then return o end
+        local pr = o:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if pr and pr.Parent and pr.Parent:IsA("BasePart") then return pr.Parent end
+        return o:FindFirstChildWhichIsA("BasePart", true)
     end)
+    return ok and res or nil
+end
+
+local function markHasFrag(reason)
+    foundThisRound = true
+    sawLootThisRound = true
+    lockNoHop = true
+    if pendingHop then
+        pendingHop = false
+        N("取消换服: " .. tostring(reason or "有碎片"))
+    end
+end
+
+local function hasFragLock()
+    return lockNoHop or foundThisRound or myF > 0 or gotG
+end
+
+-- ===== UI =====
+pcall(function()
+    local pg = LP:FindFirstChild("PlayerGui")
+    if pg then
+        local old = pg:FindFirstChild("tau_mini")
+        if old then old:Destroy() end
+    end
 end)
 
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "tau_mini"
+Gui.ResetOnSpawn = false
+Gui.DisplayOrder = 999999
+Gui.IgnoreGuiInset = true
+Gui.Enabled = true
 pcall(function()
-    Players.PlayerRemoving:Connect(function(p)
-        if p == LocalPlayer then
-            lastKickTime = tick()
-            rejoinTeleporting = false
-        end
-    end)
+    local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 8)
+    if pg then Gui.Parent = pg end
 end)
-
-pcall(function()
-    TeleportService.TeleportInitFailed:Connect(function(player, result, errorMsg)
-        if player == LocalPlayer then
-            lastKickTime = tick()
-            rejoinTeleporting = false
-            Notify("传送失败，等待服务器重开...")
-        end
-    end)
-end)
-
-local function rejoinUntilDanger()
-    if not Settings.RejoinUntilDanger then
-        rejoinTeleporting = false
-        return
-    end
-
-    if isDangerAlertOn() then
-        Settings.RejoinUntilDanger = false
-        rejoinTeleporting = false
-        RejoinDangerBtn.Text = "重进直到危险警报 ON"
-        RejoinDangerBtn.BackgroundColor3 = T.Off
-        StatusLabel.Text = "  Status: Danger Alert 已开，停止重进"
-        Notify("Danger Alert 已开，停止重进")
-        return
-    end
-
-    if rejoinTeleporting then
-        StatusLabel.Text = "  Status: 正在重进，请等服务器..."
-        return
-    end
-
-    local now = tick()
-    if lastKickTime <= 0 then
-        lastKickTime = now
-    end
-
-    local waited = now - lastKickTime
-    if waited < REJOIN_AFTER_KICK_WAIT then
-        local left = math.ceil(REJOIN_AFTER_KICK_WAIT - waited)
-        RejoinDangerBtn.Text = "等待服务器 " .. left .. " 秒..."
-        StatusLabel.Text = "  Status: 服务器未完全重开，还要等 " .. left .. " 秒"
-        return
-    end
-
-    rejoinTeleporting = true
-    StatusLabel.Text = "  Status: 服务器应已重开，正在重进..."
-    Notify("尝试重进服务器...")
-
-    task.delay(1.5, function()
-        if not Settings.RejoinUntilDanger then
-            rejoinTeleporting = false
-            return
-        end
-        if isDangerAlertOn() then
-            Settings.RejoinUntilDanger = false
-            rejoinTeleporting = false
-            RejoinDangerBtn.Text = "重进直到危险警报 ON"
-            RejoinDangerBtn.BackgroundColor3 = T.Off
-            Notify("Danger Alert 已开，取消重进")
-            return
-        end
-
-        pcall(function()
-            TeleportService:Teleport(PLACE_ID, LocalPlayer)
-        end)
-
-        task.delay(5, function()
-            rejoinTeleporting = false
-            if lastKickTime < now then
-                lastKickTime = tick()
-            end
-        end)
-    end)
-end
-
-local function setMusicMuted(muted)
-    Settings.MusicMuted = muted
+if not Gui.Parent then
     pcall(function()
-        SoundService.Volume = muted and 0 or Settings.MusicVolume
+        if typeof(gethui) == "function" then Gui.Parent = gethui() end
     end)
-    MuteMusicBtn.Text = muted and "取消静音" or "静音"
-    MuteMusicBtn.BackgroundColor3 = muted and T.On or T.Off
+end
+if not Gui.Parent then
+    pcall(function() Gui.Parent = game:GetService("CoreGui") end)
+end
+if not Gui.Parent then
+    N("UI挂载失败")
+    return
 end
 
-local function stopAllSounds()
-    local count = 0
-    for _, s in ipairs(workspace:GetDescendants()) do
-        if s:IsA("Sound") and s.IsPlaying then
-            pcall(function() s:Stop() end)
-            count = count + 1
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 280, 0, 400)
+Main.Position = UDim2.new(0, 12, 0.22, 0)
+Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Parent = Gui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local TB = Instance.new("Frame")
+TB.Size = UDim2.new(1, 0, 0, 30)
+TB.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+TB.BorderSizePixel = 0
+TB.Parent = Main
+Instance.new("UICorner", TB).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -56, 1, 0)
+Title.Position = UDim2.new(0, 8, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "tau mini+"
+Title.TextColor3 = Color3.fromRGB(240, 240, 245)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TB
+
+local MinB = Instance.new("TextButton")
+MinB.Size = UDim2.new(0, 22, 0, 22)
+MinB.Position = UDim2.new(1, -50, 0, 4)
+MinB.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+MinB.Text = "-"
+MinB.TextColor3 = Color3.new(1, 1, 1)
+MinB.Font = Enum.Font.GothamBold
+MinB.TextSize = 14
+MinB.Parent = TB
+Instance.new("UICorner", MinB).CornerRadius = UDim.new(0, 5)
+
+local ClB = Instance.new("TextButton")
+ClB.Size = UDim2.new(0, 22, 0, 22)
+ClB.Position = UDim2.new(1, -26, 0, 4)
+ClB.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+ClB.Text = "x"
+ClB.TextColor3 = Color3.new(1, 1, 1)
+ClB.Font = Enum.Font.GothamBold
+ClB.TextSize = 14
+ClB.Parent = TB
+Instance.new("UICorner", ClB).CornerRadius = UDim.new(0, 5)
+
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -12, 0, 26)
+TabBar.Position = UDim2.new(0, 6, 0, 34)
+TabBar.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 6)
+local tabLay = Instance.new("UIListLayout")
+tabLay.FillDirection = Enum.FillDirection.Horizontal
+tabLay.Padding = UDim.new(0, 3)
+tabLay.Parent = TabBar
+
+local function mkTab(name)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 62, 1, -4)
+    b.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    b.Text = name
+    b.TextColor3 = Color3.fromRGB(160, 160, 175)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.Parent = TabBar
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    return b
+end
+
+local T1 = mkTab("主页")
+local T2 = mkTab("传送")
+local T3 = mkTab("求救")
+local T4 = mkTab("储存")
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -12, 1, -68)
+Content.Position = UDim2.new(0, 6, 0, 64)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Pages = {}
+local function mkPage(name)
+    local p = Instance.new("Frame")
+    p.Name = name
+    p.Size = UDim2.new(1, 0, 1, 0)
+    p.BackgroundTransparency = 1
+    p.Visible = false
+    p.Parent = Content
+    Pages[name] = p
+    return p
+end
+
+local function mkL(par, y, text, col)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 16)
+    l.Position = UDim2.new(0, 0, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = col or Color3.fromRGB(180, 180, 195)
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 11
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Parent = par
+    return l
+end
+
+local function mkTog(par, y, text, on)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 22)
+    row.Position = UDim2.new(0, 0, 0, y)
+    row.BackgroundTransparency = 1
+    row.Parent = par
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(1, -44, 1, 0)
+    lb.BackgroundTransparency = 1
+    lb.Text = text
+    lb.TextColor3 = Color3.fromRGB(220, 220, 230)
+    lb.Font = Enum.Font.Gotham
+    lb.TextSize = 11
+    lb.TextXAlignment = Enum.TextXAlignment.Left
+    lb.Parent = row
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 38, 0, 16)
+    btn.Position = UDim2.new(1, -38, 0.5, -8)
+    btn.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
+    btn.Text = ""
+    btn.Parent = row
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    local kn = Instance.new("Frame")
+    kn.Size = UDim2.new(0, 12, 0, 12)
+    kn.Position = on and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+    kn.BackgroundColor3 = Color3.new(1, 1, 1)
+    kn.Parent = btn
+    Instance.new("UICorner", kn).CornerRadius = UDim.new(1, 0)
+    return btn, kn
+end
+
+local function setTog(btn, kn, on)
+    if not btn or not kn then return end
+    btn.BackgroundColor3 = on and Color3.fromRGB(220, 60, 80) or Color3.fromRGB(55, 55, 65)
+    kn.Position = on and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+end
+
+local function mkBtn(par, y, text, col)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 24)
+    b.Position = UDim2.new(0, 0, 0, y)
+    b.BackgroundColor3 = col or Color3.fromRGB(45, 45, 58)
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.Parent = par
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    return b
+end
+
+-- 主页
+local P1 = mkPage("主页")
+local StatusL = mkL(P1, 0, "状态: 关闭", Color3.fromRGB(255, 100, 100))
+local FragL = mkL(P1, 18, "碎片: 地图0 | 本局0 | 大厅0/5")
+local GlassL = mkL(P1, 34, "眼镜: 无")
+local TartL = mkL(P1, 50, "Tartarus: 大厅检测中...", Color3.fromRGB(255, 160, 100))
+local HopL = mkL(P1, 66, "换服: 待命", Color3.fromRGB(140, 200, 255))
+local Auto_tr, Auto_th = mkTog(P1, 88, "Auto 捡取", false)
+local Only_tr, Only_th = mkTog(P1, 112, "只捡碎片(关=也捡眼镜)", true)
+local ESP_tr, ESP_th = mkTog(P1, 136, "ESP", true)
+local Hop_tr, Hop_th = mkTog(P1, 160, "空图自动换服", true)
+local AFK_tr, AFK_th = mkTog(P1, 184, "Anti-AFK", true)
+local Rej_tr, Rej_th = mkTog(P1, 208, "断线重进(有碎片会锁)", true)
+local ShelB = mkBtn(P1, 236, "传送避难所", Color3.fromRGB(45, 45, 58))
+mkL(P1, 266, "有碎片 → 禁止自动重进", Color3.fromRGB(140, 140, 155))
+mkL(P1, 282, "防277: 断线检测+重进 (有碎片不重进)", Color3.fromRGB(140, 140, 155))
+
+
+-- 传送
+local P2 = mkPage("传送")
+mkL(P2, 0, "玩家 (点击传送)", Color3.fromRGB(200, 180, 100))
+local PlrF = Instance.new("ScrollingFrame")
+PlrF.Size = UDim2.new(1, 0, 0, 220)
+PlrF.Position = UDim2.new(0, 0, 0, 20)
+PlrF.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+PlrF.BorderSizePixel = 0
+PlrF.ScrollBarThickness = 3
+PlrF.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlrF.Parent = P2
+Instance.new("UICorner", PlrF).CornerRadius = UDim.new(0, 6)
+Instance.new("UIListLayout", PlrF).Padding = UDim.new(0, 2)
+local RefPlrB = mkBtn(P2, 248, "刷新玩家列表", Color3.fromRGB(45, 45, 58))
+
+-- 求救
+local P3 = mkPage("求救")
+mkL(P3, 0, "=== CallForHelp ===", Color3.fromRGB(255, 160, 100))
+local Help_tr, Help_th = mkTog(P3, 24, "自动求救", true)
+local HelpNowB = mkBtn(P3, 54, "立即 CallForHelp", Color3.fromRGB(90, 50, 70))
+local HelpL = mkL(P3, 88, "求救: 待命", Color3.fromRGB(140, 200, 255))
+mkL(P3, 110, "仅: CallForHelp:FireServer()", Color3.fromRGB(140, 140, 155))
+mkL(P3, 128, "与 Cobalt 相同，无其它逻辑", Color3.fromRGB(120, 120, 140))
+
+-- 储存
+local P4 = mkPage("储存")
+mkL(P4, 0, "保存 / 读取设置", Color3.fromRGB(140, 200, 255))
+local SaveB = mkBtn(P4, 28, "保存设置", Color3.fromRGB(50, 100, 140))
+local LoadB = mkBtn(P4, 60, "读取储存", Color3.fromRGB(45, 70, 100))
+local SaveL = mkL(P4, 96, "储存: 未操作")
+mkL(P4, 120, "文件: tau_mini_save.json", Color3.fromRGB(140, 140, 155))
+mkL(P4, 138, "需执行器 writefile / readfile", Color3.fromRGB(140, 140, 155))
+
+local function swTab(name)
+    for k, p in pairs(Pages) do
+        p.Visible = (k == name)
+    end
+    local map = {["主页"] = T1, ["传送"] = T2, ["求救"] = T3, ["储存"] = T4}
+    for _, tb in pairs({T1, T2, T3, T4}) do
+        tb.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        tb.TextColor3 = Color3.fromRGB(160, 160, 175)
+    end
+    if map[name] then
+        map[name].BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        map[name].TextColor3 = Color3.new(1, 1, 1)
+    end
+    if name == "传送" then
+        pcall(function()
+            if refPlrList then refPlrList() end
+        end)
+    end
+end
+
+T1.MouseButton1Click:Connect(function() swTab("主页") end)
+T2.MouseButton1Click:Connect(function() swTab("传送") end)
+T3.MouseButton1Click:Connect(function() swTab("求救") end)
+T4.MouseButton1Click:Connect(function() swTab("储存") end)
+swTab("主页")
+
+do
+    local drag, d0, p0 = false, nil, nil
+    TB.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = true
+            d0 = i.Position
+            p0 = Main.Position
         end
-    end
-    for _, s in ipairs(SoundService:GetDescendants()) do
-        if s:IsA("Sound") and s.IsPlaying then
-            pcall(function() s:Stop() end)
-            count = count + 1
+    end)
+    TB.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = false
         end
+    end)
+    UIS.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - d0
+            Main.Position = UDim2.new(p0.X.Scale, p0.X.Offset + d.X, p0.Y.Scale, p0.Y.Offset + d.Y)
+        end
+    end)
+end
+
+MinB.MouseButton1Click:Connect(function()
+    isMin = not isMin
+    TabBar.Visible = not isMin
+    Content.Visible = not isMin
+    Main.Size = isMin and UDim2.new(0, 140, 0, 30) or UDim2.new(0, 280, 0, 400)
+    MinB.Text = isMin and "+" or "-"
+end)
+ClB.MouseButton1Click:Connect(function()
+    Gui:Destroy()
+end)
+
+local function applyToggles()
+    setTog(Auto_tr, Auto_th, C.Auto)
+    setTog(Only_tr, Only_th, C.OnlyFrag)
+    setTog(ESP_tr, ESP_th, C.ESP)
+    setTog(Hop_tr, Hop_th, C.AutoHop)
+    setTog(AFK_tr, AFK_th, C.AFK)
+    setTog(Rej_tr, Rej_th, C.Rejoin)
+    setTog(Help_tr, Help_th, C.AutoHelp)
+    StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
+    StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+end
+
+Auto_tr.MouseButton1Click:Connect(function()
+    C.Auto = not C.Auto
+    setTog(Auto_tr, Auto_th, C.Auto)
+    StatusL.Text = C.Auto and "状态: Auto ON" or "状态: 关闭"
+    StatusL.TextColor3 = C.Auto and Color3.fromRGB(100, 220, 140) or Color3.fromRGB(255, 100, 100)
+    N(C.Auto and "Auto ON" or "Auto OFF")
+end)
+Only_tr.MouseButton1Click:Connect(function()
+    C.OnlyFrag = not C.OnlyFrag
+    setTog(Only_tr, Only_th, C.OnlyFrag)
+end)
+ESP_tr.MouseButton1Click:Connect(function()
+    C.ESP = not C.ESP
+    setTog(ESP_tr, ESP_th, C.ESP)
+end)
+Hop_tr.MouseButton1Click:Connect(function()
+    C.AutoHop = not C.AutoHop
+    setTog(Hop_tr, Hop_th, C.AutoHop)
+end)
+AFK_tr.MouseButton1Click:Connect(function()
+    C.AFK = not C.AFK
+    setTog(AFK_tr, AFK_th, C.AFK)
+end)
+Rej_tr.MouseButton1Click:Connect(function()
+    C.Rejoin = not C.Rejoin
+    setTog(Rej_tr, Rej_th, C.Rejoin)
+end)
+Help_tr.MouseButton1Click:Connect(function()
+    C.AutoHelp = not C.AutoHelp
+    setTog(Help_tr, Help_th, C.AutoHelp)
+end)
+
+-- 存档
+local function saveConfig()
+    local ok, err = pcall(function()
+        if typeof(writefile) ~= "function" then error("无 writefile") end
+        writefile(SAVE_FILE, HS:JSONEncode({C = C}))
+    end)
+    if ok then
+        SaveL.Text = "储存: 已保存"
+        SaveL.TextColor3 = Color3.fromRGB(100, 220, 140)
+        N("已保存")
+    else
+        SaveL.Text = "储存失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 120, 100)
+        N("保存失败: " .. tostring(err))
     end
-    Notify("已停止 " .. count .. " 个声音")
 end
 
-local function applyVolume()
-    if not Settings.MusicMuted then
-        pcall(function() SoundService.Volume = Settings.MusicVolume end)
+local function loadConfig()
+    local ok, err = pcall(function()
+        if typeof(readfile) ~= "function" then error("无 readfile") end
+        if typeof(isfile) == "function" and not isfile(SAVE_FILE) then error("无存档") end
+        local data = HS:JSONDecode(readfile(SAVE_FILE))
+        if typeof(data.C) == "table" then
+            for k, v in pairs(data.C) do
+                if C[k] ~= nil then C[k] = v end
+            end
+        end
+    end)
+    if ok then
+        applyToggles()
+        SaveL.Text = "储存: 已读取"
+        SaveL.TextColor3 = Color3.fromRGB(100, 200, 255)
+        N("已读取")
+    else
+        SaveL.Text = "无存档/失败"
+        SaveL.TextColor3 = Color3.fromRGB(255, 160, 100)
     end
-    VolLabel.Text = "音量: " .. math.floor(Settings.MusicVolume * 100) .. "%"
+end
+SaveB.MouseButton1Click:Connect(saveConfig)
+LoadB.MouseButton1Click:Connect(loadConfig)
+
+-- 传送玩家
+local function toPlr(pl)
+    if not pl or pl == LP then return end
+    local c = pl.Character
+    local th = c and c:FindFirstChild("HumanoidRootPart")
+    local h = HRP()
+    if not h then
+        N("无角色")
+        return
+    end
+    if not th then
+        N(pl.Name .. " 无角色")
+        return
+    end
+    pcall(function()
+        h.CFrame = th.CFrame + Vector3.new(0, 3, 0)
+    end)
+    N("已传到 " .. pl.Name)
 end
 
-local chestEspFolder = Instance.new("Folder", ScreenGui)
-chestEspFolder.Name = "ChestESP"
-local cardEspFolder = Instance.new("Folder", ScreenGui)
-cardEspFolder.Name = "CardESP"
+function refPlrList()
+    for _, ch in ipairs(PlrF:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    local y = 0
+    local list = {}
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LP then table.insert(list, pl) end
+    end
+    table.sort(list, function(a, b)
+        return a.Name:lower() < b.Name:lower()
+    end)
+    for _, pl in ipairs(list) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 22)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+        b.Text = "  " .. pl.Name
+        b.TextColor3 = Color3.fromRGB(220, 220, 230)
+        b.Font = Enum.Font.Gotham
+        b.TextSize = 11
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Parent = PlrF
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        local target = pl
+        b.MouseButton1Click:Connect(function()
+            toPlr(target)
+        end)
+        y = y + 24
+    end
+    PlrF.CanvasSize = UDim2.new(0, 0, 0, math.max(y, 1))
+end
+RefPlrB.MouseButton1Click:Connect(function()
+    pcall(refPlrList)
+end)
 
-local function clearFolder(f)
-    for _, c in ipairs(f:GetChildren()) do c:Destroy() end
+-- CallForHelp
+-- 仅此一条，与 Cobalt 相同
+local function fireCallForHelp(why)
+    if not C.AutoHelp and why ~= "手动" then return end
+    if tick() - lastHelpFire < 1.5 then return end
+    lastHelpFire = tick()
+    pcall(function()
+        local Event = game:GetService("ReplicatedStorage").Assets.Signals.CallForHelp
+        Event:FireServer()
+        N("CallForHelp")
+        if HelpL then
+            HelpL.Text = "求救: 已 FireServer"
+            HelpL.TextColor3 = Color3.fromRGB(100, 255, 140)
+        end
+    end)
 end
 
-local function addESP(folder, obj, col, lab)
-    local part = bestPart(obj)
+local function tryClickHelpGui()
+    fireCallForHelp("auto")
+end
+
+-- 自动求救：定时只 FireServer（不点 UI、不钩其它 Remote）
+
+HelpNowB.MouseButton1Click:Connect(function()
+    local old = C.AutoHelp
+    C.AutoHelp = true
+    fireCallForHelp("手动")
+    C.AutoHelp = old
+end)
+
+-- 核心逻辑
+local espFolder = Instance.new("Folder")
+espFolder.Name = "tau_esp"
+espFolder.Parent = Gui
+
+local function clrESP()
+    for _, c in ipairs(espFolder:GetChildren()) do
+        c:Destroy()
+    end
+end
+
+local function addESP(o, col)
+    local part = best(o)
     if not part then return end
     pcall(function()
         local hl = Instance.new("Highlight")
-        hl.Adornee = obj:IsA("Model") and obj or part
+        hl.Adornee = o:IsA("Model") and o or part
         hl.FillColor = col
         hl.OutlineColor = col
-        hl.FillTransparency = 0.5
-        hl.Parent = folder
-        local bb = Instance.new("BillboardGui")
-        bb.Size = UDim2.new(0, 60, 0, 16)
-        bb.AlwaysOnTop = true
-        bb.StudsOffset = Vector3.new(0, 2, 0)
-        bb.Adornee = part
-        bb.Parent = folder
-        local tl = Instance.new("TextLabel")
-        tl.Size = UDim2.new(1, 0, 1, 0)
-        tl.BackgroundTransparency = 1
-        tl.Text = lab
-        tl.TextColor3 = col
-        tl.Font = Enum.Font.GothamBold
-        tl.TextSize = 11
-        tl.Parent = bb
+        hl.FillTransparency = 0.55
+        hl.OutlineTransparency = 0.2
+        hl.Parent = espFolder
     end)
 end
 
-local function refreshChestESP()
-    clearFolder(chestEspFolder)
-    if not Settings.ChestESP then return end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isChest(obj) then addESP(chestEspFolder, obj, Color3.fromRGB(255, 200, 60), "Chest") end
+local function countKnown()
+    local fc, gc = 0, 0
+    for o in pairs(kF) do
+        if o and o.Parent then fc = fc + 1 else kF[o] = nil end
     end
+    for o in pairs(kG) do
+        if o and o.Parent then gc = gc + 1 else kG[o] = nil end
+    end
+    return fc, gc
 end
 
-local function refreshCardESP()
-    clearFolder(cardEspFolder)
-    if not Settings.CardESP then return end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isCard(obj) then addESP(cardEspFolder, obj, Color3.fromRGB(180, 80, 255), "Card") end
-    end
-end
 
-local function applySpdJump()
-    local h = getHum()
-    if not h then return end
+-- 大厅 Tartarus 预测: Workspace.Lobby.TartarusForecast.Screen...
+local function readLobbyFrag()
     pcall(function()
-        if Settings.SpdOn then h.WalkSpeed = Settings.Spd else h.WalkSpeed = 16 end
-        if Settings.JumpOn then
-            if h.UseJumpPower then h.JumpPower = Settings.Jump
-            else h.JumpHeight = math.clamp(Settings.Jump / 7.2, 7, 50) end
-        else
-            if h.UseJumpPower then h.JumpPower = 50 else h.JumpHeight = 7.2 end
-        end
-    end)
-end
-
-local godConn
-local function offGod()
-    if godConn then godConn:Disconnect() godConn = nil end
-end
-local function onGod()
-    offGod()
-    godConn = RunService.Heartbeat:Connect(function()
-        if not Settings.God then return end
-        local h = getHum()
-        if h then pcall(function() if h.Health < h.MaxHealth then h.Health = h.MaxHealth end end) end
-    end)
-end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    applySpdJump()
-    if Settings.God then onGod() end
-end)
-
-task.spawn(function()
-    while ScreenGui and ScreenGui.Parent do
-        local now = tick()
-        updateDisasterFromValues()
-        local onMall = isBlueMoonMall()
-
-        if not Settings.RejoinUntilDanger then
-            StatusLabel.Text = "  Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or "Ready")
-        end
-        DisasterLabel.Text = "当前灾难: " .. tostring(currentDisaster)
-        MapLabel.Text = "地图: " .. (onMall and "Blue Moon Mall ✓" or "非商场")
-        MapLabel.TextColor3 = onMall and T.Green or T.Sub
-
-        if dangerAlerts then
-            DangerLabel.Text = "Danger Alert: 已启动 ⚠"
-            DangerLabel.TextColor3 = Color3.fromRGB(255, 100, 80)
-        else
-            DangerLabel.Text = "Danger Alert: 未开启"
-            DangerLabel.TextColor3 = T.Sub
-        end
-
-        if Settings.RejoinUntilDanger then rejoinUntilDanger() end
-        if Settings.AutoFarm and (now - lastAutoFarm) >= AUTO_FARM_INTERVAL then
-            lastAutoFarm = now
-            autoFarmFlow()
-        end
-        if Settings.DangerAuto and (now - lastDangerAuto) >= DANGER_AUTO_CD then
-            if dangerAlerts or theEndActive or isDangerDisaster(currentDisaster) then
-                lastDangerAuto = now
-                keyAndEnterShelter()
+        local bestN = nil
+        local lobby = workspace:FindFirstChild("Lobby")
+        local forecast = lobby and (lobby:FindFirstChild("TartarusForecast") or lobby:FindFirstChild("TrartarusForecast"))
+        local screen = forecast and (forecast:FindFirstChild("Screen") or forecast:FindFirstChild("屏幕"))
+        local function takeText(obj)
+            if not obj then return end
+            local function applyTx(tx)
+                tx = tostring(tx or "")
+                local low = string.lower(tx)
+                -- 优先: "2/5" 进度
+                local a, b = string.match(tx, "(%d+)%s*/%s*(%d+)")
+                if a and b and tonumber(b) == NEED_FRAG then
+                    bestN = tonumber(a)
+                    return
+                end
+                -- "3 ... remain" = 还剩 3 块 → 进度 5-3=2
+                if string.find(low, "remain", 1, true) or string.find(low, "remaining", 1, true)
+                    or string.find(tx, "剩余", 1, true) or string.find(tx, "还差", 1, true) then
+                    local n = tonumber(string.match(tx, "(%d+)"))
+                    if n and n >= 0 and n <= NEED_FRAG then
+                        bestN = NEED_FRAG - n
+                        return
+                    end
+                end
+                -- 不要用裸数字（易把 remain 的 3 当成 3/5）
+            end
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                applyTx(obj.Text)
+            elseif obj:IsA("StringValue") then
+                applyTx(obj.Value)
+            elseif obj:IsA("IntValue") or obj:IsA("NumberValue") then
+                local n = tonumber(obj.Value)
+                if n and n >= 0 and n <= NEED_FRAG then bestN = n end
             end
         end
-        if Settings.AutoCard and onMall and (now - lastCardCheck) >= CARD_INTERVAL then
-            lastCardCheck = now
-            tryGetCard()
+        if screen then
+            local node = screen:FindFirstChild("TartarusForecast")
+                or screen:FindFirstChild("TrartarusForecast")
+                or screen:FindFirstChildWhichIsA("TextLabel")
+            takeText(node)
+            for _, c in ipairs(screen:GetDescendants()) do
+                takeText(c)
+            end
         end
-        if Settings.SpdOn or Settings.JumpOn then applySpdJump() end
-        task.wait(0.35)
-    end
-end)
-
-task.spawn(function()
-    while ScreenGui and ScreenGui.Parent do
-        if Settings.ChestESP then refreshChestESP() end
-        if Settings.CardESP then refreshCardESP() end
-        task.wait(2.5)
-    end
-end)
-
-task.spawn(function()
-    while ScreenGui and ScreenGui.Parent do
-        if Settings.AntiAFK then
-            local hum = getHum()
-            if hum then hum.Jump = true end
+        if bestN ~= nil then
+            serverFrag = bestN
         end
-        task.wait(45)
-    end
-end)
-
-AutoFarmBtn.MouseButton1Click:Connect(function()
-    Settings.AutoFarm = not Settings.AutoFarm
-    AutoFarmBtn.BackgroundColor3 = Settings.AutoFarm and T.Accent or T.Off
-    AutoFarmBtn.Text = Settings.AutoFarm and "★ Auto Farm ON" or "★ Auto Farm"
-    if Settings.AutoFarm then autoFarmFlow() end
-end)
-
-DangerAutoBtn.MouseButton1Click:Connect(function()
-    Settings.DangerAuto = not Settings.DangerAuto
-    DangerAutoBtn.BackgroundColor3 = Settings.DangerAuto and T.On or T.Off
-    DangerAutoBtn.Text = Settings.DangerAuto and "危险时自动进所 ON" or "危险时自动进所"
-end)
-
-RejoinDangerBtn.MouseButton1Click:Connect(function()
-    Settings.RejoinUntilDanger = not Settings.RejoinUntilDanger
-    if Settings.RejoinUntilDanger then
-        if isDangerAlertOn() then
-            Settings.RejoinUntilDanger = false
-            rejoinTeleporting = false
-            Notify("Danger Alert 已经是开的")
+    end)
+    -- 本局 myF 可能重复计数，大厅以屏幕为准；仅当大厅读到更大才更新
+    if TartL then
+        if serverFrag >= NEED_FRAG then
+            TartL.Text = "Tartarus: 已解锁 (5/5)"
+            TartL.TextColor3 = Color3.fromRGB(100, 255, 140)
         else
-            rejoinTeleporting = false
-            lastKickTime = tick()
-            RejoinDangerBtn.Text = "等待服务器 " .. REJOIN_AFTER_KICK_WAIT .. " 秒..."
-            RejoinDangerBtn.BackgroundColor3 = T.On
-            Notify("危险警报未开：等服务器稳定后再重进（" .. REJOIN_AFTER_KICK_WAIT .. "秒）")
+            TartL.Text = string.format("Tartarus: 大厅 %d/%d", serverFrag, NEED_FRAG)
+            TartL.TextColor3 = Color3.fromRGB(255, 160, 100)
         end
+    end
+end
+
+local function fullScan()
+    for o in pairs(kF) do
+        if not o or not o.Parent then kF[o] = nil end
+    end
+    for o in pairs(kG) do
+        if not o or not o.Parent then kG[o] = nil end
+    end
+    pcall(function()
+        for _, o in ipairs(workspace:GetDescendants()) do
+            if isF(o) then
+                kF[o] = true
+            elseif isG(o) then
+                kG[o] = true
+            end
+        end
+    end)
+    lastFullScan = tick()
+    local fc, gc = countKnown()
+    if fc > 0 then markHasFrag("scan") end
+    if gc > 0 then sawLootThisRound = true end
+    return fc, gc
+end
+
+local function scan()
+    if tick() - lastFullScan >= 3 then
+        return fullScan()
+    end
+    return countKnown()
+end
+
+local function stillHasLoot()
+    local fc, gc = countKnown()
+    if fc > 0 then return true end
+    if not C.OnlyFrag and gc > 0 then return true end
+    return false
+end
+
+local function pickup(o, typ)
+    pcall(function()
+        if not o or not o.Parent then return end
+        local key = tostring(o)
+        if tried[key] and tick() - tried[key] < 0.8 then return end
+        tried[key] = tick()
+        if typ == "Fragment" or typ == "Glasses" then
+            markHasFrag("pickup")
+        end
+        local h = HRP()
+        if not h then return end
+        local part = best(o)
+        if not part then return end
+        pcall(function()
+            h.CFrame = part.CFrame + Vector3.new(0, 2, 0)
+        end)
+        local pr = o:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if pr and typeof(fireproximityprompt) == "function" then
+            pcall(fireproximityprompt, pr)
+        end
+        if typeof(firetouchinterest) == "function" then
+            pcall(function()
+                firetouchinterest(h, part, 0)
+                firetouchinterest(h, part, 1)
+            end)
+        end
+        task.delay(0.4, function()
+            if not o or not o.Parent then
+                if typ == "Fragment" then
+                    myF = myF + 1
+                    serverFrag = math.min(NEED_FRAG, math.max(serverFrag, myF))
+                    N("碎片 +" .. tostring(myF))
+                    pcall(readLobbyFrag)
+                elseif typ == "Glasses" then
+                    gotG = true
+                    N("眼镜已捡")
+                end
+            end
+        end)
+    end)
+end
+
+local function toShel()
+    local h = HRP()
+    if not h then
+        N("无角色")
+        return
+    end
+    for _, o in ipairs(workspace:GetDescendants()) do
+        if inL(o.Name, ShelN) then
+            local p = best(o)
+            if p then
+                pcall(function()
+                    h.CFrame = p.CFrame + Vector3.new(0, 5, 0)
+                end)
+                N("已到避难所")
+                return
+            end
+        end
+    end
+    N("没找到避难所")
+end
+ShelB.MouseButton1Click:Connect(toShel)
+
+local function queueScript()
+    pcall(function()
+        if typeof(queue_on_teleport) == "function" then
+            queue_on_teleport([[task.wait(2) print("[tau] rejoin queue")]])
+        end
+    end)
+end
+
+local function doTeleport()
+    local pid = game.PlaceId
+    pcall(function()
+        TS:Teleport(pid, LP)
+    end)
+    task.wait(0.2)
+    pcall(function()
+        TS:Teleport(PLACE, LP)
+    end)
+end
+
+local function rejoin(reason)
+    if rejoining then return end
+    if hasFragLock() then
+        pendingHop = false
+        N("有碎片 → 不重进")
+        return
+    end
+    if not C.Rejoin and not pendingHop then return end
+    rejoining = true
+    N("重进: " .. tostring(reason or "?"))
+    queueScript()
+    if not kickHandled then
+        task.wait(2)
+        kickHandled = true
     else
-        rejoinTeleporting = false
-        RejoinDangerBtn.Text = "重进直到危险警报 ON"
-        RejoinDangerBtn.BackgroundColor3 = T.Off
-        Notify("已停止重进")
+        task.wait(pendingHop and 1.5 or 0.5)
+    end
+    doTeleport()
+    task.delay(10, function()
+        rejoining = false
+        pendingHop = false
+        kickHandled = false
+    end)
+end
+
+local function hop()
+    if pendingHop or rejoining then return end
+    if hasFragLock() then
+        N("有碎片 → 禁止换服")
+        pendingHop = false
+        return
+    end
+    pendingHop = true
+    kickHandled = false
+    N("空图换服中...")
+    queueScript()
+    task.spawn(function()
+        pcall(function()
+            if LP and typeof(LP.Kick) == "function" then
+                LP:Kick("tau hop")
+            end
+        end)
+        task.wait(2.5)
+        kickHandled = true
+        task.wait(1)
+        if pendingHop then
+            if hasFragLock() then
+                pendingHop = false
+                N("换服前发现碎片 → 中止")
+                return
+            end
+            rejoining = false
+            rejoin("AutoHop")
+        end
+    end)
+end
+
+local function afk()
+    -- 防挂机 / 降低 277 空闲踢
+    pcall(function()
+        if VU and typeof(VU.CaptureController) == "function" then
+            VU:CaptureController()
+        end
+        if VU and typeof(VU.ClickButton2) == "function" then
+            VU:ClickButton2(Vector2.new())
+        end
+    end)
+    pcall(function()
+        local h = HRP()
+        if h then
+            h.CFrame = h.CFrame * CFrame.new(0.05, 0, 0)
+            task.wait(0.03)
+            h.CFrame = h.CFrame * CFrame.new(-0.05, 0, 0)
+        end
+    end)
+    pcall(function()
+        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.Jump = true
+        end
+    end)
+end
+
+workspace.DescendantAdded:Connect(function(o)
+    task.defer(function()
+        pcall(function()
+            if isF(o) then
+                kF[o] = true
+                markHasFrag("出现碎片")
+            elseif isG(o) then
+                kG[o] = true
+                sawLootThisRound = true
+            end
+        end)
+    end)
+end)
+
+workspace.DescendantRemoving:Connect(function(o)
+    pcall(function()
+        if kF[o] then
+            markHasFrag("碎片消失")
+            myF = math.max(myF, 1)
+        end
+        if kG[o] then
+            gotG = true
+            sawLootThisRound = true
+            lockNoHop = true
+            foundThisRound = true
+        end
+        kF[o] = nil
+        kG[o] = nil
+    end)
+end)
+
+local tScan, tLoot, tEsp, tAfk, tHelp = 0, 0, 0, 0, 0
+local lastEspKey = ""
+
+task.spawn(function()
+    pcall(fullScan)
+    pcall(readLobbyFrag)
+    lastLobbyRead = tick()
+    task.wait(0.3)
+    pcall(loadConfig)
+    while Gui and Gui.Parent do
+        local ok, err = pcall(function()
+            local now = tick()
+            if hasFragLock() then
+                pendingHop = false
+            end
+
+            if now - tScan >= 2 then
+                tScan = now
+                local fc, gc = scan()
+                if tick() - lastLobbyRead >= 300 then
+                    lastLobbyRead = tick()
+                    readLobbyFrag()
+                end
+                FragL.Text = string.format("碎片: 地图%d | 本局%d | 大厅%d/%d", fc, myF, serverFrag, NEED_FRAG)
+                GlassL.Text = (gotG or gc > 0) and "眼镜: 有" or "眼镜: 无"
+
+                if hasFragLock() then
+                    emptyScanStreak = 0
+                    HopL.Text = "有碎片 → 禁止重进"
+                    HopL.TextColor3 = Color3.fromRGB(100, 255, 140)
+                elseif stillHasLoot() or not C.Auto then
+                    emptyScanStreak = 0
+                    HopL.Text = stillHasLoot() and "地图有物资" or "请开 Auto"
+                else
+                    emptyScanStreak = emptyScanStreak + 1
+                    local ready = C.AutoHop and C.Auto and (now - serverJoinTime) >= MIN_STAY
+                        and emptyScanStreak >= 3 and not sawLootThisRound and not hasFragLock()
+                    if ready then
+                        HopL.Text = "确认空图 → 换服"
+                        HopL.TextColor3 = Color3.fromRGB(100, 255, 140)
+                        hop()
+                    else
+                        local left = MIN_STAY - (now - serverJoinTime)
+                        if left > 0 then
+                            HopL.Text = string.format("等待进图 %.0fs", left)
+                        else
+                            HopL.Text = string.format("空图确认 %d/3", emptyScanStreak)
+                        end
+                        HopL.TextColor3 = Color3.fromRGB(140, 200, 255)
+                    end
+                end
+            end
+
+            if C.Auto and now - tLoot >= 0.9 then
+                tLoot = now
+                local h = HRP()
+                local pos = h and h.Position or Vector3.zero
+                local list = {}
+                for o in pairs(kF) do
+                    if o and o.Parent then
+                        local p = best(o)
+                        if p then
+                            table.insert(list, {o = o, d = (p.Position - pos).Magnitude})
+                        end
+                    end
+                end
+                table.sort(list, function(a, b)
+                    return a.d < b.d
+                end)
+                local n = 0
+                for _, d in ipairs(list) do
+                    if n >= 3 then break end
+                    pickup(d.o, "Fragment")
+                    n = n + 1
+                end
+                if not C.OnlyFrag and not gotG then
+                    for o in pairs(kG) do
+                        if o and o.Parent then
+                            pickup(o, "Glasses")
+                            break
+                        end
+                    end
+                end
+            end
+
+            if C.ESP and now - tEsp >= 2 then
+                tEsp = now
+                local fc, gc = countKnown()
+                local key = fc .. ":" .. gc
+                if key ~= lastEspKey then
+                    lastEspKey = key
+                    clrESP()
+                    local n = 0
+                    for o in pairs(kF) do
+                        if o and o.Parent and n < 12 then
+                            addESP(o, Color3.fromRGB(255, 70, 70))
+                            n = n + 1
+                        end
+                    end
+                    for o in pairs(kG) do
+                        if o and o.Parent then
+                            addESP(o, Color3.fromRGB(80, 220, 220))
+                        end
+                    end
+                end
+            elseif not C.ESP then
+                lastEspKey = ""
+                clrESP()
+            end
+
+            if C.AFK and now - tAfk >= 25 then
+                tAfk = now
+                afk()
+            end
+
+            if C.AutoHelp and now - tHelp >= 4 then
+                tHelp = now
+                tryClickHelpGui()
+            end
+        end)
+        if not ok and err then
+            warn("[tau] loop:", err)
+        end
+        task.wait(0.3)
     end
 end)
 
-GetKeyBtn.MouseButton1Click:Connect(function()
-    GetKeyBtn.BackgroundColor3 = T.Black
-    keyAndEnterShelter()
-    task.delay(1.2, function() if GetKeyBtn then GetKeyBtn.BackgroundColor3 = T.Off end end)
+pcall(function()
+    LP.Idled:Connect(function()
+        if C.AFK then
+            pcall(afk)
+        end
+    end)
 end)
 
-AutoCardBtn.MouseButton1Click:Connect(function()
-    Settings.AutoCard = not Settings.AutoCard
-    AutoCardBtn.BackgroundColor3 = Settings.AutoCard and T.On or T.Off
-    AutoCardBtn.Text = Settings.AutoCard and "自动捡卡 ON" or "自动捡卡（仅商场）"
+pcall(function()
+    Players.PlayerRemoving:Connect(function(pl)
+        if pl == LP then
+            kickHandled = true
+            if hasFragLock() then
+                pendingHop = false
+                N("有碎片 → 离开不重进")
+                return
+            end
+            task.defer(function()
+                task.wait(0.5)
+                if hasFragLock() then return end
+                rejoin(pendingHop and "HopKick" or "PlayerRemoving")
+            end)
+        end
+    end)
 end)
 
-KeyOnlyBtn.MouseButton1Click:Connect(function()
-    KeyOnlyBtn.BackgroundColor3 = T.Black
-    getKey()
-    Notify("已拿钥匙")
-    task.delay(0.7, function() if KeyOnlyBtn then KeyOnlyBtn.BackgroundColor3 = T.Off end end)
+pcall(function()
+    TS.TeleportInitFailed:Connect(function(player)
+        if player == LP and C.Rejoin and not hasFragLock() then
+            task.wait(2)
+            rejoining = false
+            rejoin("TeleportFailed")
+        end
+    end)
 end)
 
-FirstAidBtn.MouseButton1Click:Connect(function()
-    FirstAidBtn.BackgroundColor3 = T.Black
-    getFirstAid()
-    Notify("已拿急救包")
-    task.delay(0.7, function() if FirstAidBtn then FirstAidBtn.BackgroundColor3 = T.Off end end)
+-- ===== 防 277 / 断线恢复 =====
+pcall(function()
+    local GuiService = game:GetService("GuiService")
+    GuiService.ErrorMessageChanged:Connect(function()
+        pcall(function()
+            local msg = tostring(GuiService:GetErrorMessage() or "")
+            if msg == "" then return end
+            local low = string.lower(msg)
+            print("[tau] error:", msg)
+            if not C.Rejoin or hasFragLock() then return end
+            if string.find(low, "277") or string.find(low, "connection")
+                or string.find(low, "disconnect") or string.find(low, "lost")
+                or string.find(low, "internet") or string.find(low, "network")
+                or string.find(low, "reconnect") then
+                N("检测到断线/277 → 重进")
+                task.wait(1.2)
+                rejoining = false
+                rejoin("277:" .. msg)
+            end
+        end)
+    end)
 end)
 
-PointsBox.FocusLost:Connect(function()
-    local n = tonumber(PointsBox.Text)
-    if n and n > 0 then pointsAmount = math.floor(n) PointsBox.Text = tostring(pointsAmount)
-    else PointsBox.Text = tostring(pointsAmount) end
+-- 网络保活：定期轻微请求，降低空闲断线概率
+pcall(function()
+    task.spawn(function()
+        while Gui and Gui.Parent do
+            pcall(function()
+                if C.AFK then
+                    -- 读一下服务器时间，保持活动感
+                    pcall(function()
+                        game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+                    end)
+                    pcall(afk)
+                end
+            end)
+            task.wait(30)
+        end
+    end)
 end)
 
-PointsBtn.MouseButton1Click:Connect(function()
-    PointsBtn.BackgroundColor3 = T.Black
-    addPoints(tonumber(PointsBox.Text) or pointsAmount)
-    task.delay(0.7, function() if PointsBtn then PointsBtn.BackgroundColor3 = T.Off end end)
+-- 角色丢失时尝试不掉线（仅提示；有碎片不重进）
+pcall(function()
+    LP.CharacterRemoving:Connect(function()
+        if hasFragLock() then return end
+        -- 不立即 rejoin，等真正离开再处理
+    end)
 end)
 
-AFKBtn.MouseButton1Click:Connect(function()
-    Settings.AntiAFK = not Settings.AntiAFK
-    AFKBtn.BackgroundColor3 = Settings.AntiAFK and T.On or T.Off
-end)
-
-GodBtn.MouseButton1Click:Connect(function()
-    Settings.God = not Settings.God
-    GodBtn.BackgroundColor3 = Settings.God and T.On or T.Off
-    if Settings.God then onGod() else offGod() end
-end)
-
-ChestESPBtn.MouseButton1Click:Connect(function()
-    Settings.ChestESP = not Settings.ChestESP
-    ChestESPBtn.BackgroundColor3 = Settings.ChestESP and T.On or T.Off
-    if Settings.ChestESP then refreshChestESP() else clearFolder(chestEspFolder) end
-end)
-
-CardESPBtn.MouseButton1Click:Connect(function()
-    Settings.CardESP = not Settings.CardESP
-    CardESPBtn.BackgroundColor3 = Settings.CardESP and T.On or T.Off
-    if Settings.CardESP then refreshCardESP() else clearFolder(cardEspFolder) end
-end)
-
-SpdBtn.MouseButton1Click:Connect(function()
-    Settings.SpdOn = not Settings.SpdOn
-    SpdBtn.BackgroundColor3 = Settings.SpdOn and T.On or T.Off
-    applySpdJump()
-end)
-SpdDn.MouseButton1Click:Connect(function()
-    Settings.Spd = math.max(16, Settings.Spd - 4)
-    SpdLabel.Text = "Speed: " .. Settings.Spd
-    applySpdJump()
-end)
-SpdUp.MouseButton1Click:Connect(function()
-    Settings.Spd = math.min(80, Settings.Spd + 4)
-    SpdLabel.Text = "Speed: " .. Settings.Spd
-    applySpdJump()
-end)
-
-JumpBtn.MouseButton1Click:Connect(function()
-    Settings.JumpOn = not Settings.JumpOn
-    JumpBtn.BackgroundColor3 = Settings.JumpOn and T.On or T.Off
-    applySpdJump()
-end)
-
-SavePosBtn.MouseButton1Click:Connect(function()
-    local hrp = getHRP()
-    if hrp then
-        savedCFrame = hrp.CFrame
-        SaveStatusLabel.Text = "  位置: 已保存"
-        SaveStatusLabel.TextColor3 = T.Green
-        Notify("位置已保存")
-    end
-end)
-
-LoadPosBtn.MouseButton1Click:Connect(function()
-    local hrp = getHRP()
-    if hrp and savedCFrame then
-        hrp.CFrame = savedCFrame
-        Notify("已传送到保存位置")
-    else
-        Notify("没有保存的位置")
-    end
-end)
-
-ClearPosBtn.MouseButton1Click:Connect(function()
-    savedCFrame = nil
-    SaveStatusLabel.Text = "  位置: 未保存"
-    SaveStatusLabel.TextColor3 = T.Sub
-    Notify("已清除保存位置")
-end)
-
-ServerHopBtn.MouseButton1Click:Connect(function()
-    Notify("Server Hopping...")
-    pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
-end)
-
-MuteMusicBtn.MouseButton1Click:Connect(function()
-    setMusicMuted(not Settings.MusicMuted)
-    Notify(Settings.MusicMuted and "已静音" or "已取消静音")
-end)
-
-StopAllSoundBtn.MouseButton1Click:Connect(function()
-    stopAllSounds()
-end)
-
-VolDn.MouseButton1Click:Connect(function()
-    Settings.MusicVolume = math.max(0, Settings.MusicVolume - 0.1)
-    applyVolume()
-end)
-
-VolUp.MouseButton1Click:Connect(function()
-    Settings.MusicVolume = math.min(1, Settings.MusicVolume + 0.1)
-    applyVolume()
-end)
-
-CloseBtn.MouseButton1Click:Connect(function()
-    clearFolder(chestEspFolder)
-    clearFolder(cardEspFolder)
-    offGod()
-    ScreenGui:Destroy()
-end)
-
-local dragging, dragStart, startPos
-TitleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-    end
-end)
-TitleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local d = input.Position - dragStart
-        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-    end
-end)
-
-Notify("灾难警告 VIP 已加载（被踢后等45秒再重进）")
-print("Disaster Warning VIP FULL - wait after kick before rejoin")
+N("tau mini+ 已加载 (防277)")
+print("[tau] mini+ ready + anti-277")
