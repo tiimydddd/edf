@@ -353,8 +353,8 @@ mkL(P3, 0, "=== CallForHelp ===", Color3.fromRGB(255, 160, 100))
 local Help_tr, Help_th = mkTog(P3, 24, "自动求救", true)
 local HelpNowB = mkBtn(P3, 54, "立即 CallForHelp", Color3.fromRGB(90, 50, 70))
 local HelpL = mkL(P3, 88, "求救: 待命", Color3.fromRGB(140, 200, 255))
-mkL(P3, 110, "被困时自动 FireServer", Color3.fromRGB(140, 140, 155))
-mkL(P3, 128, "Remote: Assets.Signals.CallForHelp", Color3.fromRGB(120, 120, 140))
+mkL(P3, 110, "仅: CallForHelp:FireServer()", Color3.fromRGB(140, 140, 155))
+mkL(P3, 128, "与 Cobalt 相同，无其它逻辑", Color3.fromRGB(120, 120, 140))
 
 -- 储存
 local P4 = mkPage("储存")
@@ -565,78 +565,27 @@ RefPlrB.MouseButton1Click:Connect(function()
 end)
 
 -- CallForHelp
+-- 仅此一条，与 Cobalt 相同
 local function fireCallForHelp(why)
     if not C.AutoHelp and why ~= "手动" then return end
-    if tick() - lastHelpFire < 2 then return end
+    if tick() - lastHelpFire < 1.5 then return end
     lastHelpFire = tick()
     pcall(function()
-        local Signals = RPS:FindFirstChild("Assets") and RPS.Assets:FindFirstChild("Signals")
-        local ev = Signals and Signals:FindFirstChild("CallForHelp")
-        if ev and ev:IsA("RemoteEvent") then
-            pcall(function()
-                ev:FireServer()
-            end)
-            N("CallForHelp " .. tostring(why or ""))
-            if HelpL then
-                HelpL.Text = "求救: 已发送 " .. tostring(why or "")
-                HelpL.TextColor3 = Color3.fromRGB(100, 255, 140)
-            end
-        else
-            N("未找到 CallForHelp")
+        local Event = game:GetService("ReplicatedStorage").Assets.Signals.CallForHelp
+        Event:FireServer()
+        N("CallForHelp")
+        if HelpL then
+            HelpL.Text = "求救: 已 FireServer"
+            HelpL.TextColor3 = Color3.fromRGB(100, 255, 140)
         end
     end)
 end
 
 local function tryClickHelpGui()
-    if not C.AutoHelp then return end
-    pcall(function()
-        local pg = LP:FindFirstChild("PlayerGui")
-        if not pg then return end
-        local root = pg:FindFirstChild("Obstructions") or pg
-        for _, d in ipairs(root:GetDescendants()) do
-            if d:IsA("GuiButton") then
-                local n = string.lower(tostring(d.Name) .. " " .. tostring(d.Text or ""))
-                if string.find(n, "help", 1, true) or string.find(n, "求救", 1, true) then
-                    if typeof(firesignal) == "function" then
-                        if d.MouseButton1Click then pcall(firesignal, d.MouseButton1Click) end
-                        if d.Activated then pcall(firesignal, d.Activated) end
-                    end
-                    fireCallForHelp("UI")
-                    return
-                end
-            end
-        end
-    end)
+    fireCallForHelp("auto")
 end
 
-pcall(function()
-    local Signals = RPS:WaitForChild("Assets", 5)
-    Signals = Signals and Signals:WaitForChild("Signals", 5)
-    if not Signals then return end
-    local initEv = Signals:FindFirstChild("CallForHelpGuiInit")
-    if initEv and initEv:IsA("RemoteEvent") then
-        initEv.OnClientEvent:Connect(function()
-            if C.AutoHelp then
-                task.defer(function()
-                    fireCallForHelp("GuiInit")
-                    task.wait(0.15)
-                    tryClickHelpGui()
-                end)
-            end
-        end)
-    end
-    local para = Signals:FindFirstChild("Paralyze")
-    if para and para:IsA("RemoteEvent") then
-        para.OnClientEvent:Connect(function()
-            if C.AutoHelp then
-                task.defer(function()
-                    fireCallForHelp("Paralyze")
-                    tryClickHelpGui()
-                end)
-            end
-        end)
-    end
-end)
+-- 自动求救：定时只 FireServer（不点 UI、不钩其它 Remote）
 
 HelpNowB.MouseButton1Click:Connect(function()
     local old = C.AutoHelp
