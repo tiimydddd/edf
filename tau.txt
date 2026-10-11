@@ -36,7 +36,7 @@ local myF, gotG = 0, false
 local tried = {}
 local isMin = false
 local serverJoinTime = tick()
-local MIN_STAY = 70
+local MIN_STAY = 50
 local emptyScanStreak = 0
 local foundThisRound = false
 local sawLootThisRound = false
@@ -320,7 +320,7 @@ local HopL = mkL(P1, 50, "换服: 待命", Color3.fromRGB(140, 200, 255))
 local Auto_tr, Auto_th = mkTog(P1, 72, "Auto 捡取", false)
 local Only_tr, Only_th = mkTog(P1, 96, "只捡碎片(关=也捡眼镜)", true)
 local ESP_tr, ESP_th = mkTog(P1, 120, "ESP", true)
-local Hop_tr, Hop_th = mkTog(P1, 144, "空图自动换服", true)
+local Hop_tr, Hop_th = mkTog(P1, 144, "0碎片自动换服", true)
 local AFK_tr, AFK_th = mkTog(P1, 168, "Anti-AFK", true)
 local Rej_tr, Rej_th = mkTog(P1, 192, "断线重进(有碎片会锁)", true)
 local ShelB = mkBtn(P1, 220, "传送避难所", Color3.fromRGB(45, 45, 58))
