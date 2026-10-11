@@ -1,5 +1,7 @@
--- ==================== FULL Disaster Warning VIP (已修复传送 remove) ====================
--- PlaceId: 7479931846 | 实时刷新 Info + 传送修复 + 所有功能优化
+-- 灾难警告之VIP版本 FULL
+-- Tabs: Farm | Extra | Tool | Save | Music
+-- 排队仅 3.1 有效 | 只到门 | Blue Moon Mall才找卡 | 沙尘暴→Flares→门
+-- PlaceId: 7479931846
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -9,8 +11,8 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
-
 local PLACE_ID = 7479931846
 
 local Settings = {
@@ -25,7 +27,9 @@ local Settings = {
     JumpOn = false,
     Jump = 70,
     God = false,
-    AutoVoteMall = true,
+    RejoinUntilDanger = false,
+    MusicMuted = false,
+    MusicVolume = 0.5,
 }
 
 local currentDisaster = "Unknown"
@@ -35,22 +39,24 @@ local isMinimized = false
 local lastAutoFarm = 0
 local lastDangerAuto = 0
 local lastCardCheck = 0
-local lastVoteCheck = 0
+local lastRejoin = 0
 local gotCard = false
 local pointsAmount = 10000
+local savedCFrame = nil
 
 local AUTO_FARM_INTERVAL = 10
 local DANGER_AUTO_CD = 12
 local CARD_INTERVAL = 3
-local VOTE_INTERVAL = 1.2
+local REJOIN_CD = 8
 
-local ShelterDoorNames = {"ShelterDoor", "ShelterEntrance", "Entrance", "Door", "Shelter", "Bunker", "Underground", "避难所"}
+local ShelterDoorNames = {
+    "ShelterDoor", "ShelterEntrance", "Entrance", "Door",
+    "Shelter", "Bunker", "Underground", "避难所"
+}
 local ChestNames = {"Chest","Treasure","TreasureChest","Box","Crate","Loot","宝箱"}
 local CardNames = {"Wild Card","WildCard","Wild Cards","Cursed Card","CursedCard","Card","Wildcard","卡牌"}
 local StoreNames = {"Cursed Card Store","CursedCardStore","Card Store","CardStore","Cursed Store","Wild Card Store"}
-
 local DangerDisasterList = {"Tornado","Tsunami","The End","Meteor","Volcano","Avalanche","Mothership","Flood","Lethal Smog","Wild Card","Berserk","Solar Flare","Dust Bowl"}
-local MallKeywords = {"商场","mall","shopping","商店街","商业","market","plaza","blue moon"}
 local DustBowlNames = {"Dust Bowl", "DustBowl", "沙尘暴", "dust bowl"}
 local FlareKeywords = {"flares", "flare", "flaers", "solarflare", "solar flare"}
 
@@ -62,21 +68,29 @@ local DisasterList = {
     {"Blizzard", "Blizzard"}, {"Krampus", "Krampus"}, {"Krampus 2021", "Krampus2021"},
     {"Nian", "Nian"}, {"Jellybean", "Jellybean"}, {"Hoshi Attack", "HoshiAttack"},
     {"Air Strikes", "AirStrikes"}, {"Acid Rain", "AcidRain"}, {"Toast Attack", "ToastAttack"},
-    {"Ritual Storm", "RitualStorm"}, {"Battleship", "Battleship"}, {"Chemical Storm", "ChemicalStorm"},
-    {"Typhoon", "Typhoon"}, {"Homing Rays", "HomingRays"}, {"Comet Shower", "CometShower"},
+    {"Ritual Storm", "RitualStorm"}, {"Battleship", "Battleship"},
+    {"Chemical Storm", "ChemicalStorm"}, {"Typhoon", "Typhoon"},
+    {"Homing Rays", "HomingRays"}, {"Comet Shower", "CometShower"},
     {"Stonenado", "Stonenado"}, {"Random", "Random"},
 }
 
 local T = {
-    Bg = Color3.fromRGB(16, 18, 26), Title = Color3.fromRGB(22, 26, 38),
-    Side = Color3.fromRGB(12, 14, 22), Content = Color3.fromRGB(18, 22, 32),
-    Card = Color3.fromRGB(26, 30, 44), Off = Color3.fromRGB(38, 44, 62),
-    On = Color3.fromRGB(55, 120, 220), Accent = Color3.fromRGB(90, 50, 180),
-    Text = Color3.fromRGB(235, 240, 250), Sub = Color3.fromRGB(150, 160, 180),
-    Red = Color3.fromRGB(190, 55, 55), Black = Color3.fromRGB(20, 20, 25),
+    Bg = Color3.fromRGB(16, 18, 26),
+    Title = Color3.fromRGB(22, 26, 38),
+    Side = Color3.fromRGB(12, 14, 22),
+    Content = Color3.fromRGB(18, 22, 32),
+    Card = Color3.fromRGB(26, 30, 44),
+    Off = Color3.fromRGB(38, 44, 62),
+    On = Color3.fromRGB(55, 120, 220),
+    Accent = Color3.fromRGB(90, 50, 180),
+    Text = Color3.fromRGB(235, 240, 250),
+    Sub = Color3.fromRGB(150, 160, 180),
+    Red = Color3.fromRGB(190, 55, 55),
+    Black = Color3.fromRGB(20, 20, 25),
+    Green = Color3.fromRGB(50, 180, 110),
+    Orange = Color3.fromRGB(255, 160, 80),
 }
 
--- ==================== 反挂载 ====================
 pcall(function()
     local function wipe(root)
         if not root then return end
@@ -97,7 +111,6 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999999
 ScreenGui.IgnoreGuiInset = true
-
 do
     local mounted = false
     if typeof(gethui) == "function" then
@@ -112,13 +125,12 @@ do
 end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 400, 0, 520)
-Main.Position = UDim2.new(0, 20, 0.08, 0)
+Main.Size = UDim2.new(0, 420, 0, 540)
+Main.Position = UDim2.new(0, 20, 0.06, 0)
 Main.BackgroundColor3 = T.Bg
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
-
 local stroke = Instance.new("UIStroke", Main)
 stroke.Color = Color3.fromRGB(50, 70, 120)
 stroke.Thickness = 1
@@ -130,7 +142,6 @@ TitleBar.BackgroundColor3 = T.Title
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = Main
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 14)
-
 local titleFix = Instance.new("Frame")
 titleFix.Size = UDim2.new(1, 0, 0, 14)
 titleFix.Position = UDim2.new(0, 0, 1, -14)
@@ -142,7 +153,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -90, 1, 0)
 Title.Position = UDim2.new(0, 16, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "灾难警告 · VIP"
+Title.Text = "灾难警告  ·  VIP"
 Title.TextColor3 = T.Text
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -172,15 +183,15 @@ CloseBtn.Parent = TitleBar
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 100, 1, -42)
+Sidebar.Size = UDim2.new(0, 108, 1, -42)
 Sidebar.Position = UDim2.new(0, 0, 0, 42)
 Sidebar.BackgroundColor3 = T.Side
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -100, 1, -42)
-Content.Position = UDim2.new(0, 100, 0, 42)
+Content.Size = UDim2.new(1, -108, 1, -42)
+Content.Position = UDim2.new(0, 108, 0, 42)
 Content.BackgroundColor3 = T.Content
 Content.BorderSizePixel = 0
 Content.Parent = Main
@@ -188,24 +199,24 @@ Content.Parent = Main
 local function makeTab(name, text, y)
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.Size = UDim2.new(1, -12, 0, 34)
+    btn.Size = UDim2.new(1, -12, 0, 36)
     btn.Position = UDim2.new(0, 6, 0, y)
     btn.BackgroundColor3 = T.Side
-    btn.Text = " " .. text
+    btn.Text = "  " .. text
     btn.TextColor3 = T.Sub
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
+    btn.TextSize = 12
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.Parent = Sidebar
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
     return btn
 end
 
-local TabInfo = makeTab("Info", "Info", 10)
-local TabMain = makeTab("Main", "Main", 50)
-local TabCard = makeTab("Card", "Card", 90)
-local TabQueue = makeTab("Queue", "Queue", 130)
-local TabExtra = makeTab("Extra", "Extra", 170)
+local TabFarm  = makeTab("Farm",  "Farm",  10)
+local TabExtra = makeTab("Extra", "Extra", 52)
+local TabTool  = makeTab("Tool",  "Tool",  94)
+local TabSave  = makeTab("Save",  "Save", 136)
+local TabMusic = makeTab("Music", "Music", 178)
 
 local Pages = {}
 local function createPage(name)
@@ -215,7 +226,7 @@ local function createPage(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 3
-    page.CanvasSize = UDim2.new(0, 0, 0, 500)
+    page.CanvasSize = UDim2.new(0, 0, 0, 520)
     page.Visible = false
     page.Parent = Content
     Pages[name] = page
@@ -253,146 +264,80 @@ end
 
 local function Notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {Title = "灾难警告 VIP", Text = tostring(msg), Duration = 3})
+        StarterGui:SetCore("SendNotification", {
+            Title = "灾难警告 VIP",
+            Text = tostring(msg),
+            Duration = 3
+        })
     end)
 end
 
--- ==================== Info 页面（实时刷新版）===================
-local PageInfo = createPage("Info")
+-- ========== FARM ==========
+local PageFarm = createPage("Farm")
+PageFarm.CanvasSize = UDim2.new(0, 0, 0, 480)
 
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -28, 0, 28)
-StatusLabel.Position = UDim2.new(0, 14, 0, 12)
+StatusLabel.Position = UDim2.new(0, 14, 0, 10)
 StatusLabel.BackgroundColor3 = T.Card
-StatusLabel.Text = " Status: Ready"
+StatusLabel.Text = "  Status: Ready"
 StatusLabel.TextColor3 = T.Text
 StatusLabel.Font = Enum.Font.GothamBold
-StatusLabel.TextSize = 14
+StatusLabel.TextSize = 13
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.Parent = PageInfo
+StatusLabel.Parent = PageFarm
 Instance.new("UICorner", StatusLabel).CornerRadius = UDim.new(0, 8)
 
 local DisasterLabel = Instance.new("TextLabel")
-DisasterLabel.Size = UDim2.new(1, -28, 0, 22)
-DisasterLabel.Position = UDim2.new(0, 14, 0, 52)
+DisasterLabel.Size = UDim2.new(1, -28, 0, 20)
+DisasterLabel.Position = UDim2.new(0, 14, 0, 46)
 DisasterLabel.BackgroundTransparency = 1
 DisasterLabel.Text = "当前灾难: Unknown"
 DisasterLabel.TextColor3 = T.Text
 DisasterLabel.Font = Enum.Font.Gotham
-DisasterLabel.TextSize = 13
+DisasterLabel.TextSize = 12
 DisasterLabel.TextXAlignment = Enum.TextXAlignment.Left
-DisasterLabel.Parent = PageInfo
+DisasterLabel.Parent = PageFarm
 
 local DangerLabel = Instance.new("TextLabel")
-DangerLabel.Size = UDim2.new(1, -28, 0, 22)
-DangerLabel.Position = UDim2.new(0, 14, 0, 80)
+DangerLabel.Size = UDim2.new(1, -28, 0, 20)
+DangerLabel.Position = UDim2.new(0, 14, 0, 68)
 DangerLabel.BackgroundTransparency = 1
 DangerLabel.Text = "Danger Alert: 未开启"
 DangerLabel.TextColor3 = T.Sub
 DangerLabel.Font = Enum.Font.Gotham
-DangerLabel.TextSize = 13
+DangerLabel.TextSize = 12
 DangerLabel.TextXAlignment = Enum.TextXAlignment.Left
-DangerLabel.Parent = PageInfo
-
-local EndLabel = Instance.new("TextLabel")
-EndLabel.Size = UDim2.new(1, -28, 0, 22)
-EndLabel.Position = UDim2.new(0, 14, 0, 108)
-EndLabel.BackgroundTransparency = 1
-EndLabel.Text = "The End: No"
-EndLabel.TextColor3 = T.Sub
-EndLabel.Font = Enum.Font.Gotham
-EndLabel.TextSize = 13
-EndLabel.TextXAlignment = Enum.TextXAlignment.Left
-EndLabel.Parent = PageInfo
+DangerLabel.Parent = PageFarm
 
 local MapLabel = Instance.new("TextLabel")
-MapLabel.Size = UDim2.new(1, -28, 0, 22)
-MapLabel.Position = UDim2.new(0, 14, 0, 136)
+MapLabel.Size = UDim2.new(1, -28, 0, 20)
+MapLabel.Position = UDim2.new(0, 14, 0, 90)
 MapLabel.BackgroundTransparency = 1
 MapLabel.Text = "地图: Unknown"
 MapLabel.TextColor3 = T.Sub
 MapLabel.Font = Enum.Font.Gotham
-MapLabel.TextSize = 13
+MapLabel.TextSize = 12
 MapLabel.TextXAlignment = Enum.TextXAlignment.Left
-MapLabel.Parent = PageInfo
+MapLabel.Parent = PageFarm
 
-local CardStatusLabel = Instance.new("TextLabel")
-CardStatusLabel.Size = UDim2.new(1, -28, 0, 28)
-CardStatusLabel.Position = UDim2.new(0, 14, 0, 168)
-CardStatusLabel.BackgroundColor3 = T.Card
-CardStatusLabel.Text = " Wild Card: 未找到"
-CardStatusLabel.TextColor3 = T.Sub
-CardStatusLabel.Font = Enum.Font.Gotham
-CardStatusLabel.TextSize = 13
-CardStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-CardStatusLabel.Parent = PageInfo
-Instance.new("UICorner", CardStatusLabel).CornerRadius = UDim.new(0, 8)
+makeSection(PageFarm, "自动", 118)
+local AutoFarmBtn = makeBtn(PageFarm, "★ Auto Farm", 142, false)
+local DangerAutoBtn = makeBtn(PageFarm, "危险时自动进所", 184, false)
+local RejoinDangerBtn = makeBtn(PageFarm, "重进直到危险警报 ON", 226, false)
 
--- ==================== Main 页面 ====================
-local PageMain = createPage("Main")
-PageMain.CanvasSize = UDim2.new(0, 0, 0, 420)
+makeSection(PageFarm, "手动", 272)
+local GetKeyBtn = makeBtn(PageFarm, "拿钥匙 → 开门（只到门）", 296, false)
+local AutoCardBtn = makeBtn(PageFarm, "自动捡卡（仅商场）", 338, false)
 
-makeSection(PageMain, "自动", 10)
-local AutoFarmBtn = makeBtn(PageMain, "★ Auto Farm", 34, false)
-local DangerAutoBtn = makeBtn(PageMain, "危险时自动进所", 76, false)
-
-makeSection(PageMain, "一键操作", 122)
-local GetKeyBtn = makeBtn(PageMain, "拿钥匙 → 开门（只到门）", 146, false)
-local KeyOnlyBtn = makeBtn(PageMain, "只拿钥匙", 188, false)
-local FirstAidBtn = makeBtn(PageMain, "拿急救包", 230, false)
-
-makeSection(PageMain, "积分（可自定义）", 276)
-local PointsBox = Instance.new("TextBox")
-PointsBox.Size = UDim2.new(1, -28, 0, 32)
-PointsBox.Position = UDim2.new(0, 14, 0, 300)
-PointsBox.BackgroundColor3 = T.Card
-PointsBox.Text = "10000"
-PointsBox.PlaceholderText = "输入积分数量"
-PointsBox.TextColor3 = T.Text
-PointsBox.PlaceholderColor3 = T.Sub
-PointsBox.Font = Enum.Font.Gotham
-PointsBox.TextSize = 14
-PointsBox.ClearTextOnFocus = false
-PointsBox.Parent = PageMain
-Instance.new("UICorner", PointsBox).CornerRadius = UDim.new(0, 8)
-
-local PointsBtn = makeBtn(PageMain, "加积分", 344, false)
-
--- ==================== Card 页面 ====================
-local PageCard = createPage("Card")
-PageCard.CanvasSize = UDim2.new(0, 0, 0, 260)
-
-makeSection(PageCard, "卡牌（仅 Blue Moon Mall）", 10)
-local AutoCardBtn = makeBtn(PageCard, "自动捡卡", 34, false)
-local ClickCardBtn = makeBtn(PageCard, "点卡（商店）", 76, false)
-local StoreTPBtn = makeBtn(PageCard, "传到 Card Store", 118, false)
-local CardESPBtn = makeBtn(PageCard, "卡牌 ESP", 160, false)
-
--- ==================== Queue 页面 ====================
-local PageQueue = createPage("Queue")
-PageQueue.CanvasSize = UDim2.new(0, 0, 0, 980)
-
-makeSection(PageQueue, "排队灾难（仅VIP服）", 10)
-local QueueHint = Instance.new("TextLabel")
-QueueHint.Size = UDim2.new(1, -28, 0, 18)
-QueueHint.Position = UDim2.new(0, 14, 0, 32)
-QueueHint.BackgroundTransparency = 1
-QueueHint.Text = "点一下排队 | 按下变黑"
-QueueHint.TextColor3 = T.Sub
-QueueHint.Font = Enum.Font.Gotham
-QueueHint.TextSize = 11
-QueueHint.TextXAlignment = Enum.TextXAlignment.Left
-QueueHint.Parent = PageQueue
-
--- ==================== Extra 页面 ====================
+-- ========== EXTRA ==========
 local PageExtra = createPage("Extra")
-PageExtra.CanvasSize = UDim2.new(0, 0, 0, 400)
-
+PageExtra.CanvasSize = UDim2.new(0, 0, 0, 420)
 makeSection(PageExtra, "基础", 10)
 local AFKBtn = makeBtn(PageExtra, "Anti-AFK", 34, false)
 local GodBtn = makeBtn(PageExtra, "God / 锁血", 76, false)
-local AutoVoteBtn = makeBtn(PageExtra, "自动投满「商场」 ON", true)
-local ChestESPBtn = makeBtn(PageExtra, "宝箱 ESP", 160, false)
+local ChestESPBtn = makeBtn(PageExtra, "宝箱 ESP", 118, false)
+local CardESPBtn = makeBtn(PageExtra, "卡牌 ESP", 160, false)
 
 makeSection(PageExtra, "移动", 206)
 local SpdBtn = makeBtn(PageExtra, "WalkSpeed", 230, false)
@@ -433,29 +378,185 @@ Instance.new("UICorner", SpdUp).CornerRadius = UDim.new(0, 8)
 
 local JumpBtn = makeBtn(PageExtra, "Jump", 336, false)
 
--- ==================== 默认显示 ====================
-Pages["Info"].Visible = true
-TabInfo.BackgroundColor3 = T.On
-TabInfo.TextColor3 = T.Text
+-- ========== TOOL ==========
+local PageTool = createPage("Tool")
+PageTool.CanvasSize = UDim2.new(0, 0, 0, 1000)
+makeSection(PageTool, "Remote", 10)
+local KeyOnlyBtn = makeBtn(PageTool, "只拿钥匙", 34, false)
+local FirstAidBtn = makeBtn(PageTool, "拿急救包", 76, false)
+
+makeSection(PageTool, "积分", 122)
+local PointsBox = Instance.new("TextBox")
+PointsBox.Size = UDim2.new(1, -28, 0, 32)
+PointsBox.Position = UDim2.new(0, 14, 0, 146)
+PointsBox.BackgroundColor3 = T.Card
+PointsBox.Text = "10000"
+PointsBox.PlaceholderText = "输入积分数量"
+PointsBox.TextColor3 = T.Text
+PointsBox.PlaceholderColor3 = T.Sub
+PointsBox.Font = Enum.Font.Gotham
+PointsBox.TextSize = 14
+PointsBox.ClearTextOnFocus = false
+PointsBox.Parent = PageTool
+Instance.new("UICorner", PointsBox).CornerRadius = UDim.new(0, 8)
+local PointsBtn = makeBtn(PageTool, "加积分", 188, false)
+
+makeSection(PageTool, "排队灾难（仅VIP / 3.1才有用）", 234)
+local QueueNote = Instance.new("TextLabel")
+QueueNote.Size = UDim2.new(1, -28, 0, 18)
+QueueNote.Position = UDim2.new(0, 14, 0, 256)
+QueueNote.BackgroundTransparency = 1
+QueueNote.Text = "⚠ 排队功能仅 3.1 有效"
+QueueNote.TextColor3 = T.Orange
+QueueNote.Font = Enum.Font.GothamBold
+QueueNote.TextSize = 12
+QueueNote.TextXAlignment = Enum.TextXAlignment.Left
+QueueNote.Parent = PageTool
+
+local queueY = 278
+for _, data in ipairs(DisasterList) do
+    local displayName, remoteName = data[1], data[2]
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -28, 0, 28)
+    btn.Position = UDim2.new(0, 14, 0, queueY)
+    btn.BackgroundColor3 = T.Off
+    btn.Text = displayName
+    btn.TextColor3 = T.Text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 12
+    btn.AutoButtonColor = false
+    btn.Parent = PageTool
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Down:Connect(function()
+        btn.BackgroundColor3 = T.Black
+    end)
+    btn.MouseButton1Click:Connect(function()
+        btn.BackgroundColor3 = T.Black
+        local ok = false
+        pcall(function()
+            local d = ReplicatedStorage.VIPServer.Disasters[remoteName]
+            if d then d:FireServer() ok = true end
+        end)
+        pcall(function()
+            local msg = ReplicatedStorage:FindFirstChild("DisasterMessage2")
+            if msg then
+                if msg:IsA("BindableEvent") then msg:Fire("Classic")
+                else pcall(function() msg:FireServer("Classic") end) end
+            end
+        end)
+        pcall(function()
+            ReplicatedStorage.VIPServer.GameStyle.Classic:FireServer()
+        end)
+        btn.BackgroundColor3 = ok and T.On or T.Red
+        Notify(ok and ("已排队: " .. displayName) or "排队失败（需 3.1 / VIP服）")
+        task.delay(0.8, function()
+            if btn and btn.Parent then btn.BackgroundColor3 = T.Off end
+        end)
+    end)
+    queueY = queueY + 32
+end
+PageTool.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
+
+-- ========== SAVE ==========
+local PageSave = createPage("Save")
+PageSave.CanvasSize = UDim2.new(0, 0, 0, 320)
+makeSection(PageSave, "位置保存", 10)
+local SavePosBtn = makeBtn(PageSave, "保存当前位置", 34, false)
+local LoadPosBtn = makeBtn(PageSave, "传送到已保存位置", 76, false)
+local ClearPosBtn = makeBtn(PageSave, "清除已保存位置", 118, false)
+
+local SaveStatusLabel = Instance.new("TextLabel")
+SaveStatusLabel.Size = UDim2.new(1, -28, 0, 36)
+SaveStatusLabel.Position = UDim2.new(0, 14, 0, 168)
+SaveStatusLabel.BackgroundColor3 = T.Card
+SaveStatusLabel.Text = "  位置: 未保存"
+SaveStatusLabel.TextColor3 = T.Sub
+SaveStatusLabel.Font = Enum.Font.Gotham
+SaveStatusLabel.TextSize = 13
+SaveStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+SaveStatusLabel.Parent = PageSave
+Instance.new("UICorner", SaveStatusLabel).CornerRadius = UDim.new(0, 8)
+
+makeSection(PageSave, "其他", 220)
+local ServerHopBtn = makeBtn(PageSave, "Server Hop（换服）", 244, false)
+
+-- ========== MUSIC ==========
+local PageMusic = createPage("Music")
+PageMusic.CanvasSize = UDim2.new(0, 0, 0, 320)
+makeSection(PageMusic, "游戏音乐", 10)
+local MuteMusicBtn = makeBtn(PageMusic, "静音 / 取消静音", 34, false)
+local StopAllSoundBtn = makeBtn(PageMusic, "停止全部声音", 76, false)
+
+local VolLabel = Instance.new("TextLabel")
+VolLabel.Size = UDim2.new(1, -28, 0, 20)
+VolLabel.Position = UDim2.new(0, 14, 0, 122)
+VolLabel.BackgroundTransparency = 1
+VolLabel.Text = "音量: 50%"
+VolLabel.TextColor3 = T.Sub
+VolLabel.Font = Enum.Font.Gotham
+VolLabel.TextSize = 12
+VolLabel.TextXAlignment = Enum.TextXAlignment.Left
+VolLabel.Parent = PageMusic
+
+local VolDn = Instance.new("TextButton")
+VolDn.Size = UDim2.new(0, 120, 0, 32)
+VolDn.Position = UDim2.new(0, 14, 0, 148)
+VolDn.BackgroundColor3 = T.Off
+VolDn.Text = "音量 -"
+VolDn.TextColor3 = T.Text
+VolDn.Font = Enum.Font.GothamBold
+VolDn.TextSize = 13
+VolDn.AutoButtonColor = false
+VolDn.Parent = PageMusic
+Instance.new("UICorner", VolDn).CornerRadius = UDim.new(0, 8)
+
+local VolUp = Instance.new("TextButton")
+VolUp.Size = UDim2.new(0, 120, 0, 32)
+VolUp.Position = UDim2.new(0, 150, 0, 148)
+VolUp.BackgroundColor3 = T.Off
+VolUp.Text = "音量 +"
+VolUp.TextColor3 = T.Text
+VolUp.Font = Enum.Font.GothamBold
+VolUp.TextSize = 13
+VolUp.AutoButtonColor = false
+VolUp.Parent = PageMusic
+Instance.new("UICorner", VolUp).CornerRadius = UDim.new(0, 8)
+
+local MusicHint = Instance.new("TextLabel")
+MusicHint.Size = UDim2.new(1, -28, 0, 40)
+MusicHint.Position = UDim2.new(0, 14, 0, 196)
+MusicHint.BackgroundTransparency = 1
+MusicHint.Text = "静音会关闭 SoundService 主音量\n停止全部声音会 Stop 所有正在播放的 Sound"
+MusicHint.TextColor3 = T.Sub
+MusicHint.Font = Enum.Font.Gotham
+MusicHint.TextSize = 11
+MusicHint.TextXAlignment = Enum.TextXAlignment.Left
+MusicHint.Parent = PageMusic
+
+-- 翻页
+Pages["Farm"].Visible = true
+TabFarm.BackgroundColor3 = T.On
+TabFarm.TextColor3 = T.Text
 
 local function switchTab(name)
     for n, page in pairs(Pages) do page.Visible = (n == name) end
-    for _, tab in pairs({TabInfo, TabMain, TabCard, TabQueue, TabExtra}) do
+    for _, tab in pairs({TabFarm, TabExtra, TabTool, TabSave, TabMusic}) do
         tab.BackgroundColor3 = T.Side
         tab.TextColor3 = T.Sub
     end
-    local map = {Info = TabInfo, Main = TabMain, Card = TabCard, Queue = TabQueue, Extra = TabExtra}
+    local map = {Farm = TabFarm, Extra = TabExtra, Tool = TabTool, Save = TabSave, Music = TabMusic}
     if map[name] then
         map[name].BackgroundColor3 = T.On
         map[name].TextColor3 = T.Text
     end
 end
 
-TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
-TabMain.MouseButton1Click:Connect(function() switchTab("Main") end)
-TabCard.MouseButton1Click:Connect(function() switchTab("Card") end)
-TabQueue.MouseButton1Click:Connect(function() switchTab("Queue") end)
+TabFarm.MouseButton1Click:Connect(function() switchTab("Farm") end)
 TabExtra.MouseButton1Click:Connect(function() switchTab("Extra") end)
+TabTool.MouseButton1Click:Connect(function() switchTab("Tool") end)
+TabSave.MouseButton1Click:Connect(function() switchTab("Save") end)
+TabMusic.MouseButton1Click:Connect(function() switchTab("Music") end)
 
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
@@ -466,78 +567,114 @@ MinBtn.MouseButton1Click:Connect(function()
         MinBtn.Text = "+"
         Title.Text = "灾难警告 VIP"
     else
-        Main.Size = UDim2.new(0, 400, 0, 520)
+        Main.Size = UDim2.new(0, 420, 0, 540)
         Sidebar.Visible = true
         Content.Visible = true
         MinBtn.Text = "–"
-        Title.Text = "灾难警告 · VIP"
+        Title.Text = "灾难警告  ·  VIP"
     end
 end)
 
--- ==================== 工具函数 ====================
-local function getHRP() local c = LocalPlayer.Character return c and c:FindFirstChild("HumanoidRootPart") end
-local function getHum() local c = LocalPlayer.Character return c and c:FindFirstChildOfClass("Humanoid") end
-local function nameIn(obj, list) local n = (obj.Name or ""):lower() for _, v in ipairs(list) do if n:find(v:lower(), 1, true) then return true end end return false end
+-- ========== 逻辑 ==========
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function nameIn(obj, list)
+    local n = (obj.Name or ""):lower()
+    for _, v in ipairs(list) do
+        if n:find(v:lower(), 1, true) then return true end
+    end
+    return false
+end
+
 local function isShelterDoor(obj) return nameIn(obj, ShelterDoorNames) end
 local function isChest(obj) return nameIn(obj, ChestNames) end
-local function isCard(obj) if not nameIn(obj, CardNames) then return false end if nameIn(obj, StoreNames) then return false end return true end
+local function isCard(obj)
+    if not nameIn(obj, CardNames) then return false end
+    if nameIn(obj, StoreNames) then return false end
+    return true
+end
 local function isStore(obj) return nameIn(obj, StoreNames) end
 
 local function bestPart(obj)
-    if obj:IsA("BasePart") then 
-        return obj 
-    end
-    local part = obj:FindFirstChildWhichIsA("BasePart", true)
-    if part then return part end
-    for _, p in ipairs(obj:GetDescendants()) do
-        if p:IsA("BasePart") then return p end
-    end
-    return obj:FindFirstChildWhichIsA("BasePart", false)
+    if obj:IsA("BasePart") then return obj end
+    return obj:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function isDangerDisaster(name) if not name then return false end local n = tostring(name):lower() for _, d in ipairs(DangerDisasterList) do if n:find(d:lower(), 1, true) then return true end end return false end
-local function isDustBowl(name) if not name then return false end local n = tostring(name):lower() for _, v in ipairs(DustBowlNames) do if n:find(v:lower(), 1, true) then return true end end return false end
+local function isDangerDisaster(name)
+    if not name then return false end
+    local n = tostring(name):lower()
+    for _, d in ipairs(DangerDisasterList) do
+        if n:find(d:lower(), 1, true) then return true end
+    end
+    return false
+end
+
+local function isDustBowl(name)
+    if not name then return false end
+    local n = tostring(name):lower()
+    for _, v in ipairs(DustBowlNames) do
+        if n:find(v:lower(), 1, true) then return true end
+    end
+    return false
+end
 
 local function isBlueMoonMall()
     for _, obj in ipairs(workspace:GetDescendants()) do
         local n = (obj.Name or ""):lower()
-        if n:find("blue moon mall") or n:find("bluemoonmall") or n:find("blue_moon_mall") then return true end
+        if n:find("blue moon mall") or n:find("bluemoonmall") then return true end
     end
-    local values = Workspace:FindFirstChild("Values")
-    if values then
-        for _, v in ipairs(values:GetChildren()) do
-            local n = (v.Name or ""):lower()
-            local val = tostring(v.Value or ""):lower()
-            if n:find("map") or n:find("place") or n:find("location") then
-                if val:find("blue moon") or val:find("bluemoon") then return true end
-            end
-        end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isStore(obj) then return true end
     end
-    for _, obj in ipairs(workspace:GetDescendants()) do if isStore(obj) then return true end end
     return false
+end
+
+local function isDangerAlertOn()
+    local values = Workspace:FindFirstChild("Values")
+    if not values then return false end
+    local da = values:FindFirstChild("DangerAlert")
+    if not da then return false end
+    local val = da.Value
+    if typeof(val) == "boolean" then return val end
+    if typeof(val) == "number" then return val ~= 0 end
+    if typeof(val) == "string" then
+        local s = val:lower()
+        return s == "true" or s == "on" or s == "1" or s == "yes"
+    end
+    return val and true or false
 end
 
 local function updateDisasterFromValues()
     local values = Workspace:FindFirstChild("Values")
     if not values then return end
     local cd = values:FindFirstChild("CurrentDisaster")
-    if cd then currentDisaster = tostring(cd.Value or "") end
-    local da = values:FindFirstChild("DangerAlert")
-    if da then
-        local val = da.Value
-        if typeof(val) == "boolean" then dangerAlerts = val
-        elseif typeof(val) == "number" then dangerAlerts = val ~= 0
-        elseif typeof(val) == "string" then dangerAlerts = val:lower() == "true" or val:lower() == "on" or val == "1"
-        else dangerAlerts = val and true or false
-        end
+    if cd then
+        local v = cd.Value
+        if typeof(v) == "string" and v ~= "" then currentDisaster = v
+        elseif v ~= nil then currentDisaster = tostring(v) end
     end
+    dangerAlerts = isDangerAlertOn()
     theEndActive = tostring(currentDisaster):lower():find("the end") ~= nil
 end
 
-local function getKey() pcall(function() ReplicatedStorage.Misc.Key:FireServer() end) end
-local function getFirstAid() pcall(function() ReplicatedStorage.Misc.FirstAid:FireServer() end) end
+local function getKey()
+    pcall(function() ReplicatedStorage.Misc.Key:FireServer() end)
+end
+
+local function getFirstAid()
+    pcall(function() ReplicatedStorage.Misc.FirstAid:FireServer() end)
+end
+
 local function addPoints(n)
-    local amount = tonumber(n) or pointsAmount
+    local amount = tonumber(n) or pointsAmount or 10000
     pcall(function() ReplicatedStorage.Misc.Points:FireServer(amount) end)
     Notify("已加积分 +" .. tostring(amount))
 end
@@ -545,40 +682,68 @@ end
 local function tryInteract(obj, hrp)
     local part = bestPart(obj)
     if not part then return false end
-    local offsets = {Vector3.new(0,3,0), Vector3.new(0,2.5,2), Vector3.new(0,2.5,-2), Vector3.new(2,2.5,0), Vector3.new(-2,2.5,0)}
+    local offsets = {
+        Vector3.new(0, 3, 0), Vector3.new(0, 2.5, 2), Vector3.new(0, 2.5, -2),
+        Vector3.new(2, 2.5, 0), Vector3.new(-2, 2.5, 0),
+    }
     local opened = false
     for _, offset in ipairs(offsets) do
         pcall(function() hrp.CFrame = CFrame.new(part.Position + offset) end)
         task.wait(0.1)
         for _, d in ipairs(obj:GetDescendants()) do
             if d:IsA("ProximityPrompt") then
-                for i = 1, 12 do pcall(function() fireproximityprompt(d) end) end opened = true
+                for i = 1, 12 do
+                    pcall(function() fireproximityprompt(d) end)
+                    if i % 3 == 0 then task.wait(0.03) end
+                end
+                opened = true
             elseif d:IsA("ClickDetector") then
-                for i = 1, 8 do pcall(function() fireclickdetector(d) end) end opened = true
+                for i = 1, 8 do pcall(function() fireclickdetector(d) end) end
+                opened = true
             end
-        end
-        local ti = part:FindFirstChildOfClass("TouchInterest")
-        if ti then
-            pcall(function()
-                firetouchinterest(hrp, part, 0) task.wait(0.05)
-                firetouchinterest(hrp, part, 1)
-            end)
-            opened = true
         end
         if opened then break end
     end
     return opened
 end
 
-local function findShelterDoor() for _, obj in ipairs(workspace:GetDescendants()) do if isShelterDoor(obj) then local part = bestPart(obj) return obj, part end end return nil, nil end
-local function findFlares() for _, obj in ipairs(workspace:GetDescendants()) do local n = (obj.Name or ""):lower() for _, k in ipairs(FlareKeywords) do if n:find(k, 1, true) then local part = bestPart(obj) return obj, part end end end return nil, nil end
+local function findShelterDoor()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isShelterDoor(obj) then
+            local part = bestPart(obj)
+            if part then return obj, part end
+        end
+    end
+    return nil, nil
+end
+
+local function findFlares()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local n = (obj.Name or ""):lower()
+        for _, k in ipairs(FlareKeywords) do
+            if n:find(k, 1, true) then
+                local part = bestPart(obj)
+                if part then return obj, part end
+            end
+        end
+    end
+    return nil, nil
+end
 
 local function tryGetCard()
     local hrp = getHRP()
     if not hrp then return false end
     local storePart = nil
-    for _, obj in ipairs(workspace:GetDescendants()) do if isStore(obj) then storePart = bestPart(obj) if storePart then break end end end
-    if storePart then hrp.CFrame = storePart.CFrame + Vector3.new(0,4,0) task.wait(0.25) end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isStore(obj) then
+            storePart = bestPart(obj)
+            if storePart then break end
+        end
+    end
+    if storePart then
+        hrp.CFrame = storePart.CFrame + Vector3.new(0, 4, 0)
+        task.wait(0.25)
+    end
     local got = false
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isCard(obj) then
@@ -593,10 +758,10 @@ local function goToShelterDoorOnly()
     if not hrp then return false end
     local doorObj, doorPart = findShelterDoor()
     if doorPart then
-        hrp.CFrame = doorPart.CFrame + Vector3.new(0,3,0)
+        hrp.CFrame = doorPart.CFrame + Vector3.new(0, 3, 0)
         task.wait(0.2)
         if doorObj then tryInteract(doorObj, hrp) end
-        local insideOffset = doorPart.CFrame.LookVector * -5 + Vector3.new(0,2,0)
+        local insideOffset = doorPart.CFrame.LookVector * -5 + Vector3.new(0, 2, 0)
         hrp.CFrame = doorPart.CFrame + insideOffset
         Notify("已到避难所门")
         return true
@@ -611,12 +776,12 @@ local function dustBowlFlow()
     Notify("沙尘暴！寻找 Flares...")
     local flObj, flPart = findFlares()
     if flPart then
-        hrp.CFrame = flPart.CFrame + Vector3.new(0,3,0)
+        hrp.CFrame = flPart.CFrame + Vector3.new(0, 3, 0)
         if flObj then tryInteract(flObj, hrp) end
         Notify("已到 Flares")
         task.wait(0.5)
     else
-        Notify("未找到 Flares，直接到门")
+        Notify("未找到 Flares")
     end
     task.wait(0.3)
     goToShelterDoorOnly()
@@ -636,13 +801,13 @@ local function keyAndEnterShelter()
     getKey()
     task.wait(0.35)
     if isBlueMoonMall() then
-        Notify("2. Blue Moon Mall → 检查卡牌...")
+        Notify("2. Blue Moon Mall → 找卡...")
         tryGetCard()
         task.wait(0.3)
     else
         Notify("2. 非商场，跳过找卡")
     end
-    Notify("3. 传送到门并开门...")
+    Notify("3. 到门并开门...")
     goToShelterDoorOnly()
 end
 
@@ -651,89 +816,60 @@ local function autoFarmFlow()
     keyAndEnterShelter()
 end
 
-local function queueDisaster(displayName, remoteName)
-    local ok = false
-    local vip = ReplicatedStorage:FindFirstChild("VIPServer")
-    local disastersFolder = vip and vip:FindFirstChild("Disasters")
-    if disastersFolder then
-        local remote = disastersFolder:FindFirstChild(remoteName)
-        if remote then
-            local success = pcall(function() remote:FireServer() end)
-            if success then ok = true end
+local function rejoinUntilDanger()
+    if not Settings.RejoinUntilDanger then return end
+    if isDangerAlertOn() then
+        Settings.RejoinUntilDanger = false
+        RejoinDangerBtn.Text = "重进直到危险警报 ON"
+        RejoinDangerBtn.BackgroundColor3 = T.Off
+        Notify("Danger Alert 已开，停止重进")
+        return
+    end
+    local now = tick()
+    if now - lastRejoin < REJOIN_CD then return end
+    lastRejoin = now
+    Notify("危险警报未开，重进中...")
+    pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
+    pcall(function() TeleportService:TeleportAsync(PLACE_ID, {LocalPlayer}) end)
+end
+
+local function setMusicMuted(muted)
+    Settings.MusicMuted = muted
+    pcall(function()
+        SoundService.Volume = muted and 0 or Settings.MusicVolume
+    end)
+    MuteMusicBtn.Text = muted and "取消静音" or "静音"
+    MuteMusicBtn.BackgroundColor3 = muted and T.On or T.Off
+end
+
+local function stopAllSounds()
+    local count = 0
+    for _, s in ipairs(workspace:GetDescendants()) do
+        if s:IsA("Sound") and s.IsPlaying then
+            pcall(function() s:Stop() end)
+            count = count + 1
         end
     end
-    pcall(function()
-        local msg = ReplicatedStorage:FindFirstChild("DisasterMessage2")
-        if msg then msg:Fire("Classic") end
-    end)
-    pcall(function()
-        local classic = ReplicatedStorage.VIPServer.GameStyle.Classic
-        if classic then classic:FireServer() end
-    end)
-    if ok then Notify("已排队: " .. displayName) else Notify("排队失败（非VIP服或无此Remote）") end
-    return ok
-end
-
--- ==================== Queue 按钮 ====================
-do
-    local queueY = 56
-    for _, data in ipairs(DisasterList) do
-        local displayName, remoteName = data[1], data[2]
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, -28, 0, 30)
-        btn.Position = UDim2.new(0, 14, 0, queueY)
-        btn.BackgroundColor3 = T.Off
-        btn.Text = displayName
-        btn.TextColor3 = T.Text
-        btn.Font = Enum.Font.Gotham
-        btn.TextSize = 12
-        btn.AutoButtonColor = false
-        btn.Parent = PageQueue
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-
-        btn.MouseButton1Down:Connect(function() btn.BackgroundColor3 = T.Black end)
-        btn.MouseButton1Click:Connect(function()
-            btn.BackgroundColor3 = T.Black
-            local success = queueDisaster(displayName, remoteName)
-            btn.BackgroundColor3 = success and T.On or T.Red
-            task.delay(0.9, function()
-                if btn and btn.Parent then btn.BackgroundColor3 = T.Off end
-            end)
-        end)
-        queueY = queueY + 34
-    end
-    PageQueue.CanvasSize = UDim2.new(0, 0, 0, queueY + 20)
-end
-
-local function isMallText(text)
-    if not text then return false end
-    local t = text:lower()
-    for _, k in ipairs(MallKeywords) do if t:find(k:lower(), 1, true) then return true end end
-    return false
-end
-
-local function autoVoteMall()
-    if not Settings.AutoVoteMall then return end
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pg then return end
-    for _, gui in ipairs(pg:GetDescendants()) do
-        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
-            local text = (gui.Text or ""):lower()
-            local name = (gui.Name or ""):lower()
-            if isMallText(text) or isMallText(name) then
-                for i = 1, 6 do
-                    pcall(function() gui:Activate() end)
-                    pcall(function() firesignal(gui.MouseButton1Click) end)
-                    task.wait(0.04)
-                end
-            end
+    for _, s in ipairs(SoundService:GetDescendants()) do
+        if s:IsA("Sound") and s.IsPlaying then
+            pcall(function() s:Stop() end)
+            count = count + 1
         end
     end
+    Notify("已停止 " .. count .. " 个声音")
 end
 
--- ==================== ESP ====================
-local chestEspFolder = Instance.new("Folder", ScreenGui) chestEspFolder.Name = "ChestESP"
-local cardEspFolder = Instance.new("Folder", ScreenGui) cardEspFolder.Name = "CardESP"
+local function applyVolume()
+    if not Settings.MusicMuted then
+        pcall(function() SoundService.Volume = Settings.MusicVolume end)
+    end
+    VolLabel.Text = "音量: " .. math.floor(Settings.MusicVolume * 100) .. "%"
+end
+
+local chestEspFolder = Instance.new("Folder", ScreenGui)
+chestEspFolder.Name = "ChestESP"
+local cardEspFolder = Instance.new("Folder", ScreenGui)
+cardEspFolder.Name = "CardESP"
 
 local function clearFolder(f)
     for _, c in ipairs(f:GetChildren()) do c:Destroy() end
@@ -749,14 +885,12 @@ local function addESP(folder, obj, col, lab)
         hl.OutlineColor = col
         hl.FillTransparency = 0.5
         hl.Parent = folder
-
         local bb = Instance.new("BillboardGui")
         bb.Size = UDim2.new(0, 60, 0, 16)
         bb.AlwaysOnTop = true
         bb.StudsOffset = Vector3.new(0, 2, 0)
         bb.Adornee = part
         bb.Parent = folder
-
         local tl = Instance.new("TextLabel")
         tl.Size = UDim2.new(1, 0, 1, 0)
         tl.BackgroundTransparency = 1
@@ -790,7 +924,8 @@ local function applySpdJump()
     pcall(function()
         if Settings.SpdOn then h.WalkSpeed = Settings.Spd else h.WalkSpeed = 16 end
         if Settings.JumpOn then
-            if h.UseJumpPower then h.JumpPower = Settings.Jump else h.JumpHeight = math.clamp(Settings.Jump / 7.2, 7, 50) end
+            if h.UseJumpPower then h.JumpPower = Settings.Jump
+            else h.JumpHeight = math.clamp(Settings.Jump / 7.2, 7, 50) end
         else
             if h.UseJumpPower then h.JumpPower = 50 else h.JumpHeight = 7.2 end
         end
@@ -816,18 +951,16 @@ LocalPlayer.CharacterAdded:Connect(function()
     if Settings.God then onGod() end
 end)
 
--- ==================== 主循环（实时刷新版）===================
 task.spawn(function()
     while ScreenGui and ScreenGui.Parent do
         local now = tick()
         updateDisasterFromValues()
         local onMall = isBlueMoonMall()
 
-        -- Info 页面实时刷新
-        StatusLabel.Text = " Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or "Ready")
+        StatusLabel.Text = "  Status: " .. (Settings.AutoFarm and "★ Auto Farm ON" or (Settings.RejoinUntilDanger and "重进中..." or "Ready"))
         DisasterLabel.Text = "当前灾难: " .. tostring(currentDisaster)
         MapLabel.Text = "地图: " .. (onMall and "Blue Moon Mall ✓" or "非商场")
-        MapLabel.TextColor3 = onMall and Color3.fromRGB(100, 200, 120) or T.Sub
+        MapLabel.TextColor3 = onMall and T.Green or T.Sub
 
         if dangerAlerts then
             DangerLabel.Text = "Danger Alert: 已启动 ⚠"
@@ -837,12 +970,7 @@ task.spawn(function()
             DangerLabel.TextColor3 = T.Sub
         end
 
-        EndLabel.Text = "The End: " .. (theEndActive and "YES" or "No")
-        EndLabel.TextColor3 = theEndActive and Color3.fromRGB(255, 80, 80) or T.Sub
-
-        CardStatusLabel.Text = " Wild Card: " .. (gotCard and "已交互" or (onMall and "商场可找" or "非商场"))
-
-        -- 其他功能
+        if Settings.RejoinUntilDanger then rejoinUntilDanger() end
         if Settings.AutoFarm and (now - lastAutoFarm) >= AUTO_FARM_INTERVAL then
             lastAutoFarm = now
             autoFarmFlow()
@@ -857,16 +985,16 @@ task.spawn(function()
             lastCardCheck = now
             tryGetCard()
         end
-        if Settings.AutoVoteMall and (now - lastVoteCheck) >= VOTE_INTERVAL then
-            lastVoteCheck = now
-            autoVoteMall()
-        end
         if Settings.SpdOn or Settings.JumpOn then applySpdJump() end
+        task.wait(0.35)
+    end
+end)
 
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do
         if Settings.ChestESP then refreshChestESP() end
         if Settings.CardESP then refreshCardESP() end
-
-        task.wait(0.4)
+        task.wait(2.5)
     end
 end)
 
@@ -880,7 +1008,7 @@ task.spawn(function()
     end
 end)
 
--- ==================== 按钮绑定 ====================
+-- 按钮
 AutoFarmBtn.MouseButton1Click:Connect(function()
     Settings.AutoFarm = not Settings.AutoFarm
     AutoFarmBtn.BackgroundColor3 = Settings.AutoFarm and T.Accent or T.Off
@@ -894,10 +1022,35 @@ DangerAutoBtn.MouseButton1Click:Connect(function()
     DangerAutoBtn.Text = Settings.DangerAuto and "危险时自动进所 ON" or "危险时自动进所"
 end)
 
+RejoinDangerBtn.MouseButton1Click:Connect(function()
+    Settings.RejoinUntilDanger = not Settings.RejoinUntilDanger
+    if Settings.RejoinUntilDanger then
+        if isDangerAlertOn() then
+            Settings.RejoinUntilDanger = false
+            Notify("Danger Alert 已经是开的")
+        else
+            RejoinDangerBtn.Text = "重进中...（再点停止）"
+            RejoinDangerBtn.BackgroundColor3 = T.On
+            Notify("开始重进直到危险警报开启")
+            rejoinUntilDanger()
+        end
+    else
+        RejoinDangerBtn.Text = "重进直到危险警报 ON"
+        RejoinDangerBtn.BackgroundColor3 = T.Off
+        Notify("已停止重进")
+    end
+end)
+
 GetKeyBtn.MouseButton1Click:Connect(function()
     GetKeyBtn.BackgroundColor3 = T.Black
     keyAndEnterShelter()
     task.delay(1.2, function() if GetKeyBtn then GetKeyBtn.BackgroundColor3 = T.Off end end)
+end)
+
+AutoCardBtn.MouseButton1Click:Connect(function()
+    Settings.AutoCard = not Settings.AutoCard
+    AutoCardBtn.BackgroundColor3 = Settings.AutoCard and T.On or T.Off
+    AutoCardBtn.Text = Settings.AutoCard and "自动捡卡 ON" or "自动捡卡（仅商场）"
 end)
 
 KeyOnlyBtn.MouseButton1Click:Connect(function()
@@ -916,69 +1069,14 @@ end)
 
 PointsBox.FocusLost:Connect(function()
     local n = tonumber(PointsBox.Text)
-    if n and n > 0 then
-        pointsAmount = math.floor(n)
-        PointsBox.Text = tostring(pointsAmount)
-    else
-        PointsBox.Text = tostring(pointsAmount)
-    end
+    if n and n > 0 then pointsAmount = math.floor(n) PointsBox.Text = tostring(pointsAmount)
+    else PointsBox.Text = tostring(pointsAmount) end
 end)
 
 PointsBtn.MouseButton1Click:Connect(function()
-    local n = tonumber(PointsBox.Text) or pointsAmount
     PointsBtn.BackgroundColor3 = T.Black
-    addPoints(n)
+    addPoints(tonumber(PointsBox.Text) or pointsAmount)
     task.delay(0.7, function() if PointsBtn then PointsBtn.BackgroundColor3 = T.Off end end)
-end)
-
-AutoCardBtn.MouseButton1Click:Connect(function()
-    Settings.AutoCard = not Settings.AutoCard
-    AutoCardBtn.BackgroundColor3 = Settings.AutoCard and T.On or T.Off
-    AutoCardBtn.Text = Settings.AutoCard and "自动捡卡 ON" or "自动捡卡"
-end)
-
--- ==================== 传送修复（关键修复）===================
-ClickCardBtn.MouseButton1Click:Connect(function()
-    ClickCardBtn.BackgroundColor3 = T.Black
-    local hrp = getHRP()
-    if hrp then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if isStore(obj) then
-                local part = bestPart(obj)  -- 修复版（支持 BasePart + 安全降级）
-                if part then
-                    hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                    Notify("已传送到商店（点卡模式）")
-                    break
-                end
-            end
-        end
-    end
-    task.delay(0.8, function() if ClickCardBtn then ClickCardBtn.BackgroundColor3 = T.Off end end)
-end)
-
-StoreTPBtn.MouseButton1Click:Connect(function()
-    StoreTPBtn.BackgroundColor3 = T.Black
-    local hrp = getHRP()
-    if hrp then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if isStore(obj) then
-                local part = bestPart(obj)
-                if part then
-                    hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
-                    Notify("已传送到 Card Store")
-                    break
-                end
-            end
-        end
-    end
-    task.delay(0.8, function() if StoreTPBtn then StoreTPBtn.BackgroundColor3 = T.Off end end)
-end)
-
-CardESPBtn.MouseButton1Click:Connect(function()
-    Settings.CardESP = not Settings.CardESP
-    CardESPBtn.BackgroundColor3 = Settings.CardESP and T.On or T.Off
-    CardESPBtn.Text = Settings.CardESP and "卡牌 ESP ON" or "卡牌 ESP"
-    if Settings.CardESP then refreshCardESP() else clearFolder(cardEspFolder) end
 end)
 
 AFKBtn.MouseButton1Click:Connect(function()
@@ -992,16 +1090,16 @@ GodBtn.MouseButton1Click:Connect(function()
     if Settings.God then onGod() else offGod() end
 end)
 
-AutoVoteBtn.MouseButton1Click:Connect(function()
-    Settings.AutoVoteMall = not Settings.AutoVoteMall
-    AutoVoteBtn.BackgroundColor3 = Settings.AutoVoteMall and T.On or T.Off
-    AutoVoteBtn.Text = Settings.AutoVoteMall and "自动投满「商场」 ON" or "自动投满「商场」 OFF"
-end)
-
 ChestESPBtn.MouseButton1Click:Connect(function()
     Settings.ChestESP = not Settings.ChestESP
     ChestESPBtn.BackgroundColor3 = Settings.ChestESP and T.On or T.Off
     if Settings.ChestESP then refreshChestESP() else clearFolder(chestEspFolder) end
+end)
+
+CardESPBtn.MouseButton1Click:Connect(function()
+    Settings.CardESP = not Settings.CardESP
+    CardESPBtn.BackgroundColor3 = Settings.CardESP and T.On or T.Off
+    if Settings.CardESP then refreshCardESP() else clearFolder(cardEspFolder) end
 end)
 
 SpdBtn.MouseButton1Click:Connect(function()
@@ -1009,13 +1107,11 @@ SpdBtn.MouseButton1Click:Connect(function()
     SpdBtn.BackgroundColor3 = Settings.SpdOn and T.On or T.Off
     applySpdJump()
 end)
-
 SpdDn.MouseButton1Click:Connect(function()
     Settings.Spd = math.max(16, Settings.Spd - 4)
     SpdLabel.Text = "Speed: " .. Settings.Spd
     applySpdJump()
 end)
-
 SpdUp.MouseButton1Click:Connect(function()
     Settings.Spd = math.min(80, Settings.Spd + 4)
     SpdLabel.Text = "Speed: " .. Settings.Spd
@@ -1028,6 +1124,57 @@ JumpBtn.MouseButton1Click:Connect(function()
     applySpdJump()
 end)
 
+SavePosBtn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp then
+        savedCFrame = hrp.CFrame
+        SaveStatusLabel.Text = "  位置: 已保存"
+        SaveStatusLabel.TextColor3 = T.Green
+        Notify("位置已保存")
+    end
+end)
+
+LoadPosBtn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp and savedCFrame then
+        hrp.CFrame = savedCFrame
+        Notify("已传送到保存位置")
+    else
+        Notify("没有保存的位置")
+    end
+end)
+
+ClearPosBtn.MouseButton1Click:Connect(function()
+    savedCFrame = nil
+    SaveStatusLabel.Text = "  位置: 未保存"
+    SaveStatusLabel.TextColor3 = T.Sub
+    Notify("已清除保存位置")
+end)
+
+ServerHopBtn.MouseButton1Click:Connect(function()
+    Notify("Server Hopping...")
+    pcall(function() TeleportService:Teleport(PLACE_ID, LocalPlayer) end)
+end)
+
+MuteMusicBtn.MouseButton1Click:Connect(function()
+    setMusicMuted(not Settings.MusicMuted)
+    Notify(Settings.MusicMuted and "已静音" or "已取消静音")
+end)
+
+StopAllSoundBtn.MouseButton1Click:Connect(function()
+    stopAllSounds()
+end)
+
+VolDn.MouseButton1Click:Connect(function()
+    Settings.MusicVolume = math.max(0, Settings.MusicVolume - 0.1)
+    applyVolume()
+end)
+
+VolUp.MouseButton1Click:Connect(function()
+    Settings.MusicVolume = math.min(1, Settings.MusicVolume + 0.1)
+    applyVolume()
+end)
+
 CloseBtn.MouseButton1Click:Connect(function()
     clearFolder(chestEspFolder)
     clearFolder(cardEspFolder)
@@ -1035,7 +1182,6 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- ==================== 拖拽 ====================
 local dragging, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1044,7 +1190,7 @@ TitleBar.InputBegan:Connect(function(input)
         startPos = Main.Position
     end
 end)
-TitleBar.InputEnded:Connect(function()
+TitleBar.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
@@ -1056,5 +1202,5 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Notify("灾难警告 VIP 已加载（实时刷新 + 传送修复）")
-print("Disaster Warning VIP FULL - 传送已修复 ✅")
+Notify("灾难警告 VIP 已加载（排队仅3.1）")
+print("Disaster Warning VIP FULL - Queue 3.1 only | Farm/Extra/Tool/Save/Music")
