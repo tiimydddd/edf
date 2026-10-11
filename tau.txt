@@ -153,7 +153,7 @@ if not Gui.Parent then
 end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 280, 0, 380)
+Main.Size = UDim2.new(0, 280, 0, 400)
 Main.Position = UDim2.new(0, 12, 0.22, 0)
 Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Main.BorderSizePixel = 0
@@ -329,6 +329,8 @@ local AFK_tr, AFK_th = mkTog(P1, 184, "Anti-AFK", true)
 local Rej_tr, Rej_th = mkTog(P1, 208, "断线重进(有碎片会锁)", true)
 local ShelB = mkBtn(P1, 236, "传送避难所", Color3.fromRGB(45, 45, 58))
 mkL(P1, 266, "有碎片 → 禁止自动重进", Color3.fromRGB(140, 140, 155))
+mkL(P1, 282, "防277: 断线检测+重进 (有碎片不重进)", Color3.fromRGB(140, 140, 155))
+
 
 -- 传送
 local P2 = mkPage("传送")
@@ -415,7 +417,7 @@ MinB.MouseButton1Click:Connect(function()
     isMin = not isMin
     TabBar.Visible = not isMin
     Content.Visible = not isMin
-    Main.Size = isMin and UDim2.new(0, 140, 0, 30) or UDim2.new(0, 280, 0, 380)
+    Main.Size = isMin and UDim2.new(0, 140, 0, 30) or UDim2.new(0, 280, 0, 400)
     MinB.Text = isMin and "+" or "-"
 end)
 ClB.MouseButton1Click:Connect(function()
@@ -914,12 +916,27 @@ local function hop()
 end
 
 local function afk()
+    -- 防挂机 / 降低 277 空闲踢
     pcall(function()
         if VU and typeof(VU.CaptureController) == "function" then
             VU:CaptureController()
         end
         if VU and typeof(VU.ClickButton2) == "function" then
             VU:ClickButton2(Vector2.new())
+        end
+    end)
+    pcall(function()
+        local h = HRP()
+        if h then
+            h.CFrame = h.CFrame * CFrame.new(0.05, 0, 0)
+            task.wait(0.03)
+            h.CFrame = h.CFrame * CFrame.new(-0.05, 0, 0)
+        end
+    end)
+    pcall(function()
+        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.Jump = true
         end
     end)
 end
@@ -1065,7 +1082,7 @@ task.spawn(function()
                 clrESP()
             end
 
-            if C.AFK and now - tAfk >= 45 then
+            if C.AFK and now - tAfk >= 25 then
                 tAfk = now
                 afk()
             end
@@ -1118,5 +1135,54 @@ pcall(function()
     end)
 end)
 
-N("tau mini+ 已加载")
-print("[tau] mini+ ready")
+-- ===== 防 277 / 断线恢复 =====
+pcall(function()
+    local GuiService = game:GetService("GuiService")
+    GuiService.ErrorMessageChanged:Connect(function()
+        pcall(function()
+            local msg = tostring(GuiService:GetErrorMessage() or "")
+            if msg == "" then return end
+            local low = string.lower(msg)
+            print("[tau] error:", msg)
+            if not C.Rejoin or hasFragLock() then return end
+            if string.find(low, "277") or string.find(low, "connection")
+                or string.find(low, "disconnect") or string.find(low, "lost")
+                or string.find(low, "internet") or string.find(low, "network")
+                or string.find(low, "reconnect") then
+                N("检测到断线/277 → 重进")
+                task.wait(1.2)
+                rejoining = false
+                rejoin("277:" .. msg)
+            end
+        end)
+    end)
+end)
+
+-- 网络保活：定期轻微请求，降低空闲断线概率
+pcall(function()
+    task.spawn(function()
+        while Gui and Gui.Parent do
+            pcall(function()
+                if C.AFK then
+                    -- 读一下服务器时间，保持活动感
+                    pcall(function()
+                        game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+                    end)
+                    pcall(afk)
+                end
+            end)
+            task.wait(30)
+        end
+    end)
+end)
+
+-- 角色丢失时尝试不掉线（仅提示；有碎片不重进）
+pcall(function()
+    LP.CharacterRemoving:Connect(function()
+        if hasFragLock() then return end
+        -- 不立即 rejoin，等真正离开再处理
+    end)
+end)
+
+N("tau mini+ 已加载 (防277)")
+print("[tau] mini+ ready + anti-277")
